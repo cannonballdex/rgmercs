@@ -481,16 +481,16 @@ local _ClassConfig = {
         },
         ['aurabuff1'] = {
             ----Aura Buffs - Aura Name is seperate than the buff name
+            "Aura of the Persistent",
+            "Aura of the Reverent",
             "Aura of the Pious",
             "Aura of the Zealot",
-            "Aura of the Reverent",
-            "Aura of the Persistent",
         },
         ['aurabuff2'] = {
             ---- Aura Buff 2 - Aura Name is the same as the buff name
             "Bastion of Divinity",
-            "Circle of Divinity",
             "Aura of Divinity",
+            "Circle of Divinity",
         },
         ['DivineBuff'] = {
             --Divine Buffs REQUIRES extra spell slot because of the 90s recast
@@ -1150,14 +1150,14 @@ local _ClassConfig = {
                 name = "aurabuff1",
                 type = "Spell",
                 cond = function(self, spell)
-                    return RGMercUtils.CanUseAA('Spirit Mastery') and not RGMercUtils.AuraActiveByName("Reverent Aura") and RGMercUtils.SpellStacksOnMe(spell)
+                    return RGMercUtils.CanUseAA('Spirit Mastery') and not RGMercUtils.AuraActiveByName("Reverent Aura") and not mq.TLO.Me.Song("Aura of the Persistent Effect")() and RGMercUtils.SpellStacksOnMe(spell)
                 end,
             },
             {
                 name = "aurabuff2",
                 type = "Spell",
                 cond = function(self, spell)
-                    return RGMercUtils.CanUseAA('Spirit Mastery') and not RGMercUtils.AuraActiveByName(spell.BaseName()) and RGMercUtils.SpellStacksOnMe(spell)
+                    return RGMercUtils.CanUseAA('Spirit Mastery') and not mq.TLO.Me.Song("Bastion of Divinity Effect")() and not RGMercUtils.AuraActiveByName(spell.BaseName()) and RGMercUtils.SpellStacksOnMe(spell)
                 end,
             },
             {
@@ -1363,3 +1363,4 @@ local _ClassConfig = {
 }
 
 return _ClassConfig
+
