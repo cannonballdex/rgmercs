@@ -133,7 +133,6 @@ Config.DefaultConfig = {
     ['ShrinkItem']           = { DisplayName = "Shrink Item", Category = "Utilities", Tooltip = "Item to use to Shrink yourself", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
     ['DoShrink']             = { DisplayName = "Do Shrink", Category = "Utilities", Tooltip = "Enable auto shrinking", Default = false, ConfigType = "Normal", },
     ['PriorityHealing']      = { DisplayName = "Priority Healing", Category = "Utilities", Tooltip = "Prioritize Healing over Combat", Default = false, ConfigType = "Advanced", },
-    ['ClarityPotion']        = { DisplayName = "Clarity Potion", Category = "Utilities", Tooltip = "Name of your Clarity Pot", Default = "Distillate of Clarity", ConfigType = "Advanced", },
     ['RunMovePaused']        = { DisplayName = "Run Movement on Pause", Category = "Utilities", Tooltip = "Runs the Movement/Chase module even if the Main loop is paused", Default = false, ConfigType = "Advanced", },
     ['StandFailedFD']        = { DisplayName = "Stand on Failed FD", Category = "Utilities", Tooltip = "Auto stands you up if you fall to the ground.", Default = true, ConfigType = "Normal", },
 
@@ -148,9 +147,24 @@ Config.DefaultConfig = {
     ['ClickyItem7']          = { DisplayName = "Clicky Item 7", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
     ['ClickyItem8']          = { DisplayName = "Clicky Item 8", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
     ['ClickyItem9']          = { DisplayName = "Clicky Item 9", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
-    ['ClickyItem10']         = { DisplayName = "Clicky Item 10", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
-    ['ClickyItem11']         = { DisplayName = "Clicky Item 11", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
-    ['ClickyItem12']         = { DisplayName = "Clicky Item 12", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['ClickyItem10']          = { DisplayName = "Clicky Item 10", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['ClickyItem11']          = { DisplayName = "Clicky Item 11", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['ClickyItem12']          = { DisplayName = "Clicky Item 12", Category = "Clickies", Tooltip = "Clicky Item to use During Downtime", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    
+    -- [ DPSCLICKIES ] --
+    ['UseDPSClickies']          = { DisplayName = "Use DPSClickies", Category = "DPSClickies", Tooltip = "Use DPS Clicky Items", Default = true, ConfigType = "Normal", },
+    ['DPSClickyItem1']          = { DisplayName = "DPSClicky Item 1", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem2']          = { DisplayName = "DPSClicky Item 2", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem3']          = { DisplayName = "DPSClicky Item 3", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem4']          = { DisplayName = "DPSClicky Item 4", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem5']          = { DisplayName = "DPSClicky Item 5", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem6']          = { DisplayName = "DPSClicky Item 6", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem7']          = { DisplayName = "DPSClicky Item 7", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem8']          = { DisplayName = "DPSClicky Item 8", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem9']          = { DisplayName = "DPSClicky Item 9", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem10']          = { DisplayName = "DPSClicky Item 10", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem11']          = { DisplayName = "DPSClicky Item 11", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
+    ['DPSClickyItem12']          = { DisplayName = "DPSClicky Item 12", Category = "DPSClickies", Tooltip = "Clicky Item to use During Combat", Type = "ClickyItem", Default = "", ConfigType = "Normal", },
 
     -- [ MEDITATION ] --
     ['DoMed']                = { DisplayName = "Do Meditate", Category = "Meditation", Tooltip = "0 = No Auto Med, 1 = Auto Med Out of Combat, 2 = Auto Med In Combat", Type = "Combo", ComboOptions = { 'Off', 'Out of Combat', 'In Combat', }, Default = 2, Min = 1, Max = 3, ConfigType = "Normal", },
