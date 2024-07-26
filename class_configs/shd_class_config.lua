@@ -702,6 +702,14 @@ local _ClassConfig = {
     ['Rotations']       = {
         ['Downtime'] = {
             {
+                name = "Huntsman's Ethereal Quiver",
+                type = "Item",
+                active_cond = function(self) return mq.TLO.FindItemCount("Ethereal Arrow")() > 100 end,
+                cond = function(self)
+                    return RGMercUtils.GetSetting('SummonArrows') and mq.TLO.FindItemCount("Ethereal Arrow")() < 101 and mq.TLO.Me.ItemReady("Huntsman's Ethereal Quiver")()
+                end,
+            },
+            {
                 name = "Dark Lord's Unity (Azia)",
                 type = "AA",
                 tooltip = Tooltips.DLUA,
@@ -1390,6 +1398,7 @@ local _ClassConfig = {
         ['DoCharmClick']    = { DisplayName = "Do Charm Click", Category = "Equipment", Tooltip = "Click your charm item", Default = true, },
         ['StartBigTap']     = { DisplayName = "Use Big Taps", Category = "Spells and Abilities", Tooltip = "Your HP % before we use Big Taps.", Default = 80, Min = 1, Max = 100, },
         ['StartLifeTap']    = { DisplayName = "Use Life Taps", Category = "Spells and Abilities", Tooltip = "Your HP % before we use Life Taps.", Default = 100, Min = 1, Max = 100, },
+        ['SummonArrows'] = { DisplayName = "Summon Arrows", Category = "Equipment", Tooltip = "Enable Summon Arrows", Default = true, },
         ['MantleCount']     = { DisplayName = "Mantle Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Mantle Disc.", Default = 3, Min = 1, Max = 10, },
         ['CarapaceCount']   = { DisplayName = "Carapace Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Carapace Disc.", Default = 3, Min = 1, Max = 10, },
         ['CurseGuardCount'] = { DisplayName = "Curse Guard Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Curse Guard Disc.", Default = 3, Min = 1, Max = 10, },
