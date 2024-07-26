@@ -65,7 +65,7 @@ Module.DefaultConfig     = {
     ['ChaseTarget']      = { DisplayName = "Chase Target", Category = "Chase", Tooltip = "Character you are Chasing", Type = "Custom", Default = "", },
     ['ReturnToCamp']     = { DisplayName = "Return To Camp", Category = "Camp", Tooltip = "Return to Camp After Combat (requires you to /rgl campon)", Default = (not RGMercConfig.Constants.RGTank:contains(mq.TLO.Me.Class.ShortName())), },
     ['CampHard']         = { DisplayName = "Camp Hard", Category = "Camp", Tooltip = "Return to Camp Loc Everytime", Default = false, },
-    ['MaintainCampfire'] = { DisplayName = "Maintain Campfire", Category = "Camp", Tooltip = "1: Off; 2: Regular Fellowship; [X]: Empowered Fellowship X;", Type = "Combo", ComboOptions = Module.Constants.CampfireTypes, Default = 36, Min = 1, Max = #Module.Constants.CampfireTypes, },
+    ['MaintainCampfire'] = { DisplayName = "Maintain Campfire", Category = "Camp", Tooltip = "1: Off; 2: Regular Fellowship; [X]: Empowered Fellowship X;", Type = "Combo", ComboOptions = Module.Constants.CampfireTypes, Default = 1, Min = 1, Max = #Module.Constants.CampfireTypes, },
     ['RequireLoS']       = { DisplayName = "Require LOS", Category = "Chase", Tooltip = "Require LOS when using /nav", Default = RGMercConfig.Constants.RGCasters:contains(mq.TLO.Me.Class.ShortName()), },
 }
 
@@ -240,9 +240,9 @@ function Module:CampOff()
     RGMercUtils.DoCmd("/mapfilter pullradius off")
 end
 
-function Module:DestoryCampfire()
+function Module:DestroyCampfire()
     if mq.TLO.Me.Fellowship.Campfire() == nil then return end
-    RGMercsLogger.log_debug("DestoryCampfire()")
+    RGMercsLogger.log_debug("DestroyCampfire()")
 
     mq.TLO.Window("FellowshipWnd").DoOpen()
     mq.delay("3s", function() return mq.TLO.Window("FellowshipWnd").Open() end)
@@ -271,7 +271,7 @@ end
 
 function Module:Campfire(camptype)
     if camptype == -1 then
-        self:DestoryCampfire()
+        self:DestroyCampfire()
         return
     end
 
@@ -284,7 +284,7 @@ function Module:Campfire(camptype)
 
     if self.settings.MaintainCampfire > 2 then
         if mq.TLO.FindItemCount("Fellowship Campfire Materials") == 0 then
-            self.settings.MaintainCampfire = 36 -- Regular Fellowship
+            self.settings.MaintainCampfire = 1 -- Regular Fellowship
             self:SaveSettings(false)
             RGMercsLogger.log_info("Fellowship Campfire Materials Not Found. Setting to Regular Fellowship.")
         end
@@ -488,6 +488,38 @@ function Module:DoClickies()
     end
 end
 
+function Module:DoDPSClickies()
+    if not RGMercUtils.GetSetting('UseDPSClickies') then return end
+
+    -- don't use clickies when we are trying to med.
+    if mq.TLO.Me.Sitting() then return end
+
+    for i = 1, 12 do
+        local setting = RGMercUtils.GetSetting(string.format("DPSClickyItem%d", i))
+        if setting and setting:len() > 0 then
+            local item = mq.TLO.FindItem(setting)
+            RGMercsLogger.log_verbose("Looking for dpsclicky item: %s found: %s", setting, RGMercUtils.BoolToColorString(item() ~= nil))
+
+            if item then
+                if item.Timer.TotalSeconds() == 0 then
+                    if (item.RequiredLevel() or 0) <= mq.TLO.Me.Level() then
+                        if not RGMercUtils.BuffActiveByID(item.Clicky.Spell.RankName.ID() or 0) then
+                            RGMercsLogger.log_verbose("\aaCasting Item: \at%s\ag Clicky: \at%s\ag!", item.Name(), item.Clicky.Spell.RankName.Name())
+                            RGMercUtils.UseItem(item.Name(), mq.TLO.Target.ID())
+                        else
+                            RGMercsLogger.log_verbose("\ayItem: \at%s\ay Clicky: \at%s\ay Already Active!", item.Name(), item.Clicky.Spell.RankName.Name())
+                        end
+                    else
+                        RGMercsLogger.log_verbose("\ayItem: \at%s\ay Clicky: \at%s\ay I am too low level to use this clicky!", item.Name(), item.Clicky.Spell.RankName.Name())
+                    end
+                else
+                    RGMercsLogger.log_verbose("\ayItem: \at%s\ay Clicky: \at%s\ay Clicky timer not ready!", item.Name(), item.Clicky.Spell.RankName.Name())
+                end
+            end
+        end
+    end
+end
+
 function Module:OnDeath()
     if not RGMercUtils.GetSetting('BreakOnDeath') then return end
     if self.settings.ChaseTarget then
@@ -582,6 +614,10 @@ function Module:GiveTime(combat_state)
         end
 
         self:DoClickies()
+    end
+
+    if combat_state == 'Combat' then
+        self:DoDPSClickies()
     end
 
     if RGMercUtils.DoCamp() then
@@ -697,3 +733,4 @@ function Module:Shutdown()
 end
 
 return Module
+
