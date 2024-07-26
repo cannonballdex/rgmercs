@@ -702,6 +702,14 @@ local _ClassConfig = {
     ['Rotations']       = {
         ['Downtime'] = {
             {
+                name = "Huntsman's Ethereal Quiver",
+                type = "Item",
+                active_cond = function(self) return mq.TLO.FindItemCount("Ethereal Arrow")() > 100 end,
+                cond = function(self)
+                    return RGMercUtils.GetSetting('SummonArrows') and mq.TLO.FindItemCount("Ethereal Arrow")() < 101 and mq.TLO.Me.ItemReady("Huntsman's Ethereal Quiver")()
+                end,
+            },
+            {
                 name = "Dark Lord's Unity (Azia)",
                 type = "AA",
                 tooltip = Tooltips.DLUA,
@@ -937,6 +945,18 @@ local _ClassConfig = {
                 cond = function(self)
                     local item = mq.TLO.Me.Inventory("Charm")
                     return RGMercUtils.GetSetting('DoCharmClick') and item() and RGMercUtils.SpellStacksOnMe(item.Spell) and item.TimerReady() == 0
+                end,
+            },
+            {
+                name = mq.TLO.Me.Inventory("Back").Name(),
+                type = "Item",
+                active_cond = function(self)
+                    local item = mq.TLO.Me.Inventory("Back")
+                    return item() and RGMercUtils.TargetHasBuff(item.Spell, mq.TLO.Me)
+                end,
+                cond = function(self)
+                    local item = mq.TLO.Me.Inventory("Back")
+                    return RGMercUtils.GetSetting('DoBackClick') and item() and RGMercUtils.SpellStacksOnMe(item.Spell) and item.TimerReady() == 0
                 end,
             },
             {
@@ -1386,10 +1406,12 @@ local _ClassConfig = {
         ['HPStopDOT']       = { DisplayName = "HP Stop DOTs", Category = "Spells and Abilities", Tooltip = "Stop casting DOTs when the mob hits [x] HP %.", Default = 30, Min = 1, Max = 100, },
         ['UseVoT']          = { DisplayName = "Use Voice of Thule", Category = "Spells and Abilities", Tooltip = "Cast Voice of Thule", Default = true, },
         ['FlashHP']         = { DisplayName = "Use Shield Flash", Category = "Combat", Tooltip = "Your HP % before we use Shield Flash.", Default = 35, Min = 1, Max = 100, },
+        ['DoBackClick']    = { DisplayName = "Do Back Click", Category = "Equipment", Tooltip = "Click your back item", Default = true, },
         ['DoChestClick']    = { DisplayName = "Do Chest Click", Category = "Equipment", Tooltip = "Click your chest item", Default = true, },
         ['DoCharmClick']    = { DisplayName = "Do Charm Click", Category = "Equipment", Tooltip = "Click your charm item", Default = true, },
         ['StartBigTap']     = { DisplayName = "Use Big Taps", Category = "Spells and Abilities", Tooltip = "Your HP % before we use Big Taps.", Default = 80, Min = 1, Max = 100, },
         ['StartLifeTap']    = { DisplayName = "Use Life Taps", Category = "Spells and Abilities", Tooltip = "Your HP % before we use Life Taps.", Default = 100, Min = 1, Max = 100, },
+        ['SummonArrows'] = { DisplayName = "Summon Arrows", Category = "Equipment", Tooltip = "Enable Summon Arrows", Default = true, },
         ['MantleCount']     = { DisplayName = "Mantle Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Mantle Disc.", Default = 3, Min = 1, Max = 10, },
         ['CarapaceCount']   = { DisplayName = "Carapace Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Carapace Disc.", Default = 3, Min = 1, Max = 10, },
         ['CurseGuardCount'] = { DisplayName = "Curse Guard Count", Category = "Disciplines", Tooltip = "Number of mobs around you before you use Curse Guard Disc.", Default = 3, Min = 1, Max = 10, },
