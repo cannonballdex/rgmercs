@@ -11,6 +11,8 @@ Module.DefaultConfig     = {
     ['DoSearchDrag'] = { DisplayName = "Use Spawn Search Dragging", Category = "Drag", Tooltip = "Use Search to find drag targets", Default = false, },
     ['SearchDrag']   = { DisplayName = "Spawn Search", Category = "Drag", Tooltip = "Enable Dragging Corpses with you", Default = "pccorpse group radius 60", },
     ['DoDanNetDrag'] = { DisplayName = "Use DanNet Dragging", Category = "Drag", Tooltip = "Use DanNet to find drag targets", Default = false, },
+    ['CorpseRecovery']  = { DisplayName = "Corpse Recovery", Category = "Drag", Tooltip = "Recover Corpses (ROG & BARD ONLY)", Default = false, },
+    ['CorpseSummon'] = { DisplayName = "Corpse Summon", Category = "Drag", Tooltip = "Summon Corpses (SK & NECRO ONLY Req. Tiny Jade Inlaid Coffin)", Default = false, },
 }
 Module.DefaultCategories = {}
 
@@ -87,9 +89,27 @@ function Module:Render()
     ImGui.Text("Drag Module")
     local pressed
     if self.ModuleLoaded then
+        if mq.TLO.Me.Class.ShortName() == 'ROG' or mq.TLO.Me.Class.ShortName() == 'BRD' then
+            if ImGui.Button(RGMercUtils.GetSetting('CorpseRecovery') and "Stop Recovery" or "Start Recovery", ImGui.GetWindowWidth() * .3, 25) then
+                self.settings.CorpseRecovery = not self.settings.CorpseRecovery
+                self:SaveSettings(false)
+            end
+        end
+
+        ImGui.SameLine()
+
         if ImGui.Button(RGMercUtils.GetSetting('DoDrag') and "Stop Dragging" or "Start Dragging", ImGui.GetWindowWidth() * .3, 25) then
             self.settings.DoDrag = not self.settings.DoDrag
             self:SaveSettings(false)
+        end
+
+        ImGui.SameLine()
+
+        if mq.TLO.Me.Class.ShortName() == 'SHD' or mq.TLO.Me.Class.ShortName() == 'NEC' then
+            if ImGui.Button(RGMercUtils.GetSetting('CorpseSummon') and "Stop Summoning" or "Start Summoning", ImGui.GetWindowWidth() * .3, 25) then
+                self.settings.CorpseSummon = not self.settings.CorpseSummon
+                self:SaveSettings(false)
+            end
         end
 
         if ImGui.CollapsingHeader("Config Options") then
