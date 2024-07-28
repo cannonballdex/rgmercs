@@ -1197,6 +1197,10 @@ function RGMercUtils.ExecEntry(caller, entry, targetId, resolvedActionMap, bAllo
             RGMercUtils.UseItem(itemName, targetId)
             ret = true
         end
+        mq.delay(2000)
+        if mq.TLO.Cursor.ID() then
+            RGMercUtils.DoCmd("/autoinv")
+        end
     end
 
     if entry.type:lower() == "spell" then
@@ -1265,6 +1269,10 @@ function RGMercUtils.ExecEntry(caller, entry, targetId, resolvedActionMap, bAllo
 
     if entry.post_activate then
         entry.post_activate(caller, RGMercUtils.GetEntryConditionArg(resolvedActionMap, entry), ret)
+    end
+
+    if mq.TLO.Cursor.ID() then
+        RGMercUtils.DoCmd("/autoinv")
     end
 
     return ret
@@ -2277,7 +2285,7 @@ end
 
 ---@return boolean
 function RGMercUtils.UseOrigin()
-    if mq.TLO.FindItem("=Drunkard's Stein").ID() or 0 > 0 and mq.TLO.Me.ItemReady("=Drunkard's Stein") then
+    if mq.TLO.FindItem("=Drunkard's Stein").ID() and mq.TLO.Me.ItemReady("=Drunkard's Stein")() then
         RGMercsLogger.log_debug("\ag--\atFound a Drunkard's Stein, using that to get to PoK\ag--")
         RGMercUtils.UseItem("Drunkard's Stein", mq.TLO.Me.ID())
         return true
@@ -2296,6 +2304,13 @@ function RGMercUtils.UseOrigin()
         RGMercsLogger.log_debug("\ag--\atAs you not within a zone we know\ag--")
 
         RGMercUtils.UseAA("Origin", mq.TLO.Me.ID())
+        return true
+    end
+
+    if mq.TLO.FindItem("=Bulwark of Many Portals").ID() and mq.TLO.Me.ItemReady("=Bulwark of Many Portals")() then
+        RGMercsLogger.log_debug("\ag--\atFound a Bulwark of Many Portals, using that to get to Bind\ag--")
+        RGMercsLogger.log_debug("\ag--\atAs you not within a zone we know\ag--")
+        RGMercUtils.UseItem("Bulwark of Many Portals", mq.TLO.Me.ID())
         return true
     end
 
