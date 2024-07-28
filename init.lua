@@ -226,11 +226,12 @@ local function RGMercsGUI()
             end
 
             ImGui.NewLine()
+            local changed
+            
             ImGui.NewLine()
             ImGui.Separator()
 
             if RGMercsConsole then
-                local changed
                 RGMercConfig:GetSettings().LogLevel, changed = ImGui.Combo("Debug Level",
                     RGMercConfig:GetSettings().LogLevel, RGMercConfig.Constants.LogLevels,
                     #RGMercConfig.Constants.LogLevels)
@@ -374,6 +375,220 @@ local function RGInit(...)
 
     -- store initial positioning data.
     RGMercConfig:StoreLastMove()
+end
+-------------------------------------------------
+-----------Corpse Recovery ----------------------
+-------------------------------------------------
+local mindistance = 75
+local maxdistance = 5000
+
+function Fetch_Distance( x1, y1, x2, y2 )
+    return (x2-x1) + (y2-y1)
+end
+
+local function drag (corpsid, corpse)
+    print('\aw[RGMercs Corpse Drag] \atNeed to recover a corpse.')
+    if mq.TLO.Me.Combat() then
+        while mq.TLO.Me.Combat() do
+            mq.delay(100)
+        end
+    end
+    if mq.TLO.Me.Hovering() then
+        while mq.TLO.Me.Hovering() do
+            mq.delay(100)
+        end
+    end
+    mq.cmd('/squelch /multiline ; /mqpause on; /stick off; /moveto stop; /nav stop')
+    local x = mq.TLO.Me.X()
+    local y = mq.TLO.Me.Y()
+    local z = mq.TLO.Me.Z()
+    local myname = mq.TLO.Me.Name()
+    if Alive() and mq.TLO.Me.Invis() == false and mq.TLO.Me.Class.ShortName() == 'BRD' then
+        mq.cmd('/twist stop')
+        mq.cmd('/alt activate 231')
+        mq.cmd('/dgga /removelev')
+    end
+    if Alive() and mq.TLO.Me.Invis('SOS')() == false and mq.TLO.Me.Class.ShortName() == 'ROG' then
+        mq.cmd('/makemevisible')
+        mq.cmd('/dismount')
+        mq.delay(500)
+        if mq.TLO.Me.Sneaking() == false then
+            while mq.TLO.Me.AbilityReady('Sneak')() == false do
+                mq.delay(10)
+            end
+            mq.cmd('/doability sneak')
+        end
+        while mq.TLO.Me.AbilityReady('Hide')() == false do
+            mq.delay(10)
+        end
+        mq.cmd('/doability hide')
+        mq.cmd('/removelev')
+    end
+    mq.cmdf('/tar id %s', corpsid)
+    mq.cmdf('/dex %s /consent %s', corpse, myname)
+    mq.delay(100)
+    if Alive() and mq.TLO.Navigation.PathExists('target')() then
+        while mq.TLO.Target.Distance() ~= nil and mq.TLO.Target.Distance() >= 21 do
+            if mq.TLO.Navigation.Active() == false then
+                mq.cmd('/nav target log=off')
+            end
+            mq.delay(100)
+        end
+        if Alive() and mq.TLO.Target.Distance() ~= nil and mq.TLO.Target.Distance() <= 20 then
+            mq.cmd('/squelch /corpsedrag')
+        end
+        mq.cmd('/squelch /multiline ; /mqpause on; /stick off; /moveto stop; /nav stop')
+        mq.delay(100)
+        mq.cmdf('/squelch /nav locxyz %s %s %s log=off', x, y, z)
+        while Fetch_Distance(mq.TLO.Me.X(), mq.TLO.Me.Y(), x, y) >= 20 do
+            if mq.TLO.Navigation.Active() == false then
+                mq.cmdf('/squelch /nav locxyz %s %s %s log=off', x, y, z)
+            end
+            mq.delay(100)
+        end
+        while mq.TLO.Navigation.Active() do
+            mq.delay(100)
+        end
+        mq.cmd('/corpsedrop')
+        mq.cmd('/squelch /mqpause off')
+        print('\aw[RGMercs Corpse Drag] \agCorpse Recover Complete.')
+    else
+        print('\aw[RGMercs Corpse Drag] \arNavigation path does not exist to corpse')
+    end
+end
+function CorpseRecovery()
+    if (mq.TLO.Me.Class.ShortName() == 'ROG' or mq.TLO.Me.Class.ShortName() == 'BRD') and not mq.TLO.Me.Combat() and mq.TLO.Me.XTarget() == 0 and mq.TLO.Zone.ID() ~= 344 then
+    local corpsecount = mq.TLO.SpawnCount('pccorpse radius '..maxdistance)()
+        if corpsecount == nil then
+            return
+        end
+        if corpsecount ~= nil then
+            for c = 1, corpsecount do
+                --set the corpse variables
+                local corpsename = mq.TLO.NearestSpawn(c..',pccorpse radius '..maxdistance).CleanName()
+                local corpseid = mq.TLO.NearestSpawn(c..',pccorpse radius '..maxdistance).ID()
+                local raidcount = mq.TLO.Raid.Members()
+                local groupcount = mq.TLO.Group.Members()
+                local guild = mq.TLO.Me.Guild()
+                local guildcorpsecount = mq.TLO.SpawnCount('guild corpse radius '..maxdistance)()
+                --Guild Drag
+                if guildcorpsecount > 0 then
+                    for i = 1, guildcorpsecount do
+                        local guildcorpseid = mq.TLO.NearestSpawn(i..',guild corpse radius '..maxdistance).ID()
+                        local guildmembercorpse = mq.TLO.NearestSpawn(i..',guild corpse radius '..maxdistance).CleanName()
+                        local guildmemeberguild = mq.TLO.NearestSpawn(i..',guild corpse radius '..maxdistance).Guild()
+                        if guildmemeberguild == guild then
+                            if mq.TLO.Spawn('id '..guildcorpseid).Distance() >= mindistance and mq.TLO.Navigation.PathExists('id '..guildcorpseid)() then
+                                print('\aw[RGMercs Corpse Drag] \agDrag Guild Corpse')
+                                drag(guildcorpseid, guildmembercorpse)
+                            end
+                        end
+                    end
+                else
+                --Raid Drag
+                if raidcount > 0 then
+                    for r = 1, raidcount do
+                        local raidmember = mq.TLO.Raid.Member(r)()
+                        local corpseadd = "'s corpse"
+                        local raidcorpsename = string.format("%s%s", raidmember, corpseadd)
+                        if corpsename == raidcorpsename then 
+                            if mq.TLO.Spawn('id '..corpseid).Distance() >= mindistance and mq.TLO.Navigation.PathExists('id '..corpseid)() then
+                                printf('\ag[\apRGMercs\at]\ag Drag Raid Corpse \at%s',raidmember)
+                                drag(corpseid, raidmember)
+                            end
+                        end
+                    end
+                else
+                --Group Drag
+                    if groupcount > 0 then
+                        for g = 1, groupcount do
+                            local groupmember = mq.TLO.Group.Member(g)()
+                            local corpseadd = "'s corpse"
+                            local groupcorpsename = string.format("%s%s", groupmember, corpseadd)
+                            if corpsename == groupcorpsename then
+                                if mq.TLO.Spawn('id '..corpseid).Distance() >= mindistance and mq.TLO.Navigation.PathExists('id '..corpseid)() then
+                                    printf('\ag[\apRGMercs\at]\ag Drag Group Corpse \at%s',groupmember)
+                                    drag(corpseid, groupmember)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+            --DanNet Drag
+            if mq.TLO.Plugin('mq2dannet')() ~= nil and not mq.TLO.Me.Hovering() and mq.TLO.Zone.ID() ~= 344 then
+            local dannetscount = mq.TLO.DanNet.PeerCount()
+                if dannetscount == nil then
+                    return
+                end
+                for peers in string.gmatch(mq.TLO.DanNet.Peers(), "([^|]+)") do
+                    local maxeddistance = 5000
+                    local mininum_distance = 75
+                    local spawnedsearch = string.format('pccorpse %s radius %s', peers, maxeddistance)
+                    local corpses_count = mq.TLO.SpawnCount(spawnedsearch)()
+                        for corpse = 1, corpses_count do
+                            local corpse_ID = mq.TLO.NearestSpawn(corpse, spawnedsearch).ID()
+                            if Alive() and corpse_ID ~= nil and mq.TLO.Spawn('id '..corpse_ID).Distance() >= mininum_distance and mq.TLO.Navigation.PathExists('id '..corpse_ID)() then
+                                printf('%s has %s corpse(s) within %s feet', peers, corpses_count, maxeddistance )
+                                mq.cmdf('/mqtarget id %s', corpse_ID)
+                                printf('Dragging Corpse: ID - %s - %s', corpse_ID, mq.TLO.Target.CleanName())
+                                mq.cmdf('/dge all /consent %s',mq.TLO.Me.CleanName())
+                                mq.delay('1s')
+                                if Alive() and mq.TLO.Spawn('id '..corpse_ID)() ~= nil and mq.TLO.Spawn('id '..corpse_ID).Distance() >= mininum_distance and mq.TLO.Navigation.PathExists('id '..corpse_ID)() then
+                                    drag(corpse_ID, mq.TLO.Target.CleanName())
+                                    printf('\agRecovered \at%s', peers)
+                                end
+                                print('\ayCHECKING NEXT CORPSE')
+                            end
+                        mq.delay(1000)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-------------------------------------------------
+-----------Summon Corpse SK & NEC ---------------
+-------------------------------------------------
+--Group Corpse Target
+function CorpseSummon()
+    local corpsecount = mq.TLO.SpawnCount('pccorpse radius '..maxdistance)()
+    if corpsecount == nil then
+        return
+    end
+    if corpsecount ~= nil then
+        for c = 1, corpsecount do
+            --set the corpse variables
+            local corpsename = mq.TLO.NearestSpawn(c..',pccorpse radius '..maxdistance).CleanName()
+            local corpseid = mq.TLO.NearestSpawn(c..',pccorpse radius '..maxdistance).ID()
+            local groupcount = mq.TLO.Group.Members()
+            if groupcount > 0 then
+                for g = 1, groupcount do
+                    local groupmember = mq.TLO.Group.Member(g)()
+                    local corpseadd = "'s corpse"
+                    local groupcorpsename = string.format("%s%s", groupmember, corpseadd)
+                    if corpsename == groupcorpsename then
+                        if mq.TLO.Spawn('id '..corpseid).Distance() >= mindistance then
+                                if not mq.TLO.Spawn(groupmember).Dead() then
+                                    printf('\ag[\apRGMercs\at]\ag Summon Group Corpse \at%s',groupmember)
+                                    mq.cmdf('/tar %s', groupmember)
+                                    mq.delay(2000)
+                                if mq.TLO.Me.Class.ShortName() == 'SHD' and mq.TLO.Me.AbilityReady('Summon Remains')() then
+                                    mq.cmd('/alt act 7007')
+                                end
+                                if mq.TLO.Me.Class.ShortName() == 'NEC' and mq.TLO.Me.AbilityReady('Summon Remains')() then
+                                    mq.cmd('/alt act 7002')
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 local function Main()
@@ -571,6 +786,12 @@ RGInit(...)
 
 while openGUI do
     Main()
+    if RGMercUtils.GetSetting('CorpseRecovery') then
+    CorpseRecovery()
+    end
+    if RGMercUtils.GetSetting('CorpseSummon') then
+        CorpseSummon()
+        end
     mq.doevents()
     mq.delay(10)
 end
