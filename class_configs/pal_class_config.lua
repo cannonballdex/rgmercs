@@ -7,34 +7,10 @@ return {
     ['ModeChecks']        = {
         IsTanking = function() return RGMercUtils.IsModeActive("Tank") end,
         IsHealing = function() return true end,
-        IsCuring = function() return RGMercUtils.GetSetting('DoCures') end,
-        IsRezing = function() return (RGMercUtils.GetSetting('DoBattleRez') and not RGMercUtils.IsTanking()) or RGMercUtils.GetXTHaterCount() == 0 end,
-            --Disabling tank battle rez is not optional to prevent settings in different areas and to avoid causing more potential deaths
     },
     ['Modes']             = {
         'Tank',
         'DPS',
-    },
-    ['Cures']             = {
-        CureNow = function(self, type, targetId)
-            if RGMercUtils.AAReady("Radiant Cure") then
-                return RGMercUtils.UseAA("Radiant Cure", targetId)
-            end
-            -- TODO: Consider the impact of memorizing cures outside of combat or increasing number of options in settings
-            -- local cureSpell = RGMercUtils.GetResolvedActionMapItem('Puritycure')
-
-            -- if type:lower() == "poison" then
-                -- cureSpell = RGMercUtils.GetResolvedActionMapItem('Puritycure')
-            -- elseif type:lower() == "curse" then
-                -- cureSpell = RGMercUtils.GetResolvedActionMapItem('Puritycure')
-            --TODO: Add Corruption AbilitySets
-            -- elseif type:lower() == "corruption" then
-                -- cureSpell = RGMercUtils.GetResolvedActionMapItem('')
-            -- end
-
-            -- if not cureSpell or not cureSpell() then return false end
-            -- return RGMercUtils.UseSpell(cureSpell.RankName.Name(), targetId, true)
-        end,
     },
     ['ItemSets']          = {
         ['Epic'] = {
@@ -652,25 +628,6 @@ return {
 
             return furyProcLevel <= DPULevel
         end,
-       --Did not include Staff of Forbidden Rites, GoR refresh is very fast and rez is 96%
-		DoRez = function(self, corpseId)
-
-            if RGMercUtils.GetSetting('DoBattleRez') or RGMercUtils.DoBuffCheck() then
-                RGMercUtils.SetTarget(corpseId)
-
-                local target = mq.TLO.Target
-
-                if not target or not target() then return false end
-
-                if mq.TLO.Target.Distance() > 25 then
-                    RGMercUtils.DoCmd("/corpse")
-                end
-
-                if RGMercUtils.AAReady("Gift of Resurrection") then
-                    return RGMercUtils.UseAA("Gift of Resurrection", corpseId)
-                end
-            end
-        end,
     },
     ['HealRotationOrder'] = {
         {
@@ -768,15 +725,56 @@ return {
             name = 'GroupBuff',
             timer = 60, -- only run every 60 seconds top.
             targetId = function(self)
-                local groupIds = { mq.TLO.Me.ID(), }
-                local count = mq.TLO.Group.Members()
-                for i = 1, count do
-                    local rezSearch = string.format("pccorpse %s radius 100 zradius 50", mq.TLO.Group.Member(i).DisplayName())
-                    if RGMercUtils.GetSetting('BuffRezables') or mq.TLO.SpawnCount(rezSearch)() == 0 then
-                        table.insert(groupIds, mq.TLO.Group.Member(i).ID())
+                --Added Rez Starts
+                if mq.TLO.Me.Class.ShortName() == 'CLR' or mq.TLO.Me.Class.ShortName() == 'DRU' or mq.TLO.Me.Class.ShortName() == 'SHM' or mq.TLO.Me.Class.ShortName() == 'PAL' or mq.TLO.Me.Class.ShortName() == 'NEC' and not mq.TLO.Me.Invis() then
+                    for peer in string.gmatch(mq.TLO.DanNet.Peers(), "([^|]+)") do
+                        if mq.TLO.Me.Hovering() then
+                            break
+                        end
+                        local maxdistance = 100
+                        local spawnsearch = string.format('pccorpse %s radius %s', peer, maxdistance)
+                        local corpse_count = mq.TLO.SpawnCount(spawnsearch)()
+                        local groupIds = { mq.TLO.Me.ID(), }
+                        if corpse_count ~= 0 then
+                            for corpse = 1, corpse_count do
+                                local corpse_ID = mq.TLO.NearestSpawn(corpse, spawnsearch).ID()
+                                mq.cmdf('/mqtarget id %s', corpse_ID)
+                                mq.cmd('/corpse')
+                                mq.delay('1s')
+                                local abilities = {
+                                    [3800] = 'Blessing of Resurrection CLR',
+                                    [404] = 'Call of the Wild DRU SHM',
+                                    [2051] = 'Rejuvenation of Spirit DRU SHM',
+                                    [3711] = 'Gift of Resurrection PAL',
+                                    [676] = 'Convergence',
+                                }
+                                for ability, name in pairs(abilities) do
+                                    if mq.TLO.Me.AltAbilityReady(tostring(ability))() and mq.TLO.Me.Class.ShortName() ~= 'NEC' then
+                                        mq.cmd('/alt activate ' .. ability)
+                                    end
+                                    if mq.TLO.Me.AltAbilityReady(tostring(ability))() and mq.TLO.Me.Class.ShortName() == 'NEC' and mq.TLO.FindItemCount(9963)() >= 1 then
+                                        mq.cmd('/alt activate ' .. ability)
+                                    end
+                                end
+                                mq.delay(500)
+                                while mq.TLO.Me.Casting() do
+                                    mq.delay('1s')
+                                end
+                            end
+                        end
+                        return groupIds
                     end
                 end
-                return groupIds
+                --Added Rez Ends
+                --local groupIds = { mq.TLO.Me.ID(), }
+                --local count = mq.TLO.Group.Members()
+                --for i = 1, count do
+                    --local rezSearch = string.format("pccorpse %s radius 100 zradius 50", mq.TLO.Group.Member(i).DisplayName())
+                    --if RGMercUtils.GetSetting('BuffRezables') or mq.TLO.SpawnCount(rezSearch)() == 0 then
+                        --table.insert(groupIds, mq.TLO.Group.Member(i).ID())
+                    --end
+                --end
+                --return groupIds--
             end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and RGMercUtils.DoBuffCheck() and
