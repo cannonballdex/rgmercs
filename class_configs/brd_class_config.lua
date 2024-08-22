@@ -1383,7 +1383,7 @@ local _ClassConfig = {
     },
     ['PullAbilities'] = {
         {
-            id = 'Boastful Bellow',
+            id = 'Sonic Disturbance',
             Type = "AA",
             DisplayName = 'Sonic Disturbance',
             AbilityName = 'Sonic Disturbance',
