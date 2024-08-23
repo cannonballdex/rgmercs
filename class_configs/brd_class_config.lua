@@ -1110,6 +1110,16 @@ local _ClassConfig = {
         },
         ['Melody'] = {
             {
+                name = "Selo's Sonata",
+                type = "AA",
+                targetId = function(self) return { mq.TLO.Me.ID(), } end,
+                cond = function(self, aaName)
+                    if RGMercUtils.GetSetting('UseRunBuff') ~= 1 then return false end
+                    --refreshes slightly before expiry for better uptime
+                    return RGMercUtils.AAReady(aaName) and (mq.TLO.Me.Buff(mq.TLO.AltAbility(aaName).Spell.Trigger(1)).Duration.TotalSeconds() or 0) < 30
+                end,
+            },
+            {
                 name = "MainAriaSong",
                 type = "Song",
                 cond = function(self, songSpell)
