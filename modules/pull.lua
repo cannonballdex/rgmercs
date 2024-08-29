@@ -159,7 +159,7 @@ Module.DefaultConfig                   = {
     ['PullAllowList']      = { DisplayName = "Allow List", Category = "", Tooltip = "", Type = "Custom", Default = {}, },
     ['PullDenyList']       = { DisplayName = "Deny List", Category = "", Tooltip = "", Type = "Custom", Default = {}, },
     ['PullMobsInWater']    = { DisplayName = "Pull Mobs In Water", Category = "Pulling", Tooltip = "Pull Mobs that are in water bodies? If you are low level you might drown.", Default = false, },
-    ['PullSafeZones']      = { DisplayName = "SafeZones", Category = "", Tooltip = "", Type = "Custom", Default = { "poknowledge", "neighborhood", "guildhall", "guildlobby", "bazaar", }, },
+    ['PullSafeZones']      = { DisplayName = "SafeZones", Category = "", Tooltip = "", Type = "Custom", Default = { "poknowledge", "potranquility", "neighborhood", "guildhall", "guildhallsm", "guildhalllrg", "guildlobby", "bazaar", "nexus",}, },
 }
 
 Module.DefaultCategories               = Set.new({})
