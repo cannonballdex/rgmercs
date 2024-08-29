@@ -709,7 +709,7 @@ function Module:GiveTime(combat_state)
         end
     end
 
-    -- Downtime rotaiton will just run a full rotation to completion
+    -- Downtime rotation will just run a full rotation to completion
     for _, r in ipairs(self.TempSettings.RotationStates) do
         RGMercsLogger.log_verbose("\ay:::TEST ROTATION::: => \at%s", r.name)
         local timeCheckPassed = true
@@ -719,7 +719,7 @@ function Module:GiveTime(combat_state)
         end
         if timeCheckPassed then
             local targetTable = RGMercUtils.SafeCallFunc("Rotation Target Table", r.targetId)
-            if targetTable ~= false then
+            if targetTable ~= false and targetTable ~= nil then
                 for _, targetId in ipairs(targetTable) do
                     -- only do combat with a target.
                     if targetId and targetId > 0 then
