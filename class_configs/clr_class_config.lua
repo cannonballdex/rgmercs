@@ -368,7 +368,7 @@ local _ClassConfig = {
             "Valor",
             -- [] = "Resolution",
             "Temperance",
-            "]Blessing of Temperance",
+            "Blessing of Temperance",
             -- [] = "Heroic Bond",
             "Blessing of Aegolism",
             "Hand of Virtue",
