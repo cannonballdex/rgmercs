@@ -245,9 +245,9 @@ function Module:CampOff()
     RGMercUtils.DoCmd("/mapfilter pullradius off")
 end
 
-function Module:DestoryCampfire()
+function Module:DestroyCampfire()
     if mq.TLO.Me.Fellowship.Campfire() == nil then return end
-    RGMercsLogger.log_debug("DestoryCampfire()")
+    RGMercsLogger.log_debug("DestroyCampfire()")
 
     mq.TLO.Window("FellowshipWnd").DoOpen()
     mq.delay("3s", function() return mq.TLO.Window("FellowshipWnd").Open() end)
@@ -276,7 +276,7 @@ end
 
 function Module:Campfire(camptype)
     if camptype == -1 then
-        self:DestoryCampfire()
+        self:DestroyCampfire()
         return
     end
 
@@ -295,16 +295,7 @@ function Module:Campfire(camptype)
         end
     end
 
-    local spawnCount  = mq.TLO.SpawnCount("PC radius 100")()
-    local fellowCount = 0
-
-    for i = 1, spawnCount do
-        local spawn = mq.TLO.NearestSpawn(i, "PC radius 100")
-
-        if spawn() and mq.TLO.Me.Fellowship.Member(spawn.CleanName()) then
-            fellowCount = fellowCount + 1
-        end
-    end
+    local fellowCount = mq.TLO.SpawnCount('radius 100 fellowship')()
 
     if fellowCount >= 3 then
         mq.TLO.Window("FellowshipWnd").DoOpen()
