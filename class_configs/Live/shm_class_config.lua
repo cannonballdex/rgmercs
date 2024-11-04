@@ -1196,7 +1196,7 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "DieaseSlow",
+                name = "DiseaseSlow",
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not (RGMercUtils.GetSetting('DoDiseaseSlow') and RGMercUtils.GetSetting('DoSTSlow')) or RGMercUtils.CanUseAA("Turgur's Swarm") then return false end
