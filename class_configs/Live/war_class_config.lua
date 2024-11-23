@@ -388,6 +388,15 @@ local _ClassConfig = {
         },
         ['DPS'] = {
             {
+                name = "Huntsman's Ethereal Quiver",
+                type = "Item",
+                active_cond = function(self) return mq.TLO.FindItemCount("Ethereal Arrow")() > 100 end,
+                cond = function(self)
+                    return Config:GetSetting('SummonArrows') and mq.TLO.Me.Level() > 89 and mq.TLO.FindItemCount("Ethereal Arrow")() < 101 and
+                        mq.TLO.Me.ItemReady("Huntsman's Ethereal Quiver")()
+                end,
+            },
+            {
                 name = "aeroar",
                 type = "Disc",
                 cond = function(self, discSpell)
