@@ -366,6 +366,15 @@ return {
         },
         ['DPS'] = {
             {
+                name = "Huntsman's Ethereal Quiver",
+                type = "Item",
+                active_cond = function(self) return mq.TLO.FindItemCount("Ethereal Arrow")() > 100 end,
+                cond = function(self)
+                    return Config:GetSetting('SummonArrows') and mq.TLO.Me.Level() > 89 and mq.TLO.FindItemCount("Ethereal Arrow")() < 101 and
+                        mq.TLO.Me.ItemReady("Huntsman's Ethereal Quiver")()
+                end,
+            },
+            {
                 name = "Backstab",
                 type = "Ability",
                 cond = function(self, _)
@@ -474,6 +483,15 @@ return {
         },
         ['Downtime'] = {
             {
+                name = "Huntsman's Ethereal Quiver",
+                type = "Item",
+                active_cond = function(self) return mq.TLO.FindItemCount("Ethereal Arrow")() > 100 end,
+                cond = function(self)
+                    return Config:GetSetting('SummonArrows') and mq.TLO.Me.Level() > 89 and mq.TLO.FindItemCount("Ethereal Arrow")() < 101 and
+                        mq.TLO.Me.ItemReady("Huntsman's Ethereal Quiver")()
+                end,
+            },
+            {
                 name = "EndRegen",
                 type = "Disc",
                 cond = function(self, discSpell)
@@ -569,6 +587,14 @@ return {
             Max = 1,
             FAQ = "What do the different Modes do?",
             Answer = "Currently Rogues only have DPS mode, this may change in the future",
+        },
+        ['SummonArrows'] = {
+            DisplayName = "Use Huntsman's Quiver",
+            Category = "Equipment",
+            Tooltip = "Summon arrows with your Huntsman's Ethereal Quiver (Level 90+)",
+            Default = false,
+            FAQ = "How do I summon arrows?",
+            Answer = "If you are at least level 90, keep a Huntsman's Ethereal Quiver in your inventory and enable its use in the options.",
         },
         ['DoOpener']        = {
             DisplayName = "Use Openers",
