@@ -149,6 +149,7 @@ Config.Constants.ExpansionNameToID = {
     ['EXPANSION_LEVEL_NOS']     = 29, -- Night of Shadows
     ['EXPANSION_LEVEL_LS']      = 30, -- Laurion's Song
     ['EXPANSION_LEVEL_TOB']     = 31, -- The Outer Brood
+    ['EXPANSION_LEVEL_SOR']     = 32, -- Shattering of Ro
 }
 
 Config.Constants.ExpansionIDToName = {}
@@ -2849,3 +2850,4 @@ function Config.ShouldPriorityFollow()
 end
 
 return Config
+
