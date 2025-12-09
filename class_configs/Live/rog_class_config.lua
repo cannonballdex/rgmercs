@@ -488,7 +488,7 @@ return {
                 end,
             },
             {
-                name = "Carve",
+                name = "Slice",
                 type = "Disc",
             },
             {
@@ -605,7 +605,7 @@ return {
                 end,
             },
             {
-                name = "Envenomed Blades",
+                name = "Envenomed Blades: Enabled",
                 type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
