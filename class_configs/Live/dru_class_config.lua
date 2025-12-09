@@ -1182,7 +1182,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Swarm of the Fireflies",
+                name = "Swarm of Fireflies",
                 type = "AA",
             },
             {
@@ -1194,7 +1194,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Spirits of Nature",
+                name = "Spirit of Nature",
                 type = "AA",
             },
             {
