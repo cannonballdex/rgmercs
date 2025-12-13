@@ -105,6 +105,7 @@ local _ClassConfig = {
             "Talisman of the Ry'Gorr",    -- Level 115 - Group
             "Talisman of the Usurper",    -- Level 120 - Group
             "Talisman of the Heroic",     -- Level 125 - Group
+            "Talisman of Unity X",        -- Level 130 - Group
         },
         ["SingleFocusSpell"] = {
             -- Focus Spell - Single Spells will only be used on the Tank if they are better than the Group Version to cut incredibly long buff cycles.
@@ -113,6 +114,7 @@ local _ClassConfig = {
             "Unity of the Kromrif",   -- Level 111 - Single
             "Unity of the Vampyre",   -- Level 116 - Single
             "Celeritous Unity",       -- Level 121 - Single
+            "Spirit's Focusing XIV",  -- Level 126 - Single
         },
         ["RunSpeedBuff"] = {
             -- Run Speed Buff - 9 - 74
@@ -123,6 +125,7 @@ local _ClassConfig = {
         },
         ["HasteBuff"] = {
             -- Haste Buff - 26 - 64
+            "Spirit Bolstering V", -- 127
             "Talisman of Celerity",
             "Swift Like the Wind",
             "Celerity",
@@ -130,6 +133,7 @@ local _ClassConfig = {
         },
         ["TempHPBuff"] = {
             -- Growth Buff 111 -> 81
+            "Wils Growth X", -- 126
             "Overwhelming Growth",
             "Fervent Growth",
             "Frenzied Growth",
@@ -210,6 +214,7 @@ local _ClassConfig = {
         },
         ["MaloSpell"] = {
             -- AA Starts at LVL 75
+            "Malaise XVI", -- 127
             "Malosinera",
             "Malosinetra",
             "Malosinise",
@@ -226,6 +231,7 @@ local _ClassConfig = {
             "Tigir's Insects",
         },
         ["SlowSpell"] = {
+            "Aramna's Drowse", -- 126
             "Balance of Discord",
             "Balance of the Nihil",
             "Turgur's Insects", --Can save mana by continuing to use Togor's on group mobs, but this is problematic for automation. Not worth splitting the entry.
@@ -252,6 +258,7 @@ local _ClassConfig = {
         },
         ["WardBuff"] = {
             -- Self Heal Ward Spells
+            "Ward of Resurgence XI", -- 130
             "Ward of Heroic Deeds",
             "Ward of Recuperation",
             "Ward of Remediation",
@@ -308,6 +315,7 @@ local _ClassConfig = {
         ["PackSelfBuff"] = {
             -- Pack Self Buff - Level 90 - 115
             --- Ignoring the LVL 85 Call the Pack buff due to the decrease in mana per tick.
+            "Call the Pack X Azia", -- 130
             "Pack of Ancestral Beasts",
             "Pack of Lunar Wolves",
             "Pack of The Black Fang",
@@ -326,6 +334,7 @@ local _ClassConfig = {
             'Incarnate Anew', -- Level 59
         },
         ["RecklessHeal1"] = {
+            "Reckless Mending VIII", -- 130
             "Reckless Reinvigoration",
             "Reckless Resurgence",
             "Reckless Renewal",
@@ -353,6 +362,7 @@ local _ClassConfig = {
         },
         ["RecklessHeal2"] = {
             --worthless to mem two mendings because they don't have a recast time, keep Qirik's for when we don't have enough Reckless.
+            "Reckless Mending VIII", -- 130
             "Reckless Reinvigoration",
             "Reckless Resurgence",
             "Reckless Renewal",
@@ -365,6 +375,7 @@ local _ClassConfig = {
         },
         ["RecklessHeal3"] = {
             --fallback just in case we have some other DPS stuff disabled, but 3 reckless is overkill for automation
+            "Reckless Mending VIII", -- 130
             "Reckless Reinvigoration",
             "Reckless Resurgence",
             "Reckless Renewal",
@@ -392,9 +403,11 @@ local _ClassConfig = {
             "Blezon's Recourse",
             "Gotikan's Recourse",
             "Qirik's Recourse",
+            "Aramna's Recourse", -- 126
         },
         ["InterventionHeal"] = {
             -- Intervention Heal 78+
+            "Ancestral Intervention XI", -- 128
             "Immortal Intervention",
             "Primordial Intervention",
             "Prehistoric Intervention",
@@ -409,6 +422,7 @@ local _ClassConfig = {
         ["GroupRenewalHoT"] = {
             -- Prior to 70 Breath of Trushar, single HoTs will be used including the
             --- the Torpor/Stoicism line. LVL 44 is the lowest level.
+            "Ghost of Renewal XIII", --128
             "Reverie of Renewal",
             "Spirit of Renewal",
             "Spectre of Renewal",
@@ -429,6 +443,7 @@ local _ClassConfig = {
         },
         ["CanniSpell"] = {
             -- Convert Health to Mana - Level  23 - 124
+            "Ancestral Bargain XIV", -- 129
             "Traumatic Exchange",
             "Hoary Agreement",
             "Ancient Bargain",
@@ -459,6 +474,7 @@ local _ClassConfig = {
             "Blood of Nadox",
         },
         ['CureCorrupt'] = {
+            "Mastery Chant of the Zelniak", -- 129
             "Chant of the Zelniak",
             "Chant of the Wulthan",
             "Chant of the Kromtus",
@@ -472,6 +488,7 @@ local _ClassConfig = {
         },
         ["TwinHealNuke"] = {
             -- Nuke the MA Not the assist target - Levels 85+
+            "Frost Gift X", -- 130
             "Gelid Gift",
             "Polar Gift",
             "Wintry Gift",
@@ -504,6 +521,7 @@ local _ClassConfig = {
         },
         ["FastPoisonNuke"] = {
             -- Fast Poison Nuke LVL73+
+            "Tserik's Bite", -- 128
             "Oka's Bite",
             "Ander's Bite",
             "Direfang's Bite",
@@ -537,6 +555,7 @@ local _ClassConfig = {
             "Frost Strike",
             "Spirit Strike",
             "Frost Rift",
+            "Frost Rift XX", -- 129
         },
         ["ChaoticDot"] = {
             -- Long Dot(42s) LVL 104+
@@ -588,6 +607,7 @@ local _ClassConfig = {
         },
         ["CurseDot2"] = {
             ---, Stacking: Enalam's Curse - Long Dot(54s) - 100+
+            "Maniadry's Curse", -- 130
             "Lenrel's Curse",
             "Marlek's Curse",
             "Erogo's Curse",
@@ -597,6 +617,7 @@ local _ClassConfig = {
         },
         ["SaryrnDot"] = {
             -- Stacking: Blood of Saryrn - Long Dot(42s) - Level 8+
+            "Vengeance of Pain XIII Azia", -- 129
             "Caustic Blood",
             "Desperate Vampyre Blood",
             "Restless Blood",
@@ -663,6 +684,7 @@ local _ClassConfig = {
         },
         ["PetSpell"] = {
             -- Pet Spell - 32+
+            "Aramna's Faithful", -- 127
             "Suja's Faithful",
             "Diabo Sivuela's Faithful",
             "Grondo's Faithful",
