@@ -31,9 +31,10 @@ return {
             "Practiced Reflexes",
         },
         ["ThiefBuff"] = {
-            "Thief's Sight",  -- Level 117
-            "Thief's Vision", -- Level 96
-            "Thief's Eyes",   -- Level 68
+            "Blinding Flash XIV",  -- Level 127
+            "Thief's Sight",       -- Level 117
+            "Thief's Vision",      -- Level 96
+            "Thief's Eyes",        -- Level 68
         },
         ["DaggerThrow"] = {
             "Queseris' Dagger",       -- Level 122
@@ -62,14 +63,16 @@ return {
             "Deadeye Discipline",        -- Level 54
         },
         ["ProcBuff"] = {
-            "Weapon Covenant",    -- Level 97
-            "Weapon Bond",        -- Level 92
-            "Weapon Affiliation", -- Level 87
+            "Indiscernible Discipline",    -- Level 127
+            "Weapon Covenant",             -- Level 97
+            "Weapon Bond",                 -- Level 92
+            "Weapon Affiliation",          -- Level 87
         },
         ["Frenzied"] = {
             "Frenzied Stabbing Discipline", -- Level 70
         },
         ["Ambush"] = {
+            "Ambush XI",       -- Level 126
             "Bamboozle",       -- Level 121
             "Ambuscade",       -- Level 116
             "Bushwhack",       -- Level 111
@@ -99,6 +102,7 @@ return {
             "Sneak Attack",          -- Level 20
         },
         ["PoisonBlade"] = {
+            "Toxic Blade VIII",  -- Level 128
             "Venomous Blade",    -- Level 123
             "Netherbian Blade",  -- Level 118
             "Drachnid Blade",    -- Level 113
@@ -148,6 +152,7 @@ return {
         },
         ['CombatEndRegen'] = {
             --Timer 13, can be used in combat.
+            "Hiatus V", --Level 126
             "Hiatus", --Level 106
             "Relax",
             "Night's Calming",
@@ -162,6 +167,7 @@ return {
             "Razor's Edge Discipline",  -- Level 92
         },
         ["AspDisc"] = {
+            "Visaphen Discipline",   -- Level 129
             "Crinotoxin Discipline", -- Level 124
             "Exotoxin Discipline",   -- Level 119
             "Chelicerae Discipline", -- Level 114
@@ -170,12 +176,14 @@ return {
             "Aspbleeder Discipline", -- Level 99
         },
         ["AimDisc"] = {
+            "Fatal Aim Discipline IV",--  Level 130
             "Baleful Aim Discipline", --  Level 116
             "Lethal Aim Discipline",  --  Level 108
             "Fatal Aim Discipline",   --  Level 98
             "Deadly Aim Discipline",  --  Level 68
         },
         ["MarkDisc"] = {
+            "Easy Mark X",       -- Level 127
             "Unsuspecting Mark", -- Level 121
             "Foolish Mark",      -- Level 116
             "Naive Mark",        -- Level 111
@@ -196,11 +204,14 @@ return {
             "Jugular Cut",      -- Level 112
             "Jugular Rend",     -- Level 117
             "Jugular Hew",      -- Level 122
+            "Jugular Slash XI", -- Level 127
+
         },
         ["Phantom"] = {
             "Phantom Assassin", -- Level 100
         },
         ["SecretBlade"] = {
+            "Holdout Blade VII",-- Level 129
             "Veiled Blade",     -- Level 124
             "Obfuscated Blade", -- Level 119
             "Cloaked Blade",    -- Level 114
@@ -226,6 +237,7 @@ return {
             "Knifeplay Discipline", -- Level 98, Timer 16
         },
         ["HateDebuff"] = {          --Timer 11, Aggro reduction and Aggro modifier for current target
+            "Misdirection IX",      -- Level 129
             "Trickery",             -- Level 124
             "Beguile",              -- Level 119
             "Cozen",                -- Level 114
@@ -360,7 +372,7 @@ return {
                 type = "Disc",
             },
             {
-                name = "Dicho",
+                name = "DichoSpell",
                 type = "Disc",
             },
             {
@@ -488,7 +500,7 @@ return {
                 end,
             },
             {
-                name = "Carve",
+                name = "Slice",
                 type = "Disc",
             },
             {
@@ -605,7 +617,7 @@ return {
                 end,
             },
             {
-                name = "Envenomed Blades",
+                name = "Envenomed Blades: Enabled",
                 type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
