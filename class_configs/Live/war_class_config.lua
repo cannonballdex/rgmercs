@@ -33,6 +33,7 @@ local _ClassConfig = {
     },
     ['AbilitySets']     = {
         ['StandDisc'] = {
+            "Final Stand VI", -- 128
             "Climactic Stand",
             "Resolute Stand",
             "Ultimate Stand Discipline",
@@ -62,6 +63,7 @@ local _ClassConfig = {
             "Shield Split",
         },
         ['GroupACBuff'] = {
+            "Field Armorer X", -- 129
             "Field Bulwark",
             "Full Moon's Champion",
             "Paragon Champion",
@@ -76,6 +78,7 @@ local _ClassConfig = {
             "Commanding Voice",
         },
         ['DefenseACBuff'] = {
+            "Bracing Defense X", -- 130
             "Vigorous Defense",
             "Primal Defense",
             "Courageous Defense",
@@ -119,6 +122,7 @@ local _ClassConfig = {
             "Harmonious Precision",
         },
         ['AEBlades'] = {
+            "Cyclone Blades XIV", --127
             "Tempest Blades",
             "Dragonstrike Blades",
             "Stormstrike Blades",
@@ -134,6 +138,8 @@ local _ClassConfig = {
             "Spiraling Blades",
         },
         ['AddHate1'] = {
+            "Provoke XIX", -- 127
+            "Bazu Roar X", -- 126
             "Mortimus' Roar",
             "Namdrows' Roar",
             "Kragek's Roar",
@@ -152,6 +158,7 @@ local _ClassConfig = {
             "Provoke",
         },
         ['AddHate2'] = {
+            "Harassing Shout VII", --128
             "Distressing Shout",
             "Twilight Shout",
             "Oppressing Shout",
@@ -174,6 +181,7 @@ local _ClassConfig = {
             "Mock",
         },
         ['StrikeDisc'] = {
+            "Opportunistic Strike IX", --129
             "Decisive Strike",
             "Precision Strike",
             "Cunning Strike",
@@ -184,6 +192,7 @@ local _ClassConfig = {
             "Exploitive Strike",
         },
         ['EndRegen'] = {
+            "Hiatus V", -- 126
             "Convalesce",
             "Night's Calming",
             "Hiatus",
@@ -200,6 +209,7 @@ local _ClassConfig = {
             "Myrmidon's Aura",
         },
         ['Attention'] = {
+            "Unquestioned Attention", -- 127
             "Unending Attention",
             "Unyielding Attention",
             "Unflinching Attention",
@@ -217,6 +227,7 @@ local _ClassConfig = {
             "Brightfeld's Onslaught Discipline",
         },
         ['RuneShield'] = {
+            "Warrior's Auspice VII", --129
             "Warrior's Auspice",
             "Warrior's Bulwark",
             "Warrior's Bastion",
@@ -473,6 +484,14 @@ local _ClassConfig = {
                 type = "Item",
                 cond = function(self, itemName, target)
                     if not Config:GetSetting('DoCharmClick') or not Casting.ItemHasClicky(itemName) then return false end
+                    return Casting.SelfBuffItemCheck(itemName)
+                end,
+            },
+            { --Back Click, name function stops errors in rotation window when slot is empty
+                name_func = function() return mq.TLO.Me.Inventory("Back").Name() or "BackClick(Missing)" end,
+                type = "Item",
+                cond = function(self, itemName, target)
+                    if not Config:GetSetting('DoBackClick') or not Casting.ItemHasClicky(itemName) then return false end
                     return Casting.SelfBuffItemCheck(itemName)
                 end,
             },
@@ -1087,7 +1106,16 @@ local _ClassConfig = {
             Header = "Clickies",
             Category = "Class Config Clickies",
             Index = 102,
-            Tooltip = "Click your charm for Geomantra.",
+            Tooltip = "Click your back for Geomantra.",
+            Default = false,
+        },
+        ['DoBackClick']     = {
+            DisplayName = "Do Back Click",
+            Group = "Items",
+            Header = "Clickies",
+            Category = "Class Config Clickies",
+            Index = 102,
+            Tooltip = "Click your back for Spikes.",
             Default = false,
         },
         ['DoCoating']        = {
