@@ -279,6 +279,7 @@ _ClassConfig      = {
         },
         ['MaloNuke'] = {
             -- Shock/Malo Combo Line
+            "Shock of Malaise VII", -- 128
             "Memorial Steel Malosinera",
             "Carbide Malosinetra",
             "Blistersteel Malosenia",
@@ -1095,6 +1096,24 @@ _ClassConfig      = {
             end
 
             -- find a slot for the item
+            if mq.TLO.Me.Inventory('32').ID() ~= '177689' then
+                print('\ayYou need to place the Weapon Pack in the bottom right slot of your inventory')
+                print('\aySorry for the mess about to be made of your inventory')
+                --mq.cmdf('/itemnotify "%s" leftmouseup',"Anizok's Bait Dispenser")
+                mq.delay(2000)
+                mq.cmd('/itemnotify 32 leftmouseup')
+                --while mq.TLO.Cursor.ID() ~= nil do
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 23 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 24 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 25 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 26 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 27 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 28 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 29 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 30 leftmouseup') end
+                    if mq.TLO.Cursor.ID() ~= nil then mq.cmd('/ctrl /itemnotify 31 leftmouseup') end
+                --end
+            end
             local openSlot = 0
             for i = 1, 10 do
                 if mq.TLO.InvSlot("pack" .. tostring(i)).Item.Container() == nil and mq.TLO.InvSlot("pack" .. tostring(i)).Item.ID() == nil then
@@ -1999,6 +2018,7 @@ _ClassConfig      = {
             cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
             spells = {
                 { name = "PetHealSpell", },
+                { name = "PetWeaponSummon", },
             },
         },
     },
