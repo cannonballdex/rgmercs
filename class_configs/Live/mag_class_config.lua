@@ -46,7 +46,7 @@ _ClassConfig      = {
         --- Nukes
         ['SwarmPet'] = {
             -- Swarm Pet* >= LVL 70
-            "Raging Servant XIII",
+            "Raging Servant XIII", -- 130
             "Ravening Servant",
             "Roiling Servant",
             "Riotous Servant",
@@ -63,7 +63,7 @@ _ClassConfig      = {
         },
         ['SpearNuke'] = {
             -- Spear Nuke* >= LVL 70
-            "Spear of Ro X",
+            "Spear of Ro X", -- 130
             "Spear of Molten Dacite",
             "Spear of Molten Luclinite",
             "Spear of Molten Komatiite",
@@ -76,7 +76,7 @@ _ClassConfig      = {
         },
         ['ChaoticNuke'] = {
             -- Chaotic Nuke with Beneficial Effect >= LVL69
-            "Chaotic Fire VI",
+            "Chaotic Fire VI", -- 130
             "Chaotic Magma",
             "Chaotic Calamity",
             "Chaotic Pyroclasm",
@@ -92,7 +92,7 @@ _ClassConfig      = {
         },
         -- ['FireNuke'] = {
         --     -- Fire Nuke 1 <= LVL <= 70
-        --     "Burning Sands XIV",
+        --     "Burning Sands XIV", -- 129
         --     "Cremating Sands",
         --     "Ravaging Sands",
         --     "Incinerating Sands",
@@ -119,7 +119,8 @@ _ClassConfig      = {
         --     "Burst of Flame",
         -- },
         -- ['FireBoltNuke'] = {
-        --     "Bolt of Flame XVIII",
+        --     -- Fire Bolt Nukes
+        --     "Bold of Flame XVIII", -- 126
         --     "Bolt of Molten Dacite",
         --     "Bolt of Molten Olivine",
         --     "Bolt of Molten Komatiite",
@@ -142,7 +143,7 @@ _ClassConfig      = {
         -- },
         -- ['MagicNuke'] = {
         --     -- Nuke 1 <= LVL <= 69
-        --     "Shock of Blades XIX",
+        --     "Shock of Blades XIX", -- 127
         --     "Shock of Memorial Steel",
         --     "Shock of Carbide Steel",
         --     "Shock of Burning Steel",
@@ -201,7 +202,8 @@ _ClassConfig      = {
         },
         ['BeamNuke'] = {
             -- Beam Frontal AOE Spell*
-            "Beam of Molten Slag XII",
+            "Beam of Daggers VIII", -- 128
+            "Beam of Molten Slag XII", -- 127
             "Beam of Molten Dacite",
             "Beam of Molten Olivine",
             "Beam of Molten Komatiite",
@@ -216,7 +218,7 @@ _ClassConfig      = {
         },
         ['RainNuke'] = {
             --- Rain AOE Spell*
-            "Rain of Fire XVI",
+            "Rain of Fire XVI", -- 128
             "Rain of Molten Dacite",
             "Rain of Molten Olivine",
             "Rain of Molten Komatiite",
@@ -235,7 +237,8 @@ _ClassConfig      = {
             "Rain of Fire",
         },
         ['MagicRainNuke'] = {
-            "Rain of Blades XVII",
+            -- Magic Rain
+            "Rain of Blades XVII", -- 129
             "Rain of Kukris",
             "Rain of Falchions",
             "Rain of Blades",
@@ -247,7 +250,7 @@ _ClassConfig      = {
         },
         ['VolleyNuke'] = {
             -- Volley Nuke - Pet buff*
-            "Shock of Many XI",
+            "Shock of Many XI", -- 127
             "Fusillade of Many",
             "Barrage of Many",
             "Shockwave of Many",
@@ -261,7 +264,7 @@ _ClassConfig      = {
         },
         ['SummonedNuke'] = {
             -- Unnatural Nukes >70
-            "Expunge the Unnatural",
+            "Expunge the Unnatural", -- 129
             "Dismantle the Unnatural",
             "Unmend the Unnatural",
             "Obliterate the Unnatural",
@@ -276,7 +279,7 @@ _ClassConfig      = {
         },
         ['MaloNuke'] = {
             -- Shock/Malo Combo Line
-            "Shock of Malaise VII",
+            "Shock of Malaise VII", -- 128
             "Memorial Steel Malosinera",
             "Carbide Malosinetra",
             "Blistersteel Malosenia",
@@ -286,7 +289,7 @@ _ClassConfig      = {
         },
         --- Buffs
         ['SelfShield'] = {
-            "Shielding XXIII",
+            "Shielding XXIII", -- 126
             "Shield of Memories",
             "Shield of Shadow",
             "Shield of Restless Ice",
@@ -311,7 +314,7 @@ _ClassConfig      = {
         },
         ['ShortDurDmgShield'] = {
             -- Use at the start of the DPS loop
-            "Searing Skin XI",
+            "Searing Skin XI", -- 128
             "Boiling Skin",
             "Scorching Skin",
             "Burning Skin",
@@ -329,7 +332,7 @@ _ClassConfig      = {
         },
         ['LongDurDmgShield'] = {
             -- Preferring group buffs for ease. Included all Single target Now as well.
-            "Circle of Fireskin XVI",
+            "Circle of Fireskin XVI", -- 126
             "Circle of Forgefire Coat",
             "Forgefire Coat",
             "Circle of Emberweave Coat",
@@ -367,7 +370,7 @@ _ClassConfig      = {
         },
         ['ManaRegenBuff'] = {
             -- LVL58 (Transon's Phantasmal Protection) and up to avoid reagent usage
-            "Eidolic Guardian XVII",
+            "Eidolic Guardian XVII", -- 127
             "Courageous Guardian",
             "Relentless Guardian",
             "Restless Guardian",
@@ -433,7 +436,7 @@ _ClassConfig      = {
         },]] --
         ['FireShroud'] = {
             -- Defensive Proc 3-6m Buff
-            "Burning Veil X",
+            "Burning Veil X", -- 129
             "Igneous Veil",
             "Volcanic Veil",
             "Exothermic Veil",
@@ -446,7 +449,8 @@ _ClassConfig      = {
             "Burning Aura",
         },
         ['PetBodyGuard'] = {
-            "Hulking Bodyguard X",
+            "Tellurian Bodyguard IX", -- 130
+            "Hulking Bodyguard X", -- 126
             "ValorForged Bodyguard",
             "Ophiolite Bodyguard",
             "Pyroxenite Bodyguard",
@@ -458,7 +462,7 @@ _ClassConfig      = {
             "Hulking Bodyguard",
         },
         ['GatherMana'] = {
-            "Gather Potential VIII",
+            "Gather Potential VIII", -- 130
             "Gather Zeal",
             "Gather Vigor",
             "Gather Potency",
@@ -469,7 +473,7 @@ _ClassConfig      = {
         },
         -- Pet Spells Pets & Spells Affecting them
         ['MeleeGuard  '] = {
-            "Shield of Fate VII",
+            "Shield of Fate VII", -- 127
             "Shield of Inescapability",
             "Shield of Inevitability",
             "Shield of Destiny",
@@ -487,7 +491,7 @@ _ClassConfig      = {
         },
         ['PetHealSpell'] = {
             -- Pet Heal*
-            "Renewal of Magmath",
+            "Renewal of Magmath", -- 128
             "Renewal of Shoru",
             "Renewal of Iilivina ",
             "Renewal of Evreth",
@@ -509,7 +513,7 @@ _ClassConfig      = {
         },
         ['PetPromisedSpell'] = {
             ---Pet Promised*
-            "Promised Mending XII",
+            "Promised Mending XII", -- 128
             "Promised Reconstitution",
             "Promised Relief",
             "Promised Healing",
@@ -552,8 +556,7 @@ _ClassConfig      = {
             "Elemental Draw",
         },
         ['PetHaste'] = {
-            "Burnout XVII",
-            "Burnout XVI",
+            "Burnout XVI", -- 126
             "Burnout XV",
             "Burnout XIV",
             "Burnout XIII",
@@ -573,7 +576,7 @@ _ClassConfig      = {
             "Burnout",
         },
         ['PetIceFlame'] = {
-            "Iceflame Guard XII",
+            "Iceflame Guard XII", -- 129
             "IceFlame Palisade",
             "Iceflame Barricade ",
             "Iceflame Rampart",
@@ -588,7 +591,7 @@ _ClassConfig      = {
             "Iceflame Guard",
         },
         ['EarthPetSpell'] = {
-            "Earth Elemental XXVI",
+            "Earth Elemental XXVI", --129
             "Recruitment of Earth",
             "Conscription of Earth",
             "Manifestation of Earth",
@@ -616,7 +619,8 @@ _ClassConfig      = {
             "Elementalkin: Earth",
         },
         ['WaterPetSpell'] = {
-            "Water Elemental XXVI",
+            ----- Water Pet*
+            "Water Elemental XXVI", -- 127
             "Recruitment of Water",
             "Conscription of Water",
             "Manifestation of Water",
@@ -645,7 +649,8 @@ _ClassConfig      = {
             "Elementalkin: Water",
         },
         ['AirPetSpell'] = {
-            "Air Elemental XXVI",
+            ----- Air Pet*
+            "Air Elemental XXVI", -- 126
             "Recruitment of Air",
             "Conscription of Air",
             "Manifestation of Air",
@@ -674,7 +679,7 @@ _ClassConfig      = {
             "Elementalkin: Air",
         },
         ['FirePetSpell'] = {
-            "Fire Elemental XXVI",
+            "Fire Elemental XXVI", --128
             "Recruitment of Fire",
             "Conscription of Fire",
             "Manifestation of Fire",
@@ -701,6 +706,24 @@ _ClassConfig      = {
             "Elemental: Fire",
             "Elementaling: Fire",
             "Elementalkin: Fire",
+        },
+        ['MonsterPetSpell'] = {
+            "Monster Summoning XVI", --130
+            "Monster Summoning XV",
+            "Monster Summoning XIV",
+            "Monster Summoning XIII",
+            "Monster Summoning XII",
+            "Monster Summoning XI",
+            "Monster Summoning X",
+            "Monster Summoning IX",
+            "Monster Summoning VIII",
+            "Monster Summoning VII",
+            "Monster Summoning VI",
+            "Monster Summoning V",
+            "Monster Summoning IV",
+            "Monster Summoning III",
+            "Monster Summoning II",
+            "Monster Summoning I",
         },
         ['AegisBuff'] = {
             ---Pet Aegis Shield Buff (Short Duration)*
@@ -730,7 +753,7 @@ _ClassConfig      = {
         -- - Summoned item Spells
         ['PetArmorSummon'] = {
             -- >=LVL71
-            "Grant Arcane Plate",
+            "Grant Arcane Plate", -- 127
             "Grant The Alloy's Plate",
             "Grant the Centien's Plate",
             "Grant Ocoenydd's Plate",
@@ -743,7 +766,7 @@ _ClassConfig      = {
             "Summon Plate of the Elements",
         },
         ['PetWeaponSummon'] = {
-            "Grant Arcane Armaments",
+            "Grant Arcane Armaments", -- 128
             "Grant Goliath's Armaments",
             "Grant Shak Dathor's Armaments",
             "Grant Yalrek's Armaments",
@@ -757,7 +780,7 @@ _ClassConfig      = {
             "Summon Elemental Armaments",
         },
         ['PetHeirloomSummon'] = {
-            "Grant Arcane Heirlooms",
+            "Grant Arcane Heirlooms", -- 126
             "Grant Ankexfen's Heirlooms",
             "Grant the Diabo's Heirlooms",
             "Summon Nastel's Heirlooms",
@@ -787,7 +810,7 @@ _ClassConfig      = {
             "Summon: Lava Orb",
         },
         ['EarthPetItemSummon'] = {
-            "Summon Arcane Servant",
+            "Summon Arcane Servant", -- 128
             "Summon Valorous Servant",
             "Summon Forbearing Servant",
             "Summon Imperative Servant",
@@ -797,7 +820,7 @@ _ClassConfig      = {
             "Summon Exigent Servant",
         },
         ['FirePetItemSummon'] = {
-            "Summon Arcane Minion",
+            "Summon Arcane Minion", -- 130
             "Summon Valorous Minion",
             "Summon Forbearing Minion",
             "Summon Imperative Minion",
@@ -819,7 +842,7 @@ _ClassConfig      = {
         },
         ['SelfManaRodSummon'] = {
             ---, - Focuses on self mana rod summon separate from other timers. >95
-            "Rod of Shattered Modulation",
+            "Rod of Shattered Modulation", -- 127
             "Rod of Courageous Modulation",
             "Sickle of Umbral Modulation",
             "Wand of Frozen Modulation",
@@ -830,7 +853,7 @@ _ClassConfig      = {
         -- - Debuffs
         ['MaloDebuff'] = {
             -- line < LVL 75 @ LVL75 use the AA
-            "Malaise XVI",
+            "Malaise XVI", -- 126
             "Malosinera",
             "Malosinetra",
             "Malosinara",
@@ -1073,6 +1096,36 @@ _ClassConfig      = {
             end
 
             -- find a slot for the item
+            -- ensure pack is present in bottom-right slot
+if tostring(mq.TLO.Me.Inventory('32').ID() or "") ~= '177689' then
+    print('\ayYou need to place the Weapon Pack in the bottom right slot of your inventory')
+    print('\aySorry for the mess about to be made of your inventory')
+    mq.delay(2000)
+    mq.cmd('/itemnotify 32 leftmouseup')
+    if mq.TLO.Window("QuantityWnd").Open() then
+                    mq.TLO.Window("QuantityWnd").Child("QTYW_Accept_Button").LeftMouseUp()
+    end
+
+    local slotTargets = {23, 24, 25, 26, 27, 28, 29, 30, 31}
+    local maxAttempts = 20
+    local attempts = 0
+
+    -- Try clicking the slots in cycles until cursor is clear or we hit attempts limit
+    while (mq.TLO.Cursor.ID() or 0) > 0 and attempts < maxAttempts do
+        for _, slot in ipairs(slotTargets) do
+            if (mq.TLO.Cursor.ID() or 0) == 0 then break end
+            mq.cmd(string.format('/ctrl /itemnotify %d leftmouseup', slot))
+            mq.delay(50) -- small delay between clicks
+        end
+        attempts = attempts + 1
+    end
+
+    if (mq.TLO.Cursor.ID() or 0) > 0 then
+        Logger.log_error("summon_pet_toy(): cursor did not clear after attempting to place weapon pack (attempts=%d).", attempts)
+        -- optional: try to safe-dump the cursor somewhere predictable or return false
+        return false
+    end
+end
             local openSlot = 0
             for i = 1, 10 do
                 if mq.TLO.InvSlot("pack" .. tostring(i)).Item.Container() == nil and mq.TLO.InvSlot("pack" .. tostring(i)).Item.ID() == nil then
@@ -1977,6 +2030,7 @@ _ClassConfig      = {
             cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
             spells = {
                 { name = "PetHealSpell", },
+                { name = "PetWeaponSummon", },
             },
         },
     },
@@ -2024,12 +2078,12 @@ _ClassConfig      = {
             Group = "Abilities",
             Header = "Pet",
             Category = "Pet Summoning",
-            Tooltip = "1 = Fire, 2 = Water, 3 = Earth, 4 = Air",
+            Tooltip = "1 = Fire, 2 = Water, 3 = Earth, 4 = Air, 5 = Monster",
             Type = "Combo",
-            ComboOptions = { 'Fire', 'Water', 'Earth', 'Air', },
+            ComboOptions = { 'Fire', 'Water', 'Earth', 'Air', 'Monster', },
             Default = 2,
             Min = 1,
-            Max = 4,
+            Max = 5,
         },
         ['DoPetHeirlooms'] = {
             DisplayName = "Do Pet Heirlooms",
