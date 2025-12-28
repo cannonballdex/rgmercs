@@ -31,9 +31,10 @@ return {
             "Practiced Reflexes",
         },
         ["ThiefBuff"] = {
-            "Thief's Sight",  -- Level 117
-            "Thief's Vision", -- Level 96
-            "Thief's Eyes",   -- Level 68
+            "Blinding Flash XIV",  -- Level 127
+            "Thief's Sight",       -- Level 117
+            "Thief's Vision",      -- Level 96
+            "Thief's Eyes",        -- Level 68
         },
         ["DaggerThrow"] = {
             "Queseris' Dagger",       -- Level 122
@@ -63,9 +64,10 @@ return {
             "Deadeye Discipline",        -- Level 54
         },
         ["ProcBuff"] = {
-            "Weapon Covenant",    -- Level 97
-            "Weapon Bond",        -- Level 92
-            "Weapon Affiliation", -- Level 87
+            "Indiscernible Discipline",    -- Level 127
+            "Weapon Covenant",             -- Level 97
+            "Weapon Bond",                 -- Level 92
+            "Weapon Affiliation",          -- Level 87
         },
         ["Frenzied"] = {
             "Frenzied Stabbing Discipline", -- Level 70
@@ -153,10 +155,10 @@ return {
         ['CombatEndRegen'] = {
             --Timer 13, can be used in combat.
             "Hiatus V", --Level 126
-            "Convalesce",
-            "Night's Calming",
-            "Relax",
             "Hiatus", --Level 106
+            "Relax",
+            "Night's Calming",
+            "Convalesce",
         },
         ["CADisc"] = {
             "Counterattack Discipline",
@@ -167,7 +169,7 @@ return {
             "Razor's Edge Discipline",  -- Level 92
         },
         ["AspDisc"] = {
-            "Visapehn Discipline",   -- Level 129
+            "Visaphen Discipline",   -- Level 129
             "Crinotoxin Discipline", -- Level 124
             "Exotoxin Discipline",   -- Level 119
             "Chelicerae Discipline", -- Level 114
@@ -176,14 +178,14 @@ return {
             "Aspbleeder Discipline", -- Level 99
         },
         ["AimDisc"] = {
-            "Fatal Aim Discipline IV", --  Level 130
-            "Baleful Aim Discipline",  --  Level 116
-            "Lethal Aim Discipline",   --  Level 108
-            "Fatal Aim Discipline",    --  Level 98
-            "Deadly Aim Discipline",   --  Level 68
+            "Fatal Aim Discipline IV",--  Level 130
+            "Baleful Aim Discipline", --  Level 116
+            "Lethal Aim Discipline",  --  Level 108
+            "Fatal Aim Discipline",   --  Level 98
+            "Deadly Aim Discipline",  --  Level 68
         },
         ["MarkDisc"] = {
-            "Easy Mark X",       -- Level 126
+            "Easy Mark X",       -- Level 127
             "Unsuspecting Mark", -- Level 121
             "Foolish Mark",      -- Level 116
             "Naive Mark",        -- Level 111
@@ -194,29 +196,30 @@ return {
             "Easy Mark",         -- Level 86
         },
         ["Jugular"] = {
-            "Jugular Slash XI", -- Level 127
-            "Jugular Hew",      -- Level 122
-            "Jugular Rend",     -- Level 117
-            "Jugular Cut",      -- Level 112
-            "Jugular Strike",   -- Level 107
-            "Jugular Hack",     -- Level 102
-            "Jugular Lacerate", -- Level 97
-            "Jugular Gash",     -- Level 92
-            "Jugular Sever",    -- Level 87
-            "Jugular Slice",    -- Level 82
             "Jugular Slash",    -- Level 77
+            "Jugular Slice",    -- Level 82
+            "Jugular Sever",    -- Level 87
+            "Jugular Gash",     -- Level 92
+            "Jugular Lacerate", -- Level 97
+            "Jugular Hack",     -- Level 102
+            "Jugular Strike",   -- Level 107
+            "Jugular Cut",      -- Level 112
+            "Jugular Rend",     -- Level 117
+            "Jugular Hew",      -- Level 122
+            "Jugular Slash XI", -- Level 127
+
         },
         ["Phantom"] = {
             "Phantom Assassin", -- Level 100
         },
         ["SecretBlade"] = {
-            "Holdout Blade VII", -- Level 129
-            "Veiled Blade",      -- Level 124
-            "Obfuscated Blade",  -- Level 119
-            "Cloaked Blade",     -- Level 114
-            "Secret Blade",      -- Level 109
-            "Hidden Blade",      -- Level 104
-            "Holdout Blade",     -- Level 99
+            "Holdout Blade VII",-- Level 129
+            "Veiled Blade",     -- Level 124
+            "Obfuscated Blade", -- Level 119
+            "Cloaked Blade",    -- Level 114
+            "Secret Blade",     -- Level 109
+            "Hidden Blade",     -- Level 104
+            "Holdout Blade",    -- Level 99
         },
         ["DichoSpell"] = {
             "Reciprocal Weapons", -- Level 121
@@ -371,7 +374,7 @@ return {
                 type = "Disc",
             },
             {
-                name = "Dicho",
+                name = "DichoSpell",
                 type = "Disc",
             },
             {
@@ -480,6 +483,7 @@ return {
                 type = "ClickyItem",
                 cond = function(self)
                     return Casting.SelfBuffItemCheck(Config:GetSetting('PoisonName'))
+                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonName'))() or false)
                 end,
             },
             {
@@ -499,7 +503,7 @@ return {
                 end,
             },
             {
-                name = "Carve",
+                name = "Slice",
                 type = "Disc",
             },
             {
@@ -593,17 +597,24 @@ return {
                     return mq.TLO.Me.PctEndurance() < 15
                 end,
             },
+            -- Corrected Downtime poison logic
+            -- 1) Conjure/restock poison when below threshold
             {
                 name = "PoisonClicky",
                 type = "ClickyItem",
                 active_cond = function(self, _)
-                    return (mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))() or 0) >= Config:GetSetting('PoisonItemCount')
+                    local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
+                    local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
+                    return count < threshold
                 end,
                 cond = function(self, _)
-                    return (mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))() or 0) < Config:GetSetting('PoisonItemCount') and
-                        mq.TLO.Me.ItemReady(Config:GetSetting('PoisonClicky'))()
+                    local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
+                    local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
+                    return count < threshold
+                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonClicky'))() or false)
                 end,
             },
+            -- 2) Apply/refresh poison buff using the consumable item itself
             {
                 name = "PoisonName",
                 type = "ClickyItem",
@@ -611,12 +622,13 @@ return {
                     local poisonItem = mq.TLO.FindItem(Config:GetSetting('PoisonName'))
                     return poisonItem and poisonItem() and Casting.IHaveBuff(poisonItem.Spell.ID() or 0)
                 end,
-                cond = function(self)
+                cond = function(self, _)
                     return Casting.SelfBuffItemCheck(Config:GetSetting('PoisonName'))
+                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonName'))() or false)
                 end,
             },
             {
-                name = "Envenomed Blades",
+                name = "Envenomed Blades: Enabled",
                 type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
