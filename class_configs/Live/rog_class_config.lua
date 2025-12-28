@@ -260,13 +260,6 @@ return {
             end,
         },
         {
-            name = 'Hide & Sneak',
-            targetId = function(self) return { mq.TLO.Me.ID(), } end,
-            cond = function(self, combat_state)
-                return combat_state == "Downtime" and Casting.AmIBuffable()
-            end,
-        },
-        {
             name = 'Aggro Management',
             state = 1,
             steps = 1,
@@ -634,8 +627,6 @@ return {
                     return Casting.SelfBuffAACheck(aaName)
                 end,
             },
-        },
-        ['Hide & Sneak'] = {
             {
                 name = "Hide & Sneak",
                 type = "CustomFunc",
