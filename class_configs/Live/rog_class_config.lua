@@ -192,7 +192,6 @@ return {
             "Dim-Witted Mark",   -- Level 106
             "Wide-Eyed Mark",    -- Level 101
             "Gullible Mark",     -- Level 96
-            "Gullible Mark",     -- Level 91
             "Easy Mark",         -- Level 86
         },
         ["Jugular"] = {
@@ -590,17 +589,17 @@ return {
                     return mq.TLO.Me.PctEndurance() < 15
                 end,
             },
-            -- Corrected Downtime poison logic
-            -- 1) Conjure/restock poison when below threshold
             {
                 name = "PoisonClicky",
                 type = "ClickyItem",
                 active_cond = function(self, _)
+                    if mq.TLO.Cursor() ~= nil then mq.cmd("/autoinventory") end
                     local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
                     local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
                     return count < threshold
                 end,
                 cond = function(self, _)
+                    if mq.TLO.Cursor() ~= nil then mq.cmd("/autoinventory") end
                     local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
                     local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
                     return count < threshold
@@ -621,7 +620,7 @@ return {
                 end,
             },
             {
-                name = "Envenomed Blades: Enabled",
+                name = "Envenomed Blades: Disabled",
                 type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
