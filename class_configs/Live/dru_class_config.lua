@@ -94,8 +94,8 @@ local _ClassConfig = {
             "Wildfire Aura",
         },
         ['IceAura'] = {
+            -- Updated to 125
             -- Spell Series >= 88LVL Minimum -- Only Heroic Aura that will be used
-            "Frostfell Aura IX",
             "Coldburst Aura",
             "Nightchill Aura",
             "Icerend Aura",
@@ -112,17 +112,15 @@ local _ClassConfig = {
         },
         ['SingleTgtCure'] = {
             -- Single Target Multi-Cure >= 84
-            "Mastery: Sanctified Blood",
+            "Sanctified Blood",
             "Expurgated Blood",
             "Unblemished Blood",
             "Cleansed Blood",
             "Perfected Blood",
             "Purged Blood",
             "Purified Blood",
-            "Sanctified Blood",
         },
         ['CureCorrupt'] = {
-            "Mastery: Chant of the Zelniak",
             "Chant of the Zelniak",
             "Chant of the Wulthan",
             "Chant of the Kromtus",
@@ -136,7 +134,6 @@ local _ClassConfig = {
         },
         ['GroupCure'] = {
             -- Group Multi-Cure >=91
-            "Mastery: Nightwhisper's Breeze",
             "Nightwhisper's Breeze",
             "Wildtender's Breeze",
             "Copsetender's Breeze",
@@ -144,8 +141,8 @@ local _ClassConfig = {
             "Fawnwalker's Breeze",
         },
         ['CharmSpell'] = {
+            -- Updated to 125
             -- Charm Spells >= 14
-            "Beast's Beckoning XVIII",
             "Beast's Bestowing",
             "Beast's Bellowing",
             "Beast's Beckoning",
@@ -167,8 +164,8 @@ local _ClassConfig = {
             "Befriend Animal",
         },
         ['QuickHealSurge'] = {
+            -- Updated to 125
             -- Main Quick heal >=75
-            "Adrenaline Surge XII",
             "Adrenaline Fury",
             "Adrenaline Spate",
             "Adrenaline Deluge",
@@ -183,8 +180,8 @@ local _ClassConfig = {
             "Adrenaline Spate",
         },
         ['QuickHeal'] = {
+            -- Updated to 125
             -- Backup Quick heal >= LVL90
-            "Rejuvilation IX",
             "Resuscitation",
             "Sootheseance",
             "Rejuvenescence",
@@ -195,9 +192,37 @@ local _ClassConfig = {
             "Rejuvilation",
             "Sootheseance",
         },
-        ['LongHeal'] = {
+        ['LongHeal1'] = {
+            -- Updated to 125
             -- Long Heal >= 1 -- skipped 10s cast heals.
-            "Puravida XI",
+            "Vivavida",
+            "Clotavida",
+            "Viridavida",
+            "Curavida",
+            "Panavida",
+            "Sterivida",
+            "Sanavida",
+            "Benevida",
+            "Granvida",
+            "Puravida",
+            "Pure Life",
+            "Chlorotrope",
+            "Sylvan Infusion",
+            "Nature's Infusion",
+            "Nature's Touch",
+            "Chloroblast",
+            "Forest's Renewal",
+            "Superior Healing",
+            "Nature's Renewal",
+            "Healing Water",
+            "Greater Healing",
+            "Healing",
+            "Light Healing",
+            "Minor Healing",
+        },
+        ['LongHeal2'] = {
+            -- Updated to 125
+            -- Long Heal >= 1 -- skipped 10s cast heals.
             "Vivavida",
             "Clotavida",
             "Viridavida",
@@ -224,8 +249,8 @@ local _ClassConfig = {
             "Minor Healing",
         },
         ['QuickGroupHeal'] = {
+            -- Updated to 125
             -- Quick Group heal >= LVL78
-            "Survival of the Fittest XI",
             "Survival of the Heroic",
             "Survival of the Unrelenting",
             "Survival of the Favored",
@@ -239,8 +264,8 @@ local _ClassConfig = {
             "Survival of the Unrelenting",
         },
         ['LongGroupHeal'] = {
+            -- Updated to 125
             -- Long Group heal >= LVL 70
-            "Lunamend",
             "Lunacea",
             "Lunarush",
             "Lunalesce",
@@ -256,8 +281,8 @@ local _ClassConfig = {
             "Lunarush",
         },
         ['PromHeal'] = {
+            -- Updated to 125
             -- Promised Heals Line Druid
-            "Promised Reknit X",
             "Promised Regrowth",
             "Promised Reknit",
             "Promised Replenishment",
@@ -269,8 +294,8 @@ local _ClassConfig = {
             "Promised Revivification",
         },
         ['FrostDebuff'] = {
+            -- Updated to 125
             -- Frost Debuff Series -- >= 74LVL -- On Bar
-            "Gelid Frost XI",
             "Mythic Frost",
             "Primal Frost",
             "Restless Frost",
@@ -284,8 +309,8 @@ local _ClassConfig = {
             "Hoar Frost",
         },
         ['RoDebuff'] = {
+            -- Updated to 125
             -- Ro Debuff Series -- >= 37LVL -- AA Starts at LVL (Single Target) -- On Bar Until AA
-            "Grasp of Ro IX",
             "Clench of Ro",
             "Cinch of Ro",
             "Clasp of Ro",
@@ -302,8 +327,8 @@ local _ClassConfig = {
             "Ro's Fiery Sundering",
         },
         ['RoDebuffAE'] = {
+            -- Updated to 125
             -- Ro AE Debuff Series -- >= 97LVL -- AA Starts at LVL
-            "Pillar of Ro VII",
             "Visage of Ro",
             "Scrutiny of Ro",
             "Glare of Ro",
@@ -312,8 +337,8 @@ local _ClassConfig = {
             "Pillar of Ro",
         },
         ['IceBreathDebuff'] = {
+            -- Updated to 125
             -- Ice Breath Series >= 63LVL -- On Bar
-            "Glacier Breath XIV",
             "Algid Breath",
             "Twilight Breath",
             "Icerend Breath",
@@ -329,6 +354,7 @@ local _ClassConfig = {
             "E`ci's Frosty Breath",
         },
         ['SkinDebuff'] = {
+            -- Updated to 125
             -- Skin Debuff Series >= 73LVL -- On Bar
             "Skin to Lichen",
             "Skin to Sumac",
@@ -340,8 +366,8 @@ local _ClassConfig = {
             "Skin to Vines",
         },
         ['ReptileCombatInnate'] = {
+            -- Updated to 125
             -- Reptile Combat Innate >= 68LVL -- On Bar
-            "Skin of the Reptile XII",
             "Chitin of the Reptile",
             "Bulwark of the Reptile",
             "Defense of the Reptile",
@@ -355,8 +381,8 @@ local _ClassConfig = {
             "Skin of the Reptile",
         },
         ['NaturesWrathDot'] = {
+            -- Updated to 125
             -- Natures Wrath DOT Line >= 75LVL -- On Bar
-            "Nature's Blazing Wrath XII",
             "Nature's Fervid Wrath",
             "Nature's Blistering Wrath",
             "Nature's Fiery Wrath",
@@ -370,7 +396,8 @@ local _ClassConfig = {
             "Nature's Boiling Wrath",
         },
         ['HordeDot'] = {
-            "Horde of Spitewasps",
+            -- Updated to 125
+            -- Horde Dots >= 10LVL -- On Bar
             "Horde of Hotaria",
             "Horde of Duskwigs",
             "Horde of Hyperboreads",
@@ -391,8 +418,8 @@ local _ClassConfig = {
             "Stinging Swarm",
         },
         ['SunDot'] = {
+            -- Updated to 125
             -- SUN Dot Line >= 49LVL -- On Bar
-            "Sunscorch XII",
             "Sunscald",
             "Sunpyre",
             "Sunshock",
@@ -409,19 +436,38 @@ local _ClassConfig = {
             "Vengeance of Nature",
             "Vengeance of the Wild",
         },
-        ['MoonbeamDot'] = {
-            "Gelid Moonbeam IX",
+        ['SunMoonDot'] = {
+            -- Updated to 125
+            --, Line >= 1 LVL
             "Mythical Moonbeam",
+            "Searing Sunray",
             "Onyx Moonbeam",
+            "Tenebrous Sunray",
             "Opaline Moonbeam",
+            "Erupting Sunray",
             "Pearlescent Moonbeam",
+            "Overwhelming Sunray",
             "Argent Moonbeam",
+            "Consuming Sunray",
             "Frigid Moonbeam",
+            "Incinerating Sunray",
             "Algid Moonbeam",
+            "Blazing Sunray",
             "Gelid Moonbeam",
+            "Scorching Sunray",
+            "Withering Sunray",
+            "Torrid Sunray",
+            "Blistering Sunray",
+            "Immolation of the Sun",
+            "Sylvan Embers",
+            "Immolation of Ro",
+            "Breath of Ro",
+            "Immolate",
+            "Flame Lick",
         },
         ['SunrayDot'] = {
-            "Blistering Sunray XII",
+            -- Updated to 125
+            -- Sunray Line >= 1 LVL
             "Searing Sunray",
             "Tenebrous Sunray",
             "Erupting Sunray",
@@ -440,9 +486,21 @@ local _ClassConfig = {
             "Immolate",
             "Flame Lick",
         },
+        ['MoonBeamDot'] = {
+            -- Updated to 125
+            -- MoonBeam Dot
+            "Gelid Moonbeam",
+            "Algid Moonbeam",
+            "Frigid Moonbeam",
+            "Argent Moonbeam",
+            "Pearlescent Moonbeam",
+            "Opaline Moonbeam",
+            "Onyx Moonbeam",
+            "Mythical Moonbeam",
+        },
         ['RemoteMoonDD'] = {
+            -- Updated to 125
             -- Remote Moon DD >= 99LVL
-            "Remote Moonfire VII",
             "Remote Moonshiver",
             "Remote Moonchill",
             "Remote Moonrake",
@@ -451,8 +509,8 @@ local _ClassConfig = {
             "Remote Moonfire",
         },
         ['RemoteSunDD'] = {
+            -- Updated to 125
             -- Remote Sun DD >= 83LVL
-            "Remote Sunflare X",
             "Remote Sunscorch",
             "Remote Sunbolt",
             "Remote Sunshock",
@@ -464,8 +522,8 @@ local _ClassConfig = {
             "Remote Manaflux",
         },
         ['RoarDD'] = {
+            -- Updated to 125
             -- Roar DD >= 93LVL
-            "Katabatic Roar VIII",
             "Tempest Roar",
             "Bloody Roar",
             "Typhonic Roar",
@@ -475,8 +533,8 @@ local _ClassConfig = {
             "Roar of Kolos",
         },
         ['QuickRoarDD'] = {
+            -- Updated to 125
             -- Quick Cast Roar Series -- will be replaced by roar at lvl 93
-            "Shattering of the Stormborn",
             "Revelry of the Stormborn",
             "Bedlam of the Sotrmborn",
             "Maelstrom of the Stormborn",
@@ -502,8 +560,8 @@ local _ClassConfig = {
             "Reciprocal Winds",
         },
         ['WinterFireDD'] = {
+            -- Updated to 125
             -- Winters Fire DD Line >= 73LVL -- Using for Low level Fire DD as well
-            "Winder's Wildflame XII",
             "Winder's Wildgale",
             "Winter's Wildbrume",
             "Winter's Wildshock",
@@ -528,8 +586,8 @@ local _ClassConfig = {
             "Burst of Flame",
         },
         ['ChillDot'] = {
+            -- Updated to 125
             -- Chill DOT Line -- >= 95LVL -- Used for Burns
-            "Chill of the Grovetender",
             "Chill of the Ferntender",
             "Chill of the Dusksage Tender",
             "Chill of the Arbor Tender",
@@ -564,7 +622,8 @@ local _ClassConfig = {
             "Tangling Weeds",
         },
         ['TwinHealNuke'] = {
-            "Sundew Blessing X",
+            -- Updated to 125
+            -- Druid Twincast
             "Sunbliss Blessing",
             "Sundew Blessing",
             "Sunrise Blessing",
@@ -576,7 +635,8 @@ local _ClassConfig = {
             "Sunwarmth Blessing",
         },
         ['IceNuke'] = {
-            "Rime Crystals XII",
+            -- Updated to 125
+            --Ice Nuke
             "Ice",
             "Frost",
             "Moonfire",
@@ -595,7 +655,7 @@ local _ClassConfig = {
             "Coldbite Crystals",
         },
         ['IceRainNuke'] = {
-            "Cascade of Hail XVIII",
+            -- Updated to 125
             "Cascade of Hail",
             "Pogonip",
             "Avalanche",
@@ -632,8 +692,8 @@ local _ClassConfig = {
             "Frost",
         },
         ['SelfShield'] = {
+            -- Updated to 125
             -- Self Shield Buff
-            "Brackenbriar Coat",
             "Bramblespike Coat",
             "Shadespine Coat",
             "Icebriar Coat",
@@ -655,8 +715,8 @@ local _ClassConfig = {
             "Thistlecoat",
         },
         ['SelfManaRegen'] = {
+            -- Updated to 125
             -- Self mana Regen Buff
-            "Mask of the Grovetender",
             "Mask of the Ferntender",
             "Mask of the Dusksage Tender",
             "Mask of the Arbor Tender",
@@ -673,7 +733,8 @@ local _ClassConfig = {
             "Mask of the Hunter",
         },
         ['HPTypeOneGroup'] = {
-            "Grovewood Blessing",
+            -- Updated to 125
+            -- Opaline Group Health
             "Emberquartz Blessing",
             "Luclinite Blessing",
             "Opaline Blessing",
@@ -696,8 +757,8 @@ local _ClassConfig = {
             'Skin like Wood',
         },
         ['TempHPBuff'] = {
+            -- Updated to 125
             -- Temp Health -- Focus on Tank
-            "Wild Growth X",
             "Overwhelming Growth",
             "Fervent Growth",
             "Frenzied Growth",
@@ -709,8 +770,8 @@ local _ClassConfig = {
             "Wild Growth",
         },
         ['GroupRegenBuff'] = {
+            -- Updated to 125
             -- Group Regen BuffAll Have Long Duration HP Regen Buffs. Not Short term Heal.
-            "Talisman of Perseverance XV",
             "Talisman of the Unforgettable",
             "Talisman of the Tenacious",
             "Talisman of the Enduring",
@@ -721,7 +782,6 @@ local _ClassConfig = {
             "Talisman of the Relentless",
             "Talisman of the Resolute",
             "Talisman of the Stalwart",
-            "Talisman of Perseverance",
             "Pack Regeneration",
             "Pack Chloroplast",
             "Regrowth of the Grove",
@@ -740,8 +800,8 @@ local _ClassConfig = {
             "Strength of Earth",
         },
         ['GroupDmgShield'] = {
+            -- Updated to 125
             -- Group Damage Shield -- Focus on the tank
-            "Legacy of Brackenbriars",
             "Legacy of Bramblespikes",
             "Legacy of Bloodspikes",
             "Legacy of Icebriars",
@@ -767,6 +827,7 @@ local _ClassConfig = {
             "Flight of Falcons",
         },
         ['ManaBear'] = {
+            -- Updated to 125
             --Druid Mana Bear Growth Line
             "Nurturing Growth",
             "Nourishing Growth",
@@ -777,29 +838,29 @@ local _ClassConfig = {
         ['PetSpell'] = {
             "Nature Walker's Behest",
         },
-        -- ['SingleDS'] = {
-        --     -- Updated to 125
-        --     --Single Target Damage Shield
-        --     "Shield of Thistles",
-        --     "Shield of Barbs",
-        --     "Shield of Brambles",
-        --     "Shield of Spikes",
-        --     "Shield of Thorns",
-        --     "Shield of Blades",
-        --     "Shield of Bracken",
-        --     "Nettle Shield",
-        --     "Viridifloral Shield",
-        --     "Viridifloral Bulwark",
-        --     "Brierbloom Bulwark",
-        --     "Bonebriar Bulwark",
-        --     "Spineburr Bulwark",
-        --     "Spikethistle Bulwark",
-        --     "Daggerspur Bulwark",
-        --     "Daggerspike Bulwark",
-        --     "Icebriar Bulwark",
-        --     "Nightspire Bulwark",
-        --     "Bramblespike Bulwark",
-        -- },
+        ['SingleDS'] = {
+            -- Updated to 125
+            --Single Target Damage Shield
+            "Shield of Thistles",
+            "Shield of Barbs",
+            "Shield of Brambles",
+            "Shield of Spikes",
+            "Shield of Thorns",
+            "Shield of Blades",
+            "Shield of Bracken",
+            "Nettle Shield",
+            "Viridifloral Shield",
+            "Viridifloral Bulwark",
+            "Brierbloom Bulwark",
+            "Bonebriar Bulwark",
+            "Spineburr Bulwark",
+            "Spikethistle Bulwark",
+            "Daggerspur Bulwark",
+            "Daggerspike Bulwark",
+            "Icebriar Bulwark",
+            "Nightspire Bulwark",
+            "Bramblespike Bulwark",
+        },
     },
     ['HealRotationOrder'] = {
         {
@@ -889,7 +950,11 @@ local _ClassConfig = {
                 type = "Spell",
             },
             {
-                name = "LongHeal",
+                name = "LongHeal1",
+                type = "Spell",
+            },
+            {
+                name = "LongHeal2",
                 type = "Spell",
             },
         },
@@ -1030,7 +1095,7 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "MoonbeamDot",
+                name = "SunMoonDot",
                 type = "Spell",
                 cond = function(self, spell)
                     return Core.IsModeActive("Mana") and Casting.DotSpellCheck(spell) and Config:GetSetting('DoDot') and
@@ -1117,7 +1182,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Swarm of the Fireflies",
+                name = "Swarm of Fireflies",
                 type = "AA",
             },
             {
@@ -1129,7 +1194,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Spirits of Nature",
+                name = "Spirit of Nature",
                 type = "AA",
             },
             {
@@ -1149,12 +1214,17 @@ local _ClassConfig = {
             {
                 name = "TwinHealNuke",
                 type = "CustomFunc",
-                cond = function(self, spell, target)
+                cond = function(self, mapItemName, target)
+                    -- Avoid trying to twincast if we already have the buff
                     if Casting.IHaveBuff("Healing Twincast") then return false end
-                    return Casting.CastReady(spell)
+
+                    -- Resolve the action map name ("TwinHealNuke") to a Spell TLO/object
+                    local twinHeal = Core.GetResolvedActionMapItem(mapItemName)
+                    return Casting.CastReady(twinHeal)
                 end,
                 custom_func = function(self)
                     local twinHeal = Core.GetResolvedActionMapItem("TwinHealNuke")
+                    if not twinHeal or not twinHeal() then return end
                     Casting.UseSpell(twinHeal.RankName(), Core.GetMainAssistId(), false, false, 0)
                 end,
             },
@@ -1396,7 +1466,7 @@ local _ClassConfig = {
                             Core.IsModeActive("Mana")
                     end,
                 },
-                { name = "LongHeal", },
+                { name = "LongHeal1", },
             },
         },
         {
@@ -1419,7 +1489,7 @@ local _ClassConfig = {
                 },
                 -- [ HEAL MODE ] --
                 { name = "QuickHealSurge", cond = function(self) return mq.TLO.Me.Level() >= 75 end, },
-                { name = "LongHeal",       cond = function(self) return true end, },
+                { name = "LongHeal2",      cond = function(self) return true end, },
                 -- [ Fall Back ]--
                 { name = "WinterFireDD",   cond = function(self) return Config:GetSetting("DoFire") end, },
                 { name = "IceNuke",        cond = function(self) return true end, },
@@ -1496,7 +1566,7 @@ local _ClassConfig = {
             gem = 7,
             spells = {
                 -- [ MANA MODE ] --
-                { name = "MoonbeamDot",         cond = function(self) return Core.IsModeActive("Mana") end, },
+                { name = "SunMoonDot",          cond = function(self) return Core.IsModeActive("Mana") end, },
                 -- [ HEAL MODE ] --
                 { name = "FrostDebuff",         cond = function(self) return mq.TLO.Me.Level() >= 74 and not Config:GetSetting('DoFire') end, },
                 { name = "ReptileCombatInnate", cond = function(self) return Casting.CanUseAA("Blessing of Ro") end, },
@@ -1569,7 +1639,7 @@ local _ClassConfig = {
             spells = {
                 -- [ MANA MODE ] --
                 {
-                    name = "LongHeal",
+                    name = "LongHeal1",
                     cond = function(self)
                         return mq.TLO.Me.Level() >= 99 and
                             Core.IsModeActive("Mana")
