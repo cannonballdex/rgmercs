@@ -454,7 +454,7 @@ Module.LogicBlocks                      = {
 
     {
         name = "My Pet Has Effect",
-        cond = function(self, target, effect, negate)
+        cond = function(self, _, effect, negate)
             local hasEffect = not Casting.PetBuffCheck(mq.TLO.Spell(effect)) -- this will return false if the pet has it
             if negate then
                 return not hasEffect
@@ -469,6 +469,38 @@ Module.LogicBlocks                      = {
         cond_targets = { "Pet", },
         args = {
             { name = "Effect", type = "string",  default = "", },
+            { name = "Negate", type = "boolean", default = false, },
+        },
+    },
+
+    {
+        name = "My Pet Has a Primary Equiped",
+        cond = function(self, _, negate)
+            local primaryEquiped = mq.TLO.Me.Pet.Primary() > 0
+            return ((not negate and primaryEquiped) or (negate and not primaryEquiped))
+        end,
+        tooltip = "Only use when this when your pet has (doesn't have) a primary weapon equiped.",
+        render_header_text = function(self, cond)
+            return string.format("Your Pet %s a Primary weapon equiped.", cond.args[1] and "doesn't have" or "has")
+        end,
+        cond_targets = { "Pet", },
+        args = {
+            { name = "Negate", type = "boolean", default = false, },
+        },
+    },
+
+    {
+        name = "My Pet Has a Secondary Equiped",
+        cond = function(self, _, negate)
+            local secondaryEquiped = mq.TLO.Me.Pet.Secondary() > 0
+            return ((not negate and secondaryEquiped) or (negate and not secondaryEquiped))
+        end,
+        tooltip = "Only use when this when your pet has (doesn't have) a secondary item equiped.",
+        render_header_text = function(self, cond)
+            return string.format("Your Pet %s a Secondary weapon equiped.", cond.args[1] and "doesn't have" or "has")
+        end,
+        cond_targets = { "Pet", },
+        args = {
             { name = "Negate", type = "boolean", default = false, },
         },
     },
@@ -808,6 +840,9 @@ function Module:WriteSettings()
 end
 
 function Module:LoadSettings()
+    -- Force any pending saves.
+    self:WriteSettings()
+
     Logger.log_debug("Clickies Module Loading Settings for: %s.", Config.Globals.CurLoadedChar)
     local settings_pickle_path = getConfigFileName()
     local settings = {}
@@ -895,10 +930,11 @@ function Module:RenderClickyControls(clickies, clickyIdx, headerCursorPos, heade
     local startingPosVec = ImGui.GetCursorPosVec()
     local offset_trash = 40
     local offset_enable = 160
+    local yOffset = ImGui.GetStyle().FramePadding.y
 
     self:RenderClickyHeaderIcon(clickies[clickyIdx], headerScreenPos)
 
-    ImGui.SetCursorPos(ImGui.GetWindowWidth() - offset_enable, headerCursorPos.y)
+    ImGui.SetCursorPos(ImGui.GetWindowWidth() - offset_enable, headerCursorPos.y + yOffset)
 
     ImGui.PushID("##_small_btn_ctrl_clicky_" .. tostring(clickyIdx) .. (preRender and "_pre" or ""))
 
@@ -909,6 +945,7 @@ function Module:RenderClickyControls(clickies, clickyIdx, headerCursorPos, heade
         enabled, changed = Ui.RenderOptionToggle("##EnableDrawn" .. tostring(clickyIdx), "", enabled, true)
         if changed then
             clickies[clickyIdx].enabled = enabled
+            Config:SetSetting('Clickies', clickies)
             self:SaveSettings(false)
         end
     end
@@ -918,6 +955,7 @@ function Module:RenderClickyControls(clickies, clickyIdx, headerCursorPos, heade
         ImGui.PushID("##_small_btn_up_clicky_" .. tostring(clickyIdx) .. (preRender and "_pre" or ""))
         if ImGui.SmallButton(Icons.FA_CHEVRON_UP) then
             clickies[clickyIdx], clickies[clickyIdx - 1] = clickies[clickyIdx - 1], clickies[clickyIdx]
+            Config:SetSetting('Clickies', clickies)
             self:SaveSettings(false)
         end
         ImGui.PopID()
@@ -931,6 +969,7 @@ function Module:RenderClickyControls(clickies, clickyIdx, headerCursorPos, heade
         ImGui.PushID("##_small_btn_dn_clicky_" .. tostring(clickyIdx) .. (preRender and "_pre" or ""))
         if ImGui.SmallButton(Icons.FA_CHEVRON_DOWN) then
             clickies[clickyIdx], clickies[clickyIdx + 1] = clickies[clickyIdx + 1], clickies[clickyIdx]
+            Config:SetSetting('Clickies', clickies)
             self:SaveSettings(false)
         end
         ImGui.PopID()
@@ -939,7 +978,7 @@ function Module:RenderClickyControls(clickies, clickyIdx, headerCursorPos, heade
         ImGui.InvisibleButton(Icons.FA_CHEVRON_DOWN, ImVec2(22, 1))
     end
 
-    ImGui.SetCursorPos(ImGui.GetWindowWidth() - offset_trash, headerCursorPos.y + 3)
+    ImGui.SetCursorPos(ImGui.GetWindowWidth() - offset_trash, headerCursorPos.y + yOffset)
 
     if ImGui.SmallButton(Icons.FA_TRASH) then
         -- if we do this in the UI thread then there could be a race condition if the user is clicking fast
@@ -953,6 +992,7 @@ end
 function Module:RenderConditionControls(clickyIdx, idx, conditionsTable, headerPos)
     local startingPosVec = ImGui.GetCursorPosVec()
     local offset = 110
+
     ImGui.SetCursorPos(ImGui.GetWindowWidth() - offset, headerPos.y)
 
     ImGui.PushID("##_small_btn_up_wp_" .. tostring(clickyIdx) .. "_" .. tostring(idx))
@@ -961,6 +1001,7 @@ function Module:RenderConditionControls(clickyIdx, idx, conditionsTable, headerP
     else
         if ImGui.SmallButton(Icons.FA_CHEVRON_UP) then
             conditionsTable[idx], conditionsTable[idx - 1] = conditionsTable[idx - 1], conditionsTable[idx]
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
     end
@@ -972,6 +1013,7 @@ function Module:RenderConditionControls(clickyIdx, idx, conditionsTable, headerP
     else
         if ImGui.SmallButton(Icons.FA_CHEVRON_DOWN) then
             conditionsTable[idx], conditionsTable[idx + 1] = conditionsTable[idx + 1], conditionsTable[idx]
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
     end
@@ -1006,6 +1048,7 @@ function Module:RenderConditionTypesCombo(cond, condIdx)
             for argIdx, arg in ipairs(self:GetLogicBlockArgsByType(cond.type) or {}) do
                 cond.args[argIdx] = arg.default
             end
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
         ImGui.EndTable()
@@ -1027,6 +1070,7 @@ function Module:RenderConditionTargetCombo(cond, condIdx)
             #condBlock.cond_targets)
         if changed then
             cond.target = condBlock.cond_targets[selectedNum] or "Self"
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
         ImGui.EndTable()
@@ -1054,6 +1098,7 @@ function Module:RenderClickyTargetCombo(clicky, clickyIdx)
             #targetTypes)
         if changed then
             clicky.target = targetTypes[selectedNum] or "Self"
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
         ImGui.EndTable()
@@ -1073,6 +1118,7 @@ function Module:RenderClickyCombatStateCombo(clicky, clickyIdx)
             #self.CombatStates)
         if changed then
             clicky.combat_state = self.CombatStates[selectedNum] or "Any"
+            Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
             self:SaveSettings(false)
         end
         ImGui.EndTable()
@@ -1101,6 +1147,7 @@ function Module:RenderClickyOption(type, cond, condIdx, argIdx, clickyIdx)
             Core.SafeCallFunc("On Changed Callback", self:GetLogicBlockArgByTypeAndIndex(cond.type, argIdx).on_changed, self, cond.args[argIdx], cond)
         end
 
+        Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
         self:SaveSettings(false)
     end
 end
@@ -1116,8 +1163,6 @@ function Module:RenderConditionArgs(cond, condIdx, clickyIdx)
             ImGui.TableNextColumn()
 
             if self:GetLogicBlockArgByTypeAndIndex(cond.type, argIdx).type == "setting_value" then
-                local changed = false
-
                 -- the arg before this must be a valid setting for this to work.
                 if argIdx == 1 or not Config:HaveSetting(cond.args[argIdx - 1]) then
                     ImGui.TextDisabled("Please select a valid setting in the previous argument.")
@@ -1125,10 +1170,10 @@ function Module:RenderConditionArgs(cond, condIdx, clickyIdx)
                     local settingName = cond.args[argIdx - 1] or ""
                     local settingInfo = Config:GetSettingDefaults(settingName)
 
-                    self:RenderClickyOption(type(settingInfo.Default), cond, condIdx, argIdx, clickyIdx)
-
-                    if changed then
-                        self:SaveSettings(false)
+                    if settingInfo then
+                        self:RenderClickyOption(type(settingInfo.Default), cond, condIdx, argIdx, clickyIdx)
+                    else
+                        ImGui.TextDisabled("Unable to retrieve setting info for '%s'.", settingName)
                     end
                 end
             else
@@ -1182,6 +1227,8 @@ function Module:RenderClickiesWithConditions(type, clickies)
     if not mq.TLO.Cursor() then
         ImGui.BeginDisabled(true)
     end
+    local filterApplied = #clickies ~= #Config:GetSetting('Clickies')
+
     if ImGui.SmallButton(mq.TLO.Cursor.Name() and string.format("%s Add %s to %s", Icons.FA_PLUS, mq.TLO.Cursor.Name() or "N/A", type) or "Pickup an Item To Add") then
         if mq.TLO.Cursor() then
             table.insert(clickies, {
@@ -1190,6 +1237,7 @@ function Module:RenderClickiesWithConditions(type, clickies)
                 combat_state = 'Any',
                 conditions = {},
             })
+            Config:SetSetting('Clickies', clickies)
             self:SaveSettings(false)
         end
     end
@@ -1206,7 +1254,10 @@ function Module:RenderClickiesWithConditions(type, clickies)
             if clicky.itemName:len() > 0 then
                 local headerScreenPos = ImGui.GetCursorScreenPosVec()
                 local headerCursorPos = ImGui.GetCursorPosVec()
+
+                ImGui.BeginDisabled(filterApplied)
                 self:RenderClickyControls(clickies, clickyIdx, headerCursorPos, headerScreenPos, true)
+                ImGui.EndDisabled()
 
                 ImGui.PushID("##clicky_header_" .. clickyIdx)
                 if ImGui.CollapsingHeader("             " .. clicky.itemName) then
@@ -1222,8 +1273,10 @@ function Module:RenderClickiesWithConditions(type, clickies)
                     ImGui.PushID("##clicky_conditions_btn_" .. clickyIdx)
                     if ImGui.SmallButton(Icons.FA_PLUS .. " Add Condition") then
                         table.insert(clicky.conditions, { type = 'None', args = {}, target = 'Self', })
+                        Config:SetSetting('Clickies', clickies)
                         self:SaveSettings(false)
                     end
+                    Config:GetSetting('Clickies')
                     ImGui.PopID()
                     ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 5.0)
 
@@ -1234,7 +1287,17 @@ function Module:RenderClickiesWithConditions(type, clickies)
                     for condIdx, cond in ipairs(clicky.conditions or {}) do
                         if self:GetLogicBlockByType(cond.type) then
                             local headerPos = ImGui.GetCursorPosVec()
+
+                            if clicky.conditionsCache and clicky.conditionsCache[condIdx] == true then
+                                ImGui.PushStyleColor(ImGuiCol.Text, 0.2, 0.8, 0.2, 1.0)
+                            elseif clicky.conditionsCache and clicky.conditionsCache[condIdx] == false then
+                                ImGui.PushStyleColor(ImGuiCol.Text, 0.8, 0.2, 0.2, 1.0)
+                            else
+                                ImGui.PushStyleColor(ImGuiCol.Text, 0.8, 0.8, 0.2, 1.0)
+                            end
+
                             if ImGui.TreeNode(self:GetLogicBlockByType(cond.type).render_header_text(self, cond) .. "###clicky_cond_tree_" .. clickyIdx .. "_" .. condIdx) then
+                                ImGui.PopStyleColor(1)
                                 Ui.Tooltip(self:GetLogicBlockByType(cond.type).tooltip or "No Tooltip Available.")
 
                                 self:RenderConditionTypesCombo(cond, condIdx)
@@ -1250,10 +1313,14 @@ function Module:RenderClickiesWithConditions(type, clickies)
                                 ImGui.Unindent()
                                 ImGui.TreePop()
                             else
+                                ImGui.PopStyleColor(1)
                                 Ui.Tooltip(self:GetLogicBlockByType(cond.type).tooltip or "No Tooltip Available.")
                             end
 
+                            -- only render configs if we are not filtered
+                            ImGui.BeginDisabled(filterApplied)
                             self:RenderConditionControls(clickyIdx, condIdx, clicky.conditions, headerPos)
+                            ImGui.EndDisabled()
                         end
                     end
 
@@ -1267,7 +1334,9 @@ function Module:RenderClickiesWithConditions(type, clickies)
                     ImGui.Unindent()
                 end
 
+                ImGui.BeginDisabled(filterApplied)
                 self:RenderClickyControls(clickies, clickyIdx, headerCursorPos, headerScreenPos, false)
+                ImGui.EndDisabled()
 
                 ImGui.PopID()
             end
@@ -1306,6 +1375,47 @@ function Module:RenderClickyData(clicky, clickyIdx)
     ImGui.Separator()
 end
 
+function Module:GetMatchingClickies(searchFilter)
+    local clickies = Config:GetSetting('Clickies')
+
+    if not searchFilter or searchFilter:len() == 0 then
+        return clickies or {}
+    end
+
+    local matchingClickies = {}
+    local searchLower = searchFilter:lower()
+    for _, clicky in ipairs(clickies or {}) do
+        if clicky.itemName:lower():find(searchLower) then
+            table.insert(matchingClickies, clicky)
+        else
+            for _, cond in ipairs(clicky.conditions or {}) do
+                if cond.type:lower():find(searchLower) then
+                    table.insert(matchingClickies, clicky)
+                    break
+                end
+                for _, arg in ipairs(cond.args or {}) do
+                    if tostring(arg):lower():find(searchLower) then
+                        table.insert(matchingClickies, clicky)
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    return matchingClickies
+end
+
+function Module:HaveSearchMatches(searchFilter)
+    local matchingClickies = self:GetMatchingClickies(searchFilter)
+    return #matchingClickies > 0
+end
+
+function Module:RenderConfig(searchFilter)
+    local clickiesToRender = self:GetMatchingClickies(searchFilter)
+    self:RenderClickiesWithConditions("Clickies", clickiesToRender)
+end
+
 function Module:Render()
     Ui.RenderPopAndSettings(self._name)
 
@@ -1322,10 +1432,10 @@ function Module:ValidateClickies()
     for idx = #clickies, 1, -1 do
         local clicky = clickies[idx]
 
-        for idx = #clicky.conditions, 1, -1 do
-            local condition = clicky.conditions[idx]
+        for cond_idx = #clicky.conditions, 1, -1 do
+            local condition = clicky.conditions[cond_idx]
             if condition.Delete then
-                table.remove(clicky.conditions, idx)
+                table.remove(clicky.conditions, cond_idx)
                 clickiesChanged = true
             end
         end
@@ -1337,6 +1447,8 @@ function Module:ValidateClickies()
     end
 
     if clickiesChanged then
+        -- update the actual settings since we just mutated the temp reference above.
+        Config:SetSetting('Clickies', clickies)
         self:SaveSettings(false)
     end
 end
@@ -1345,10 +1457,13 @@ function Module:InsertDefaultClickies()
     -- Live/Test use "Live". Emu servers use server-specific.
     local serverType = Config.Globals.BuildType:lower() ~= "emu" and "Live" or Config.Globals.CurServer
     local defaultClickyList = self.DefaultServerClickies[serverType]
+    local clickes = Config:GetSetting('Clickies') or {}
+
     if defaultClickyList then
         for _, defaultClicky in ipairs(defaultClickyList) do
-            table.insert(Config:GetSetting('Clickies'), defaultClicky)
+            table.insert(clickes, defaultClicky)
         end
+        Config:SetSetting('Clickies', clickes)
         self:SaveSettings(false)
     end
 end
@@ -1371,6 +1486,7 @@ function Module:GiveTime(combat_state)
             if clicky.combat_state == "Any" or clicky.combat_state == combat_state then
                 local target = mq.TLO.Me
                 local allConditionsMet = true
+                local conditionsCache = {}
                 for _, cond in ipairs(clicky.conditions or {}) do
                     local condBlock = self:GetLogicBlockByType(cond.type)
                     if condBlock then
@@ -1391,12 +1507,16 @@ function Module:GiveTime(combat_state)
                         if not Core.SafeCallFunc("Test clicky Condition", self:GetLogicBlockByType(cond.type).cond, self, target, unpack(cond.args or {})) then
                             Logger.log_super_verbose("\ayClicky: \aw\t|->\aw \arFailed!")
                             allConditionsMet = false
+                            table.insert(conditionsCache, false)
                             break
                         else
                             Logger.log_super_verbose("\ayClicky: \aw\t|->\aw \agSuccess!")
+                            table.insert(conditionsCache, true)
                         end
                     end
                 end
+
+                clicky.conditionsCache = conditionsCache
 
                 if allConditionsMet then
                     self.TempSettings.ClickyState[clicky.itemName] = self.TempSettings.ClickyState[clicky.itemName] or {}

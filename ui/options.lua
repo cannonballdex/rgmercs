@@ -90,7 +90,22 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
             { Name = 'Item Summoning', Categories = { "Item Summoning", }, },
             { Name = 'Bandolier',      Categories = { "Bandolier", }, },
             { Name = 'Instruments',    Categories = { "Instruments", }, },
-            { Name = 'Clickies',       Categories = { "General Clickies", "Class Config Clickies", "User Clickies", }, },
+            {
+                Name = 'Clickies',
+                Categories = { "General Clickies", "Class Config Clickies", "User Clickies", },
+                RenderCategories = {
+                    {
+                        Header = "Manage Clickies",
+
+                        Render = function(searchFilter)
+                            return Modules:ExecModule("Clickies", "RenderConfig", searchFilter)
+                        end,
+                        Search = function(searchFilter)
+                            return Modules:ExecModule("Clickies", "HaveSearchMatches", searchFilter)
+                        end,
+                    },
+                },
+            },
         },
     },
     {
@@ -148,14 +163,22 @@ function OptionsUI:OpenAndHighlightModule(module)
     Config:OpenOptionsUIAndHighlightModule(module)
 end
 
-function OptionsUI:OpenAndSetSearchFilter(filterText)
+--- Short description: <Describe what this function/module does>
+---@param filterText string The text to filter on
+---@param selectGroup string? The group to select after applying the filter
+function OptionsUI:OpenAndSetSearchFilter(filterText, selectGroup)
     Config:SetSetting('EnableOptionsUI', true)
     self:SetSearchFilter(filterText)
+    self:SetSelectedGroup(selectGroup)
 end
 
 function OptionsUI:SetSearchFilter(filterText)
     self.configFilter = filterText or ""
     self:ApplySearchFilter()
+end
+
+function OptionsUI:SetSelectedGroup(group)
+    self.selectedGroup = group or self.selectedGroup
 end
 
 function OptionsUI:ApplySearchFilter()
@@ -173,7 +196,7 @@ function OptionsUI:ApplySearchFilter()
     -- precalc all known categories so we can add ones that as missing.
     for _, group in ipairs(self.Groups) do
         for _, header in ipairs(group.Headers) do
-            for _, category in ipairs(header.Categories) do
+            for _, category in ipairs(header.Categories or {}) do
                 knownCategories:add(category)
                 if header.CatchAll then
                     catchAllHeader = header
@@ -211,8 +234,9 @@ function OptionsUI:ApplySearchFilter()
             local headerMatches = headerLower:find(filter, 1, true) ~= nil
             local highlightHeader = false
             local newCategories = {}
+            local newRenderCategories = {}
 
-            for _, category in ipairs(header.Categories) do
+            for _, category in ipairs(header.Categories or {}) do
                 local categoryLower = category:lower()
 
                 local categoryMatches = categoryLower:find(filter, 1, true) ~= nil
@@ -260,8 +284,19 @@ function OptionsUI:ApplySearchFilter()
                 end
             end
 
-            if #newCategories > 0 then
-                table.insert(newGroup.Headers, { Name = header.Name, Categories = newCategories, highlighted = highlightHeader, })
+            for _, renderCategory in ipairs(header.RenderCategories or {}) do
+                local categoryMatches = true
+                if renderCategory.Search then
+                    categoryMatches = renderCategory.Search(filter)
+                end
+
+                if categoryMatches then
+                    table.insert(newRenderCategories, renderCategory)
+                end
+            end
+
+            if #newCategories > 0 or #newRenderCategories > 0 then
+                table.insert(newGroup.Headers, { Name = header.Name, Categories = newCategories, RenderCategories = newRenderCategories, highlighted = highlightHeader, })
             end
         end
 
@@ -284,7 +319,7 @@ end
 
 function OptionsUI:RenderGroupPanel(groupLabel, groupName)
     if ImGui.Selectable(" ##" .. groupLabel, self.selectedGroup == groupName) then
-        self.selectedGroup = groupName
+        self:SetSelectedGroup(groupName)
     end
     ImGui.SameLine()
     ImGui.Text(groupLabel)
@@ -304,7 +339,7 @@ function OptionsUI:RenderGroupPanelWithImage(group)
     end
 
     if pressed then
-        self.selectedGroup = group.Name
+        self:SetSelectedGroup(group.Name)
     end
 
     local draw_list = ImGui.GetWindowDrawList()
@@ -362,7 +397,7 @@ function OptionsUI:RenderOptionsPanel(groupName)
                 if header.highlighted then
                     ImGui.PopStyleColor(1)
                 end
-                for _, category in ipairs(header.Categories) do
+                for _, category in ipairs(header.Categories or {}) do
                     if #Config:PeerGetAllSettingsForCategory(self.selectedCharacter, category) > 0 then
                         -- only draw the seperator if the category name is different from the heading
                         if header.Name ~= category then
@@ -370,6 +405,19 @@ function OptionsUI:RenderOptionsPanel(groupName)
                         end
                         -- Render options for this category
                         self:RenderCategorySettings(category)
+                    end
+                end
+
+                -- only draw these for the local character for now.
+                if self.selectedCharacter == Comms.GetPeerName() then
+                    for _, RenderCategory in ipairs(header.RenderCategories or {}) do
+                        if RenderCategory.Header then
+                            self:RenderCategorySeperator(RenderCategory.Header)
+                        end
+
+                        if RenderCategory.Render then
+                            RenderCategory.Render(self.configFilter)
+                        end
                     end
                 end
             else
@@ -422,6 +470,11 @@ function OptionsUI:RenderCategorySettings(category)
                         if self.HighlightedSettings:contains(settingName) then
                             ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.5, 0.0, 1.0)
                         end
+                        local text_height = ImGui.GetTextLineHeightWithSpacing()
+                        local row_height  = ImGui.GetFrameHeightWithSpacing()
+
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + ((row_height - text_height) / 2))
+
                         ImGui.Text(string.format("%s", settingDefaults.DisplayName or (string.format("None %d", idx))))
                         if self.HighlightedSettings:contains(settingName) then
                             ImGui.PopStyleColor(1)
@@ -572,6 +625,17 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
 
             if ImGui.BeginTable('configmenu##RGmercsOptions', 1, flags, 0, 0, 0.0) then
                 ImGui.TableNextColumn()
+                local selectedGroupVisible = false
+                for _, group in ipairs(self.FilteredGroups) do
+                    if group.Name == self.selectedGroup then
+                        selectedGroupVisible = true
+                        break
+                    end
+                end
+                if not selectedGroupVisible and #self.FilteredGroups > 0 then
+                    self:SetSelectedGroup(self.FilteredGroups[1].Name)
+                end
+
                 for _, group in ipairs(self.FilteredGroups) do
                     if group.IconImage then
                         self:RenderGroupPanelWithImage(group)

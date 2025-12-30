@@ -12,7 +12,6 @@ local Casting      = require('utils.casting')
 local Modules      = require('utils.modules')
 local Movement     = require('utils.movement')
 local ConsoleUI    = require('ui.console')
-local GitCommit    = require('extras.version')
 
 local StandardUI   = { _version = '1.0', _name = "StandardUI", _author = 'Derple', }
 StandardUI.__index = StandardUI
@@ -132,39 +131,37 @@ function StandardUI:RenderMainWindow(imgui_style, curState, openGUI)
 
         if shouldDrawGUI then
             local imgDisplayed = Casting.LastBurnCheck and ImageUI.burnImg or ImageUI.derpImg
-            ImGui.Image(imgDisplayed:GetTextureID(), ImVec2(60, 60))
+            Ui.RenderLogo(imgDisplayed:GetTextureID())
             ImGui.SameLine()
             local titlePos = ImGui.GetCursorPosVec()
-
-            ImGui.Text(string.format("RGMercs %s [%s]",
+            Ui.RenderText("RGMercs %s [%s]",
                 Config._version,
                 GitCommit.commitId or "None"
-            ))
-
+            )
             titlePos = ImVec2(titlePos.x, titlePos.y + ImGui.GetTextLineHeightWithSpacing())
             ImGui.SetCursorPos(titlePos)
 
-            ImGui.Text(string.format("Class Config: "))
+            Ui.RenderText("Class Config: ")
             ImGui.SameLine()
 
             local version = Modules:ExecModule("Class", "GetVersionString")
             Ui.RenderHyperText(version, IM_COL32(255, 255, 255, 255), IM_COL32(52, 52, 255, 255),
                 function()
-                    OptionsUI:OpenAndSetSearchFilter("what is the current status of this class config")
+                    OptionsUI:OpenAndSetSearchFilter("what is the current status of this class config", "Commands/FAQ")
                 end)
             Ui.Tooltip("Click to display notes about the status of this class config.")
             ImGui.SameLine()
             if ImGui.SmallButton(Icons.MD_INFO_OUTLINE) then
-                OptionsUI:OpenAndSetSearchFilter("what is the current status of this class config")
+                OptionsUI:OpenAndSetSearchFilter("what is the current status of this class config", "Commands/FAQ")
             end
             Ui.Tooltip("Click to display notes about the status of this class config.")
 
             titlePos = ImVec2(titlePos.x, titlePos.y + ImGui.GetTextLineHeightWithSpacing())
             ImGui.SetCursorPos(titlePos)
 
-            ImGui.Text(string.format("Author(s): %s",
-                Modules:ExecModule("Class", "GetAuthorString"))
-            )
+            Ui.RenderText("Author(s): %s", Modules:ExecModule("Class", "GetAuthorString"))
+
+            ImGui.NewLine()
 
             self:RenderWindowControls()
 
