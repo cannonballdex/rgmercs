@@ -1113,7 +1113,7 @@ local _ClassConfig = {
             Header = "Clickies",
             Category = "Class Config Clickies",
             Index = 102,
-            Tooltip = "Click your back for Geomantra.",
+            Tooltip = "Click your charm for Geomantra.",
             Default = false,
         },
         ['DoBackClick']     = {
