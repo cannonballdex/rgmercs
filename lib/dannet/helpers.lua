@@ -38,14 +38,14 @@ function helpers.getPeer(peerIdx)
         return nil
     end
 
+    -- this looks redundant but since we cannot created yield proected blocks we need to check the idx again.
     ---@diagnostic disable-next-line: redundant-parameter
-    local peer = mq.TLO.DanNet.Peers(peerIdx)()
-    Logger.log_verbose('\ayGetting Peer - mq.TLO.DanNet.Peers(%d) = %s', peerIdx, peer)
+    local peer = peerIdx <= mq.TLO.DanNet.PeerCount() and mq.TLO.DanNet.Peers(peerIdx)() or nil
+    Logger.log_verbose('\ayGetting Peer - mq.TLO.DanNet.Peers(%d) = %s', peerIdx, peer or "None")
     return peer
 end
 
 function helpers.getAllPeers()
-    ---@diagnostic disable-next-line: redundant-parameter
     local peers = Strings.split(mq.TLO.DanNet.Peers() or "", "|")
     Logger.log_verbose('\ayGetting All Peers - mq.TLO.DanNet.Peers() = %s', Strings.TableToString(peers, 512))
     return peers

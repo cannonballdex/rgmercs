@@ -1,6 +1,7 @@
 local mq        = require('mq')
 local Combat    = require('utils.combat')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -226,17 +227,16 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 30,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -250,7 +250,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -505,7 +505,7 @@ return {
                 name = "BloodDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -513,7 +513,7 @@ return {
                 name = "EndemicDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -539,12 +539,20 @@ return {
                 name = "Nature's Salve",
                 type = "AA",
                 cond = function(self, aaName)
-                    ---@diagnostic disable-next-line: undefined-field
                     return mq.TLO.Me.TotalCounters() > 0
                 end,
             },
         },
         ['Weaves']         = {
+            {
+                name = "Summon Companion",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    if mq.TLO.Me.Pet.ID() == 0 then return false end
+                    local pet = mq.TLO.Me.Pet
+                    return not pet.Combat() and (pet.Distance3D() or 0) > 200
+                end,
+            },
             {
                 name = "Roar of Thunder",
                 type = "AA",
@@ -611,7 +619,7 @@ return {
                     if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsAMelee(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                         --laz specific deconflict with brell's vibrant barricade
-                        and Casting.PeerBuffCheck(40583, target, true)
+                        and Casting.AddedBuffCheck(40583, target)
                 end,
             },
             {
@@ -1047,7 +1055,7 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

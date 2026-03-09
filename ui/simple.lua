@@ -1,9 +1,9 @@
 local mq                     = require('mq')
 local ImGui                  = require('ImGui')
 local Config                 = require('utils.config')
+local Globals                = require("utils.globals")
 local Ui                     = require('utils.ui')
 local Icons                  = require('mq.ICONS')
-local GitCommit              = require('extras.version')
 
 local SimpleUI               = { _version = '1.0', _name = "SimpleUI", _author = 'Derple', }
 SimpleUI.__index             = SimpleUI
@@ -15,23 +15,21 @@ function SimpleUI:RenderSimplePanelOption(optionLabel, optionName)
     end
 end
 
-function SimpleUI:RenderMainWindow(imgui_style, curState, openGUI)
+function SimpleUI:RenderMainWindow(_, openGUI, flags)
     local shouldDrawGUI = true
 
-    if not Config.Globals.Minimized then
-        local flags = ImGuiWindowFlags.None
-
+    if not Globals.Minimized then
         if Config:GetSetting('MainWindowLocked') then
             flags = bit32.bor(flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
         end
 
-        openGUI, shouldDrawGUI = ImGui.Begin(('RGMercs%s###rgmercssimpleui'):format(Config.Globals.PauseMain and " [Paused]" or ""), openGUI, flags)
+        openGUI, shouldDrawGUI = ImGui.Begin(Ui.GetWindowTitle(('RGMercs%s'):format(Globals.PauseMain and " [Paused]" or ""), 'rgmercssimpleui'), openGUI, flags)
 
-        ImGui.PushID("##RGMercsUI_" .. Config.Globals.CurLoadedChar)
+        ImGui.PushID("##RGMercsUI_" .. Globals.CurLoadedChar)
 
         if shouldDrawGUI then
             local _, y = ImGui.GetContentRegionAvail()
-            if ImGui.BeginChild("left##RGmercsSimplePanel", ImGui.GetWindowContentRegionWidth() * .3, y - 1, ImGuiChildFlags.Border) then
+            if ImGui.BeginChild("left##RGmercsSimplePanel", ImGui.GetWindowContentRegionWidth() * .3, y - 1, ImGuiChildFlags.Borders) then
                 local flags = bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter, ImGuiTableFlags.BordersV, ImGuiTableFlags.ScrollY)
                 if ImGui.BeginTable('configmenu##RGmercsSimplePanel', 1, flags, 0, 0, 0.0) then
                     ImGui.TableNextColumn()
@@ -49,7 +47,7 @@ function SimpleUI:RenderMainWindow(imgui_style, curState, openGUI)
             ImGui.EndChild()
             ImGui.SameLine()
             local x, _ = ImGui.GetContentRegionAvail()
-            if ImGui.BeginChild("right##RGmercsSimplePanel", x, y - 1, ImGuiChildFlags.Border) then
+            if ImGui.BeginChild("right##RGmercsSimplePanel", x, y - 1, ImGuiChildFlags.Borders) then
                 local flags = bit32.bor(ImGuiTableFlags.BordersOuter, ImGuiTableFlags.BordersInner)
                 if ImGui.BeginTable('rightpanelTable##RGmercsSimplePanel', 1, flags, 0, 0, 0.0) then
                     ImGui.TableNextColumn()

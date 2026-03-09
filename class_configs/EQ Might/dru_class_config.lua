@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
@@ -9,9 +10,11 @@ local _ClassConfig = {
     _version              = "2.1 - EQ Might",
     _author               = "Algar",
     ['ModeChecks']        = {
-        IsHealing = function() return true end,
-        IsCuring = function() return Config:GetSetting('DoCureAA') or Config:GetSetting('DoCureSpells') end,
-        IsRezing = function() return Config:GetSetting('DoBattleRez') or Targeting.GetXTHaterCount() == 0 end,
+        IsHealing  = function() return true end,
+        IsCuring   = function() return Config:GetSetting('DoCureAA') or Config:GetSetting('DoCureSpells') end,
+        IsRezing   = function() return Config:GetSetting('DoBattleRez') or Targeting.GetXTHaterCount() == 0 end,
+        CanCharm   = function() return true end,
+        IsCharming = function() return Config:GetSetting('CharmOn') end,
     },
     ['Modes']             = {
         'Heal',
@@ -145,6 +148,7 @@ local _ClassConfig = {
             "Ro's Fiery Sundering",
         },
         ['ColdDebuff'] = { -- Cold/AC Debuff
+            "Icefall Breath",
             "Glacier Breath",
             "E`ci's Frosty Breath",
             "Twilight Breath",
@@ -154,6 +158,7 @@ local _ClassConfig = {
             "Skin of the Serpent", -- EQM Custom
         },
         ['SwarmDot'] = {           -- Magic Dot, 54s
+            "Swarm of Fireants",
             "Wasp Swarm",
             "Swarming Death",
             "Winged Death",
@@ -197,6 +202,7 @@ local _ClassConfig = {
             "Tangling Weeds",
         },
         ['FireNuke'] = {
+            "Winter's Flame", -- start to add cold damage in as well
             "Solstice Strike",
             "Sylvan Fire",
             "Summer's Flame",
@@ -227,6 +233,7 @@ local _ClassConfig = {
             "Cascade of Hail",
         },
         ['SelfDS'] = {
+            "Viridicoat",
             "Nettlecoat",
             "Brackencoat",
             "Bladecoat",
@@ -239,7 +246,6 @@ local _ClassConfig = {
         ['SelfManaRegen'] = {
             "Mask of the Wild",
             "Mask of the Forest",
-            "Mask of the Hunter",
             "Mask of the Stalker",
         },
         ['HPTypeOneGroup'] = {
@@ -385,18 +391,7 @@ local _ClassConfig = {
     ['HealRotations']     = {
         ['BigHealPoint'] = {
             {
-                name = "Protection of Direwood",
-                type = "AA",
-                cond = function(self, aaName, target)
-                    return Targeting.TargetIsMyself(target)
-                end,
-            },
-            {
                 name = "Convergence of Spirits",
-                type = "AA",
-            },
-            {
-                name = "Spirit of the Bear",
                 type = "AA",
             },
             {
@@ -407,14 +402,6 @@ local _ClassConfig = {
                 name = "Mask of the Ancients",
                 type = "Item",
                 load_cond = function(self) return mq.TLO.FindItem("=Mask of the Ancients")() end,
-            },
-            { --Let's make the mainheal autocrit since we have nothing better
-                name = "Nature's Blessing",
-                type = "AA",
-            },
-            { --if we hit this we need spells back ASAP
-                name = "Forceful Rejuvenation",
-                type = "AA",
             },
         },
         ['GroupHealPoint'] = {
@@ -475,7 +462,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -483,10 +470,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds tops.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Core.OkayToNotHeal() and Casting.OkayToBuff()
             end,
@@ -522,7 +508,7 @@ local _ClassConfig = {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.OkayToNotHeal() and not Targeting.IsNamed(Targeting.GetAutoTarget()) and
+                return combat_state == "Combat" and Core.OkayToNotHeal() and not Globals.AutoTargetIsNamed and
                     Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
@@ -581,7 +567,7 @@ local _ClassConfig = {
                 name = "Nature Walkers Scimitar",
                 type = "Item",
                 cond = function(self, itemName, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Targeting.MobNotLowHP(target) and Casting.DetItemCheck(itemName, target)
                 end,
             },
@@ -590,7 +576,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoFlameLickDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -599,7 +585,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoSwarmDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -608,7 +594,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoVengeanceDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -617,7 +603,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoStunNuke') end,
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke() and Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Casting.HaveManaToNuke() and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -634,6 +620,18 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoIceNuke') end,
                 cond = function(self, spell, target)
                     return Casting.OkayToNuke(true)
+                end,
+            },
+            {
+                name = "Artifact of Nature Spirit",
+                type = "Item",
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Nature Spirit") end,
+                cond = function(self, _) return mq.TLO.Me.Pet.ID() == 0 end,
+                post_activate = function(self, spell, success)
+                    if success and mq.TLO.Me.Pet.ID() > 0 then
+                        mq.delay(50) -- slight delay to prevent chat bug with command issue
+                        self:SetPetHold()
+                    end
                 end,
             },
         },
@@ -681,6 +679,11 @@ local _ClassConfig = {
             {
                 name = "Spirit of the Wood",
                 type = "AA",
+                pre_activate = function(self)
+                    if Casting.AAReady("Mass Group Buff") and Globals.AutoTargetIsNamed then
+                        Casting.UseAA("Mass Group Buff", Globals.AutoTargetID)
+                    end
+                end,
             },
             {
                 name = "Nature's Boon",
@@ -696,7 +699,7 @@ local _ClassConfig = {
             },
             { -- Spire, the SpireChoice setting will determine which ability is displayed/used.
                 name_func = function(self)
-                    local spireAbil = string.format("Fundament: %s Spire of Nature", Config.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
+                    local spireAbil = string.format("Fundament: %s Spire of Nature", Globals.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
                     return Casting.CanUseAA(spireAbil) and spireAbil or "Spire Not Purchased/Selected"
                 end,
                 type = "AA",
@@ -786,6 +789,7 @@ local _ClassConfig = {
                     return Casting.IHaveBuff(Casting.GetAASpell(aaName))
                 end,
                 cond = function(self, aaName, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -795,6 +799,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoMoveBuffs') and not Casting.CanUseAA("Flight of Eagles") end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -838,7 +843,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoGroupDmgShield') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
-                    if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsMA(target) then return false end
+                    if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -847,7 +852,7 @@ local _ClassConfig = {
                 type = "AA",
                 active_cond = function(self, aaName) return true end,
                 cond = function(self, aaName, target)
-                    if Targeting.TargetIsMA(target) then return false end
+                    if Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -896,9 +901,24 @@ local _ClassConfig = {
         },
         ['PetSummon'] = {
             {
+                name = "Artifact of Nature Spirit",
+                type = "Item",
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Nature Spirit")() end,
+                active_cond = function(self, _) return mq.TLO.Me.Pet.ID() > 0 end,
+                post_activate = function(self, spell, success)
+                    if success and mq.TLO.Me.Pet.ID() > 0 then
+                        mq.delay(50) -- slight delay to prevent chat bug with command issue
+                        self:SetPetHold()
+                    end
+                end,
+            },
+            {
                 name = "PetSpell",
                 type = "Spell",
-                active_cond = function() return mq.TLO.Me.Pet.ID() ~= 0 end,
+                load_cond = function(self)
+                    return not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of Nature Spirit")()
+                end,
+                active_cond = function(self, _) return mq.TLO.Me.Pet.ID() > 0 end,
                 post_activate = function(self, spell, success)
                     if success and mq.TLO.Me.Pet.ID() > 0 then
                         mq.delay(50) -- slight delay to prevent chat bug with command issue
@@ -1091,10 +1111,10 @@ local _ClassConfig = {
                 "Second Spire: Healing Power Buff to Self.\n" ..
                 "Third Spire: Large Group HP Buff.",
             Type = "Combo",
-            ComboOptions = Config.Constants.SpireChoices,
+            ComboOptions = Globals.Constants.SpireChoices,
             Default = 3,
             Min = 1,
-            Max = #Config.Constants.SpireChoices,
+            Max = #Globals.Constants.SpireChoices,
         },
         ['WolfSpiritChoice']  = {
             DisplayName = "Self Wolfbuff Choice:",
@@ -1393,13 +1413,23 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true,
         },
+        ['UseDonorPet']       = {
+            DisplayName = "Summon Nature Spirit",
+            Group = "Abilities",
+            Header = "Pet",
+            Category = "Pet Summoning",
+            Index = 101,
+            Tooltip = "Use your Artifact of Nature Spirit to summon the donor mammoth pet.",
+            RequiresLoadoutChange = true, -- this is a load condition
+            Default = true,
+        },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

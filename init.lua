@@ -18,6 +18,11 @@ Config:LoadSettings()
 local Logger = require("utils.logger")
 Logger.set_log_level(Config:GetSetting('LogLevel'))
 Logger.set_log_to_file(Config:GetSetting('LogToFile'))
+Logger.set_log_timestamps_to_console(Config:GetSetting('LogTimeStampsToConsole'))
+Logger.set_debug_tracer_enabled(Config:GetSetting('EnableLogTracer'))
+if Config:GetSetting('LogFilter') ~= "" then
+    Logger.set_log_filter(Config:GetSetting('LogFilter'))
+end
 
 local Binds = require('utils.binds')
 require('utils.event_handlers')
@@ -30,21 +35,20 @@ local Casting     = require("utils.casting")
 local Events      = require("utils.events")
 local Ui          = require("utils.ui")
 local Comms       = require("utils.comms")
-local Strings     = require("utils.strings")
 local Movement    = require("utils.movement")
+local Set         = require('mq.set')
+local Globals     = require("utils.globals")
 
--- Initialize class-based moduldes
+-- Initialize class-based modules
 local Modules     = require("utils.modules")
-Modules:load(Config.Constants.LootModuleTypes[Config:GetSetting('LootModuleType')])
+Modules:load(Globals.Constants.LootModuleTypes[Config:GetSetting('LootModuleType')])
 
 require('utils.datatypes')
 
 -- ImGui Variables
-local openGUI            = true
-local notifyZoning       = true
-local curState           = "Downtime"
-local heartbeatCoroutine = nil
-
+local openGUI         = true
+local notifyZoning    = true
+Globals.CurrentState  = "Downtime"
 
 local initPctComplete = 0
 local initMsg         = "Initializing RGMercs..."
@@ -57,31 +61,19 @@ local ConsoleUI       = require("ui.console")
 local LoaderUI        = require("ui.loader")
 local HudUI           = require("ui.hud")
 
-local function renderModulesPopped()
-    if not Config:SettingsLoaded() then return end
-
-    for _, name in ipairs(Modules:GetModuleOrderedNames()) do
-        if Config:GetSetting(name .. "_Popped", true) then
-            if Modules:ExecModule(name, "ShouldRender") then
-                local open, show = ImGui.Begin(name, true)
-                if show then
-                    Modules:ExecModule(name, "Render")
-                end
-                ImGui.End()
-                if not open then
-                    Config:SetSetting(name .. "_Popped", false)
-                end
-            end
-        end
-    end
-end
-
 local function Alive()
     return mq.TLO.NearestSpawn('pc')() ~= nil
 end
 
 local function GetTheme()
-    return Modules:ExecModule("Class", "GetTheme")
+    local classTheme = Modules:ExecModule("Class", "GetTheme") or {}
+    local userTheme = Config:GetSetting('UserTheme') or {}
+
+    if #classTheme == 0 or Config:GetSetting('UserThemeOverrideClassTheme') then
+        return userTheme
+    end
+
+    return classTheme
 end
 
 local function RGMercsGUI()
@@ -97,16 +89,25 @@ local function RGMercsGUI()
     ImGui.SetNextWindowSize(ImVec2(500, 600), ImGuiCond.FirstUseEver)
 
     if openGUI and Alive() and Config:SettingsLoaded() then
+        ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * (1 + (Config:GetSetting('FontScale') / 100)))
         if initPctComplete < 100 then
             LoaderUI:RenderLoader(initPctComplete, initMsg)
         else
             if theme ~= nil then
                 for _, t in pairs(theme) do
                     if t.color then
-                        ImGui.PushStyleColor(t.element, t.color.r, t.color.g, t.color.b, t.color.a)
+                        ImGui.PushStyleColor(Ui.GetImGuiColorId(t.element), t.color.r or t.color.x,
+                            t.color.g or t.color.y,
+                            t.color.b or t.color
+                            .z, t.color.a or t.color.w)
                         themeColorPop = themeColorPop + 1
                     elseif t.value then
-                        ImGui.PushStyleVar(t.element, t.value)
+                        local elementId = Ui.GetImGuiStyleId(t.element)
+                        if type(t.value) == 'number' then
+                            ImGui.PushStyleVar(elementId, t.value)
+                        else
+                            ImGui.PushStyleVar(elementId, t.value.x, t.value.y)
+                        end
                         themeStylePop = themeStylePop + 1
                     end
                 end
@@ -117,8 +118,17 @@ local function RGMercsGUI()
             ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Config:GetMainOpacity()) -- Main window opacity.
             ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, Config:GetSetting('ScrollBarRounding'))
             ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Config:GetSetting('FrameEdgeRounding'))
+            local flags = bit32.bor(ImGuiWindowFlags.NoFocusOnAppearing)
+
+            if Config:GetSetting('PopoutWindowsLockWithMain') and Config:GetSetting('MainWindowLocked') then
+                flags = bit32.bor(flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
+            end
+
             if Config:GetSetting('PopOutForceTarget') then
-                local openFT, showFT = ImGui.Begin("Force Target", Config:GetSetting('PopOutForceTarget'))
+                local openFT, showFT = ImGui.Begin(
+                    Ui.GetWindowTitle("Force Target"),
+                    Config:GetSetting('PopOutForceTarget'), flags)
+
                 if showFT then
                     Ui.RenderForceTargetList()
                 end
@@ -129,18 +139,21 @@ local function RGMercsGUI()
                 end
             end
             if Config:GetSetting('PopOutMercsStatus') then
-                local openFT, showFT = ImGui.Begin("Mercs Status", Config:GetSetting('PopOutMercsStatus'))
-                if showFT then
+                local openMS, showMS = ImGui.Begin(Ui.GetWindowTitle("Mercs Status"),
+                    Config:GetSetting('PopOutMercsStatus'), flags)
+
+                if showMS then
                     Ui.RenderMercsStatus()
                 end
                 ImGui.End()
-                if not openFT then
+                if not openMS then
                     Config:SetSetting('PopOutMercsStatus', false)
-                    showFT = false
+                    showMS = false
                 end
             end
             if Config:GetSetting('PopOutConsole') then
-                local openConsole, showConsole = ImGui.Begin("Debug Console##RGMercs", Config:GetSetting('PopOutConsole'))
+                local openConsole, showConsole = ImGui.Begin(Ui.GetWindowTitle("Debug Console"),
+                    Config:GetSetting('PopOutConsole'), flags)
                 if showConsole then
                     ConsoleUI:DrawConsole()
                 end
@@ -151,25 +164,40 @@ local function RGMercsGUI()
                 end
             end
 
-            renderModulesPopped()
+            Ui.RenderModulesPopped(flags)
 
-            if Config:GetSetting("AlwaysShowMiniButton") or Config.Globals.Minimized then
+            if Config:GetSetting("AlwaysShowMiniButton") or Globals.Minimized then
                 HudUI:RenderToggleHud()
             end
 
-            if Config:GetSetting('FullUI') then
-                openGUI = StandardUI:RenderMainWindow(imGuiStyle, curState, openGUI)
-            else
-                openGUI = SimpleUI:RenderMainWindow(imGuiStyle, curState, openGUI)
+            local flashingWarning = Globals.PauseMain and Targeting.GetXTHaterCount(false) > 0 and Config:GetSetting('WarnCombatPaused')
+
+            if flashingWarning then
+                if Globals.GetTimeSeconds() % 3 == 0 then
+                    Comms.PopUpColor(15, 1, "RGMercs Warning: You have aggro while paused!")
+                end
+
+                ImGui.PushStyleColor(ImGuiCol.WindowBg, Globals.GetAlternatingColor(ImVec4(0.7, 0.1, 0.1, Config:GetMainOpacity()), ImVec4(0.3, 0.1, 0.1, Config:GetMainOpacity())))
             end
 
+            if Config:GetSetting('FullUI') then
+                openGUI = StandardUI:RenderMainWindow(imGuiStyle, openGUI, flags)
+            else
+                openGUI = SimpleUI:RenderMainWindow(imGuiStyle, openGUI, flags)
+            end
+
+            if flashingWarning then
+                ImGui.PopStyleColor()
+            end
+
+            Ui.RenderAAOverlay()
+
             if Config:GetSetting('EnableOptionsUI') then
-                local openOptionsUI = OptionsUI:RenderMainWindow(imGuiStyle, curState, true)
+                local openOptionsUI = OptionsUI:RenderMainWindow(imGuiStyle, true, flags)
                 if not openOptionsUI then
                     Config:SetSetting('EnableOptionsUI', false)
                 end
             end
-
 
             ImGui.PopStyleVar(3)
 
@@ -180,6 +208,7 @@ local function RGMercsGUI()
                 ImGui.PopStyleVar(themeStylePop)
             end
         end
+        ImGui.PopFont()
     end
 end
 
@@ -187,17 +216,6 @@ mq.imgui.init('RGMercsUI', RGMercsGUI)
 
 -- End UI --
 local unloadedPlugins = {}
-
-local function CreateHeartBeat()
-    heartbeatCoroutine = coroutine.create(function()
-        while (1) do
-            Comms.SendHeartbeat(Core.GetMainAssistSpawn().DisplayName(), Config.Globals.PauseMain and "Paused" or curState,
-                Targeting.GetAutoTarget() and Targeting.GetAutoTarget().DisplayName() or "None", Config.Globals.ForceCombatID,
-                Config:GetSetting('ChaseOn') and Config:GetSetting('ChaseTarget') or "Chase Off")
-            coroutine.yield()
-        end
-    end)
-end
 
 local function RGInit(...)
     Core.CheckPlugins({
@@ -209,6 +227,8 @@ local function RGInit(...)
 
     unloadedPlugins = Core.UnCheckPlugins({ "MQ2Melee", "MQ2Twist", })
 
+    Core.CheckSpawnMasterVersion()
+
     initPctComplete = 0
     initMsg = "Initializing RGMercs..."
     local args = { ..., }
@@ -217,14 +237,15 @@ local function RGInit(...)
         Logger.log_info("Arguments passed to RGMercs: %s", table.concat(args, ", "))
         for _, v in ipairs(args) do
             if v == "mini" then
-                Config.Globals.Minimized = true
+                Globals.Minimized = true
+                break
+            end
+            if v == "paused" then
+                Globals.PauseMain = true
                 break
             end
         end
     end
-
-    -- send heartbeat to peers.
-    CreateHeartBeat()
 
     initPctComplete = 10
     initMsg = "Scanning for Configurations..."
@@ -234,7 +255,7 @@ local function RGInit(...)
     initMsg = "Initializing Modules..."
     -- complex objects are passed by reference so we can just use these without having to pass them back in for saving.
     Modules:ExecAll("Init")
-    Config.Globals.SubmodulesLoaded = true
+    Globals.SubmodulesLoaded = true
 
     initPctComplete = 30
     initMsg = "Updating Command Handlers..."
@@ -247,12 +268,12 @@ local function RGInit(...)
 
     Ui.GetAssistWarningString()
 
-    local assistString = Config.Globals.MainAssist:len() > 0 and string.format("set to %s.", Config.Globals.MainAssist) or string.format("unset!")
+    local assistString = Globals.MainAssist:len() > 0 and string.format("set to %s.", Globals.MainAssist) or string.format("unset!")
 
     if Config.TempSettings.AssistWarning then
         Comms.PopUp("RGMercs " .. Config.TempSettings.AssistWarning .. "\nYour assist is currently " .. assistString)
     else
-        Comms.PopUp("Welcome to RGMercs!\nYour assist is currently set to %s.", Config.Globals.MainAssist)
+        Comms.PopUp("Welcome to RGMercs!\nYour assist is currently set to %s.", Globals.MainAssist)
     end
 
     if Core.IAmMA() then
@@ -268,7 +289,8 @@ local function RGInit(...)
         Core.DoCmd("/squelch /dnet commandecho off")
     end
 
-    Movement:DoStickCmd("set breakontarget on")
+    -- Don't pass this through the DoStickCmd system so our timing isn't affected.
+    Core.DoCmd("/squelch /stick set breakontarget on")
 
     initPctComplete = 70
     initMsg = "Closing down Macro..."
@@ -293,14 +315,15 @@ local function RGInit(...)
     printf("\aw\awBy \ag%s", Config._author)
     printf("\aw****************************")
     -- keep these for easy editing/addition later
-    --  printf("\agThe new options panel is live! See our recent forum post or commit messages.")
+    printf("\agBuff handling has been revamped to rely on actors! See our recent forum post or commit messages.")
+    printf("\agYou may wish to take a moment to peruse the new options in Abilities > Buffs> Buff Rules.")
     printf("\awPlease visit us on the RG forums for the most recent news and updates.")
     printf("\aw Use \ag /rgl \aw or check our options panel for a list of commands.")
 
     -- store initial positioning data.
     initPctComplete = 90
     initMsg = "Storing Initial Positioning Data..."
-    Config:StoreLastMove()
+    Movement:StoreLastMove()
 
     initMsg = "Done!"
     initPctComplete = 100
@@ -309,30 +332,27 @@ local function RGInit(...)
 end
 
 local function Main()
-    if mq.TLO.Zone.ID() ~= Config.Globals.CurZoneId or mq.TLO.Me.Instance() ~= Config.Globals.CurInstance then
+    if mq.TLO.Zone.ID() ~= Globals.CurZoneId or mq.TLO.Me.Instance() ~= Globals.CurInstance then
         if notifyZoning then
             Modules:ExecAll("OnZone")
             notifyZoning = false
-            Config.Globals.ForceTargetID = 0
-            Config.Globals.AutoTargetID = 0
-            Config.Globals.ForceCombatID = 0
+            Config.TempSettings.NoLevZone = false
+            Globals.ForceTargetID = 0
+            Globals.ForceCombatID = 0
+            Globals.IgnoredTargetIDs = Set.new({})
+            Globals.AutoTargetID = 0
+            Globals.AutoTargetIsNamed = false
+            Globals.AggroTargetID = 0
         end
         mq.delay(100)
-        Config.Globals.CurZoneId = mq.TLO.Zone.ID()
-        Config.Globals.CurInstance = mq.TLO.Me.Instance()
+        Globals.CurZoneId = mq.TLO.Zone.ID()
+        Globals.CurInstance = mq.TLO.Me.Instance()
         return
     end
 
-    if heartbeatCoroutine then
-        if coroutine.status(heartbeatCoroutine) ~= 'dead' then
-            local success, err = coroutine.resume(heartbeatCoroutine)
-            if not success then
-                Logger.log_error("\arError in Heartbeat Coroutine: %s", err)
-            end
-        else
-            CreateHeartBeat()
-        end
-    end
+    Core.UpdateBuffs()
+
+    Events.DoEvents(true)
 
     Config:ValidatePeers()
 
@@ -343,34 +363,28 @@ local function Main()
         Casting.UseGem = mq.TLO.Me.NumGems()
     end
 
-    if Config.Globals.PauseMain then
+    if Globals.PauseMain then
         mq.delay(100)
         mq.doevents()
+        Events.DoEvents()
         if Config:GetSetting('RunMovePaused') then
-            Modules:ExecModule("Movement", "GiveTime", curState)
+            Modules:ExecModule("Movement", "GiveTime")
         end
-        Modules:ExecModule("Drag", "GiveTime", curState)
-        Modules:ExecModule("Debug", "GiveTime", curState)
+        Modules:ExecModule("Drag", "GiveTime")
+        Modules:ExecModule("Debug", "GiveTime")
         Modules:ExecModule("Clickies", "ValidateClickies")
         Modules:ExecAll("WriteSettings") -- this needs to happen even when paused.
         return
     end
 
-    -- sometimes nav gets interupted this will try to reset it.
-    if Config:GetTimeSinceLastMove() > 5 and mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() == 0 then
-        Core.DoCmd("/nav stop")
-    end
-
-    if Targeting.GetXTHaterCount() > 0 then
-        if curState == "Downtime" and mq.TLO.Me.Sitting() then
+    if Targeting.GetXTHaterCount(true) > 0 then
+        if Globals.CurrentState == "Downtime" and mq.TLO.Me.Sitting() then
             -- if switching into combat state stand up.
             mq.TLO.Me.Stand()
         end
 
-        curState = "Combat"
-        --if os.clock() - Config.Globals.LastFaceTime > 6 then
+        Globals.CurrentState = "Combat"
         if Config:GetSetting('FaceTarget') and not Targeting.FacingTarget() and mq.TLO.Target.ID() ~= mq.TLO.Me.ID() and not mq.TLO.Me.Moving() then
-            --Config.Globals.LastFaceTime = os.clock()
             Core.DoCmd("/squelch /face fast")
         end
 
@@ -378,17 +392,20 @@ local function Main()
             Casting.AutoMed()
         end
     else
-        if curState ~= "Downtime" then
+        if Globals.CurrentState ~= "Downtime" then
+            Logger.log_debug("Switching to Downtime state.")
+
             -- clear the cache during state transition.
             Targeting.ClearSafeTargetCache()
             Targeting.ForceBurnTargetID = 0
-            Config.Globals.LastPulledID = 0
-            Config.Globals.AutoTargetID = 0
-            Casting.LastBurnCheck = false
+            Globals.LastPulledID        = 0
+            Globals.AutoTargetID        = 0
+            Globals.IgnoredTargetIDs    = Set.new({})
+            Globals.LastBurnCheck       = false
             Modules:ExecModule("Pull", "SetLastPullOrCombatEndedTimer")
         end
 
-        curState = "Downtime"
+        Globals.CurrentState = "Downtime"
 
         if Config:GetSetting('DoMed') ~= 1 then
             Casting.AutoMed()
@@ -397,42 +414,56 @@ local function Main()
 
     if mq.TLO.MacroQuest.GameState() ~= "INGAME" then return end
 
-    if Config.Globals.CurLoadedChar ~= mq.TLO.Me.DisplayName() then
+    if Globals.CurLoadedChar ~= mq.TLO.Me.DisplayName() then
         Config:LoadSettings()
         Modules:ExecAll("LoadSettings")
     end
 
-    if Config.Globals.CurLoadedClass ~= mq.TLO.Me.Class.ShortName() then
+    if Globals.CurLoadedClass ~= mq.TLO.Me.Class.ShortName() then
         ClassLoader.changeLoadedClass()
     end
 
-    Config:StoreLastMove()
+    Movement:StoreLastMove()
 
     if mq.TLO.Me.Hovering() then Events.HandleDeath() end
 
     Combat.SetMainAssist()
     Ui.GetAssistWarningString()
 
-    if Combat.FindBestAutoTargetCheck() then
-        -- This will find a valid target and set it to : Config.Globals.AutoTargetID
+    if not Globals.BackOffFlag then
+        -- This will find a valid target and set it to : Globals.AutoTargetID
         Combat.FindBestAutoTarget(Combat.OkToEngagePreValidateId)
+        -- finds the AggroTarget for a tank mode character
+        if Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') then
+            Combat.TankAggroScan()
+        end
     end
 
-    if Combat.OkToEngage(Config.Globals.AutoTargetID) then
-        Combat.EngageTarget(Config.Globals.AutoTargetID)
+    if Combat.OkToEngage(Globals.AutoTargetID) then
+        Combat.EngageTarget(Globals.AutoTargetID)
     else
-        if (Targeting.GetXTHaterCount(true) > 0 or mq.TLO.Me.Combat()) and Targeting.GetTargetID() ~= (Config:GetSetting('DoPull') and Config.Globals.LastPulledID or 0) and not (Core.IAmMA() and Targeting.IsSpawnXTHater(mq.TLO.Target.ID())) then
-            Logger.log_debug("\ayClearing Target because we are not OkToEngage() and we are in combat!")
-            Targeting.ClearTarget()
+        if Globals.CurrentState == "Combat" then
+            local targetId = Targeting.GetTargetID()
+            local ignored = Globals.IgnoredTargetIDs:contains(targetId)                         -- don't target something in our ignore list
+            local pullTarget = Config:GetSetting('DoPull') and targetId == Globals.LastPulledID -- don't clear your pull target while its traveling to you
+            local assistHater = Core.IAmMA() and Targeting.IsSpawnXTHater(targetId)             -- don't clear a targeted hater as MA unless it is ignored
+
+            if ignored or (not pullTarget and not assistHater) then
+                Logger.log_debug("\ayClearing Target because we are not OkToEngage() and we are in combat!")
+                Targeting.ClearTarget()
+            end
+        elseif mq.TLO.Me.Combat() and (Config:GetSetting('AutoAttackSafetyCheck') or not mq.TLO.Target()) then
+            Logger.log_debug("\ayTurning off attack because we don't have a target or we are not OkToEngage the current target!")
+            Core.DoCmd("/attack off")
         end
     end
 
     -- Handles state for when we're in combat
-    if curState == "Combat" then
-        if ((os.clock() - Config.Globals.LastPetCmd) > 2) then
-            Config.Globals.LastPetCmd = os.clock()
-            if ((Config:GetSetting('DoPet') or Config:GetSetting('CharmOn')) and mq.TLO.Pet.ID() ~= 0) and (Targeting.GetTargetPctHPs(Targeting.GetAutoTarget()) <= Config:GetSetting('PetEngagePct')) then
-                Combat.PetAttack(Config.Globals.AutoTargetID, true)
+    if Globals.CurrentState == "Combat" then
+        if ((Globals.GetTimeSeconds() - Globals.LastPetCmd) > 2) then
+            Globals.LastPetCmd = Globals.GetTimeSeconds()
+            if Config:GetSetting('DoPetCommands') and mq.TLO.Pet.ID() > 0 and Targeting.GetTargetPctHPs(Targeting.GetAutoTarget()) <= Config:GetSetting('PetEngagePct') then
+                Combat.PetAttack(Globals.AutoTargetID, true)
             end
         end
 
@@ -465,24 +496,12 @@ local function Main()
         end
     end
 
-    if Config.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Anytime" or (Config.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Combat" and curState == "Combat") then
+    if Globals.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Anytime" or (Globals.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Combat" and Globals.CurrentState == "Combat") then
         Casting.ClickModRod()
     end
 
-    if Combat.ShouldKillTargetReset() then
-        Config.Globals.AutoTargetID = 0
-    end
-
-    -- If target is not attackable then turn off attack
-    local pcCheck = Targeting.TargetIsType("pc") or
-        (Targeting.TargetIsType("pet") and Targeting.TargetIsType("pc", mq.TLO.Target.Master))
-    local mercCheck = Targeting.TargetIsType("mercenary")
-    if mq.TLO.Me.Combat() and (not mq.TLO.Target() or pcCheck or mercCheck) then
-        Logger.log_debug(
-            "\ay[1] Target type check failed \aw[\atinCombat(%s) pcCheckFailed(%s) mercCheckFailed(%s)\aw]\ay - turning attack off!",
-            Strings.BoolToColorString(mq.TLO.Me.Combat()), Strings.BoolToColorString(pcCheck),
-            Strings.BoolToColorString(mercCheck))
-        Core.DoCmd("/attack off")
+    if not Combat.ValidCombatTarget(Globals.AutoTargetID) then
+        Globals.AutoTargetID = 0
     end
 
     -- Revive our mercenary if they're dead and we're using a mercenary
@@ -499,7 +518,7 @@ local function Main()
         end
     end
 
-    Modules:ExecAll("GiveTime", curState)
+    Modules:ExecAll("GiveTime")
     Modules:ExecAll("WriteSettings")
 
     mq.doevents()
@@ -520,7 +539,7 @@ local script_actor = Comms.Actors.register(function(message)
     -- This is a core event so handle it here.
     if msg.Event == "Heartbeat" then
         --Logger.log_debug("Received Heartbeat from \am%s\aw: \ag%s", msg.From, Strings.TableToString(msg.Data))
-        Config:UpdatePeerHeartbeat(msg.From, msg.Data)
+        Comms.UpdatePeerHeartbeat(msg.From, msg.Data)
         return
     end
 

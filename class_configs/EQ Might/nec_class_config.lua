@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Comms        = require("utils.comms")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
@@ -21,7 +22,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.5, g = 0.05, b = 1.0, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.4, g = 0.05, b = 0.8, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.2, g = 0.05, b = 0.6, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.1, g = 0.05, b = 0.5, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
@@ -94,6 +95,7 @@ local _ClassConfig = {
             "Minor Shielding",
         },
         ['SelfRune'] = {
+            "WraitSkin",
             "Dull Pain",
             "Force Shield",
             "Manaskin",
@@ -129,6 +131,7 @@ local _ClassConfig = {
             "Lifetap",
         },
         ['DurationTap'] = {
+            "Dyn`leth's Grasp",
             "Ancient: Chiasa's Kiss",
             -- "Fang of Death",
             -- "Night's Beckon",
@@ -152,6 +155,7 @@ local _ClassConfig = {
             "Shock of Poison",
         },
         ['FireDot'] = {
+            "Pyre of the Fallen",
             "Dread Pyre",
             "Pyre of Mori",
             "Night Fire",
@@ -162,11 +166,16 @@ local _ClassConfig = {
             "Heat Blood",
         },
         ['FireDot2'] = {
+            "Pyre of the Fallen",
+            "Dread Pyre",
             "Pyre of Mori",
             "Night Fire",
             "Funeral Pyre of Kelador",
         },
         ['FireDot3'] = {
+            "Pyre of the Fallen",
+            "Dread Pyre",
+            "Pyre of Mori",
             "Night Fire",
             "Funeral Pyre of Kelador",
         },
@@ -174,6 +183,7 @@ local _ClassConfig = {
         --     "Splurt",
         -- },
         ['CurseDot'] = {
+            "Curse of Mortality",     -- Timer 4
             "Ancient: Curse of Mori", -- Timer 5
             "Dark Nightmare",         -- Timer 4
             "Horror",
@@ -181,7 +191,9 @@ local _ClassConfig = {
             "Dark Soul",
         },
         ['CurseDot2'] = {
-            "Dark Nightmare",
+            "Curse of Mortality",     -- Timer 4
+            "Ancient: Curse of Mori", -- Timer 5
+            "Dark Nightmare",         -- Timer 4
             "Horror",
         },
         ['PlagueDot'] = {
@@ -225,6 +237,7 @@ local _ClassConfig = {
         },
         ['ScentDebuff2'] = {
             "Scent of Midnight",
+            "Scent of Twilight",
         },
         ['LichSpell'] = {
             "Dark Possession",
@@ -265,6 +278,7 @@ local _ClassConfig = {
             "Cavorting Bones",
         },
         ['PetHaste'] = {
+            "Sigil of the Unnatural",
             "Glyph of Darkness",
             "Rune of Death",
             "Augmentation of Death",
@@ -293,7 +307,8 @@ local _ClassConfig = {
         --     "Guard of Calliav",
         --     "Ward of Calliav",
         -- },
-        ['PetHealSpell'] = {      -- Also has cure effect for pet
+        ['PetHealSpell'] = { -- Also has cure effect for pet
+            "Chiling Renewal",
             "Dark Salve",
             "Renewal of Lucifer", -- EQM Custom
             "Touch of Death",
@@ -342,7 +357,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 30,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -356,7 +371,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -387,7 +402,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') then return false end
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         {
@@ -444,7 +459,7 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('AggroFeign') then return false end
-                    return (Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 99) or (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') and Targeting.IHaveAggro(100))
+                    return (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99) or (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') and Targeting.IHaveAggro(100))
                 end,
             },
             {
@@ -510,6 +525,15 @@ local _ClassConfig = {
         },
         ['CombatBuff']      = {
             {
+                name = "Summon Companion",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    if mq.TLO.Me.Pet.ID() == 0 then return false end
+                    local pet = mq.TLO.Me.Pet
+                    return not pet.Combat() and (pet.Distance3D() or 0) > 200
+                end,
+            },
+            {
                 name = "Epic",
                 type = "Item",
                 cond = function(self, itemName)
@@ -542,7 +566,7 @@ local _ClassConfig = {
             {
                 name = "Artifact of the Red Demon",
                 type = "Item",
-                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of the Red Demon") end,
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of the Red Demon")() end,
                 cond = function(self, _) return mq.TLO.Me.Pet.ID() == 0 end,
                 post_activate = function(self, spell, success)
                     if success and mq.TLO.Me.Pet.ID() > 0 then
@@ -579,7 +603,6 @@ local _ClassConfig = {
                 type = "Item",
                 load_cond = function() return mq.TLO.Me.Level() >= 68 and mq.TLO.Me.Level() < 70 and mq.TLO.FindItem("=Artifact of the Dread Pyre")() end,
                 cond = function(self, itemName, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
                     return Casting.DotItemCheck(itemName, target)
                 end,
             },
@@ -588,7 +611,6 @@ local _ClassConfig = {
                 type = "Item",
                 load_cond = function() return mq.TLO.Me.Level() >= 68 and mq.TLO.FindItem("=Trinket of Suffocation")() end,
                 cond = function(self, itemName, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
                     return Casting.DotItemCheck(itemName, target)
                 end,
             },
@@ -687,7 +709,7 @@ local _ClassConfig = {
                 name = "Focus of Arcanum",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Casting.SelfBuffAACheck(aaName) and Targeting.IsNamed(target)
+                    return Casting.SelfBuffAACheck(aaName) and Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -696,7 +718,7 @@ local _ClassConfig = {
                 end,
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return mq.TLO.SpawnCount("corpse radius 100")() >= Config:GetSetting('WakeDeadCorpseCnt') and Targeting.IsNamed(target)
+                    return mq.TLO.SpawnCount("corpse radius 100")() >= Config:GetSetting('WakeDeadCorpseCnt') and Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -710,14 +732,14 @@ local _ClassConfig = {
             {
                 name = "Gathering Dusk",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) and Targeting.GetAutoTargetPctHPs() < 85 and mq.TLO.Me.PctAggro() <= 25 end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed and Targeting.GetAutoTargetPctHPs() < 85 and mq.TLO.Me.PctAggro() <= 25 end,
             },
             {
                 name = "Life Burn",
                 type = "AA",
                 load_cond = function(self) return Config:GetSetting('DoLifeBurn') end,
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() <= 25
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() <= 25
                 end,
             },
         },
@@ -781,7 +803,7 @@ local _ClassConfig = {
             {
                 name = "Artifact of the Red Demon",
                 type = "Item",
-                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of the Red Demon") end,
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of the Red Demon")() end,
                 active_cond = function(self, _) return mq.TLO.Me.Pet.ID() > 0 end,
                 post_activate = function(self, spell, success)
                     if success and mq.TLO.Me.Pet.ID() > 0 then
@@ -793,7 +815,7 @@ local _ClassConfig = {
             {
                 name = "PetSpellWar",
                 type = "Spell",
-                load_cond = function(self) return Config:GetSetting('PetType') == 1 and (not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of the Red Demon")) end,
+                load_cond = function(self) return Config:GetSetting('PetType') == 1 and (not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of the Red Demon")()) end,
                 active_cond = function(self, _) return mq.TLO.Me.Pet.ID() ~= 0 and mq.TLO.Me.Pet.Class.ShortName():lower() == ("war" or "mnk") end,
                 post_activate = function(self, spell, success)
                     local pet = mq.TLO.Me.Pet
@@ -807,7 +829,7 @@ local _ClassConfig = {
             {
                 name = "PetSpellRog",
                 type = "Spell",
-                load_cond = function(self) return Config:GetSetting('PetType') == 2 and (not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of the Red Demon")) end,
+                load_cond = function(self) return Config:GetSetting('PetType') == 2 and (not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of the Red Demon")()) end,
                 active_cond = function(self, _) return mq.TLO.Me.Pet.ID() ~= 0 and mq.TLO.Me.Pet.Class.ShortName():lower() == "rog" end,
                 post_activate = function(self, spell, success)
                     local pet = mq.TLO.Me.Pet
@@ -858,13 +880,7 @@ local _ClassConfig = {
 
             if lichSpell and lichSpell() then
                 local targetId = mq.TLO.Me.ID()
-                table.insert(self.TempSettings.QueuedAbilities, {
-                    name = lichSpell,
-                    targetId = targetId,
-                    target = mq.TLO.Spawn(targetId),
-                    type = "spell",
-                    queuedTime = os.clock(),
-                })
+                self:QueueAbility("spell", lichSpell, targetId)
             end
         end,
         GetScentItem = function(self)
@@ -1075,10 +1091,10 @@ local _ClassConfig = {
                 "Second Spire: Pet Damage Proc Buff.\n" ..
                 "Third Spire: DoT Crit Damage Buff.",
             Type = "Combo",
-            ComboOptions = Config.Constants.SpireChoices,
+            ComboOptions = Globals.Constants.SpireChoices,
             Default = 3,
             Min = 1,
-            Max = #Config.Constants.SpireChoices,
+            Max = #Globals.Constants.SpireChoices,
         },
         ['EmergencyStart']    = {
             DisplayName = "Emergency HP%",
@@ -1098,7 +1114,7 @@ local _ClassConfig = {
             Header = "Utility",
             Category = "Emergency",
             Index = 102,
-            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a RGMercsNamed/SpawnMaster mob.",
+            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a mob detected as a 'named' by RGMercs (see Named tab)..",
             Default = true,
         },
 
@@ -1161,11 +1177,11 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

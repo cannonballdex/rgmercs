@@ -1,6 +1,7 @@
 local mq        = require('mq')
 local Combat    = require('utils.combat')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -675,10 +676,9 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -692,7 +692,7 @@ return {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 30,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -714,7 +714,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -868,9 +868,10 @@ return {
             {
                 name = "Forceful Rejuvenation",
                 type = "AA",
+                load_cond = function(self) return Core.GetResolvedActionMapItem('DichoSpell') end,
                 cond = function(self, aaName)
-                    local dichoSpell = self.ResolvedActionMap['DichoSpell'].RankName() or "None"
-                    return not self.ClassConfig.HelperFunctions.FlurryActive(self) and (mq.TLO.Me.GemTimer(dichoSpell)() or -1) > 15
+                    local dichoSpell = Core.GetResolvedActionMapItem('DichoSpell')
+                    return not self.ClassConfig.HelperFunctions.FlurryActive(self) and (mq.TLO.Me.GemTimer(dichoSpell.RankName())() or -1) > 15
                 end,
             },
             {
@@ -932,7 +933,7 @@ return {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('AggroFeign') then return false end
-                    return (mq.TLO.Me.PctHPs() <= 40 and Targeting.IHaveAggro(100)) or (Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 99) and not Core.IAmMA()
+                    return (mq.TLO.Me.PctHPs() <= 40 and Targeting.IHaveAggro(100)) or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99) and not Core.IAmMA()
                 end,
             },
             {
@@ -1014,7 +1015,7 @@ return {
                 cond = function(self, spell, target)
                     --This checks to see if the Growl portion is up on the pet (or about to expire) before using this, those who prefer the swarm pets can use the actual swarm pet spell in conjunction with this for mana savings.
                     --There are some instances where the Growl isn't needed, but that is a giant TODO and of minor benefit.
-                    ---@diagnostic disable-next-line: undefined-field
+                    ---@diagnostic disable-next-line: undefined-field -- total seconds not recognized for buffduration
                     return (mq.TLO.Pet.BuffDuration(spell.RankName.Trigger(2)).TotalSeconds() or 0) < 10
                 end,
             },
@@ -1100,6 +1101,15 @@ return {
         },
         ['Weaves'] = {
             {
+                name = "Summon Companion",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    if mq.TLO.Me.Pet.ID() == 0 then return false end
+                    local pet = mq.TLO.Me.Pet
+                    return not pet.Combat() and (pet.Distance3D() or 0) > 200
+                end,
+            },
+            {
                 name = "Round Kick",
                 type = "Ability",
                 load_cond = function(self) return Casting.CanUseAA("Feral Swipe") end,
@@ -1168,7 +1178,6 @@ return {
                 name = "Nature's Salve",
                 type = "AA",
                 cond = function(self, aaName)
-                    ---@diagnostic disable-next-line: undefined-field
                     return mq.TLO.Me.TotalCounters() > 0
                 end,
             },
@@ -1296,11 +1305,9 @@ return {
             {
                 name = "Hobble of Spirits",
                 type = "AA",
-                load_cond = function(self) return Config:GetSetting('PetProcChoice') == 3 end,
+                load_cond = function(self) return Config:GetSetting('PetProcChoice') == 2 end,
                 cond = function(self, aaName, target)
-                    local slowProc = self.ResolvedActionMap['PetSlowProc']
-                    return (slowProc and slowProc() and mq.TLO.Me.PetBuff(slowProc.RankName()) == nil) and
-                        mq.TLO.Me.PetBuff(mq.TLO.Me.AltAbility(aaName).Spell.RankName.Name())() == nil
+                    return Casting.PetBuffAACheck(aaName)
                 end,
             },
             {
@@ -1338,7 +1345,7 @@ return {
             {
                 name = "PetSlowProc",
                 type = "Spell",
-                load_cond = function(self) return Config:GetSetting('PetProcChoice') == 2 end,
+                load_cond = function(self) return Config:GetSetting('PetProcChoice') == 1 end,
                 cond = function(self, spell)
                     return Casting.PetBuffCheck(spell)
                 end,
@@ -1353,7 +1360,6 @@ return {
             {
                 name = "PetDamageProc",
                 type = "Spell",
-                load_cond = function(self) return Config:GetSetting('PetProcChoice') == 1 end,
                 cond = function(self, spell)
                     return Casting.PetBuffCheck(spell)
                 end,
@@ -1600,10 +1606,10 @@ return {
             Index = 102,
             Tooltip = "Select your preferred pet proc buff type.",
             Type = "Combo",
-            ComboOptions = { 'Damage', 'Slow', 'Snare', },
-            Default = 3,
+            ComboOptions = { 'Slow', 'Snare', },
+            Default = 1,
             Min = 1,
-            Max = 3,
+            Max = 2,
             RequiresLoadoutChange = true,
             ConfigType = "Advanced",
         },
@@ -1812,7 +1818,7 @@ return {
             Header = "Utility",
             Category = "Emergency",
             Index = 101,
-            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a RGMercsNamed/SpawnMaster mob.",
+            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a mob detected as a 'named' by RGMercs (see Named tab)..",
             Default = true,
             RequiresLoadoutChange = true,
         },
@@ -1849,7 +1855,7 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

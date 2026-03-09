@@ -1,6 +1,8 @@
 local mq                    = require('mq')
 local Config                = require('utils.config')
+local Globals               = require('utils.globals')
 local Core                  = require('utils.core')
+local Comms                 = require("utils.comms")
 local Modules               = require("utils.modules")
 local Logger                = require("utils.logger")
 local Strings               = require("utils.strings")
@@ -14,34 +16,31 @@ Targeting.ForceBurnTargetID = 0
 Targeting.SafeTargetCache   = {}
 
 function Targeting.IsNamed(spawn)
-    if not spawn() then return false end
+    if not spawn or not spawn() then return false end
     if (spawn.Level() or 0) < Config:GetSetting("NamedMinLevel") then return false end
-    return Modules:ExecModule("Named", "IsNamed", spawn)
+    return Modules:ExecModule("Named", "IsNamed", spawn) or false
 end
 
 --- Sets the target.
 --- @param targetId number The ID of the target to be set.
 --- @param ignoreBuffPopulation boolean? Wait to return until buffs are populated Default: false
 function Targeting.SetTarget(targetId, ignoreBuffPopulation)
-    if targetId == 0 then return end
-
-    local maxWaitBuffs = ((mq.TLO.EverQuest.Ping() * 2) + 500)
-
-    if targetId == mq.TLO.Target.ID() then return end
-    Logger.log_debug("SetTarget(): Setting Target: %d (buffPopWait: %d)", targetId, ignoreBuffPopulation and 0 or maxWaitBuffs)
-    if Targeting.GetTargetID() ~= targetId then
-        mq.TLO.Spawn(targetId).DoTarget()
-        mq.delay(10, function() return mq.TLO.Target.ID() == targetId end)
-        mq.delay(maxWaitBuffs, function() return ignoreBuffPopulation or (mq.TLO.Target() and mq.TLO.Target.BuffsPopulated()) end)
-    end
-    Logger.log_debug("SetTarget(): Set Target to: %d (buffsPopulated: %s)", targetId, Strings.BoolToColorString(mq.TLO.Target.BuffsPopulated() ~= nil))
+    -- avoid breaking change.
+    return Core.SetTarget(targetId, ignoreBuffPopulation)
 end
 
 --- Retrieves the current auto-target.
 ---
 --- @return MQSpawn The current auto-target.
 function Targeting.GetAutoTarget()
-    return mq.TLO.Spawn(string.format("id %d", Config.Globals.AutoTargetID))
+    return mq.TLO.Spawn(string.format("id %d", Globals.AutoTargetID))
+end
+
+--- Retrieves the current auto-target.
+---
+--- @return MQSpawn The current auto-target.
+function Targeting.GetAggroTarget()
+    return mq.TLO.Spawn(string.format("id %d", Globals.AggroTargetID))
 end
 
 --- Clears the current target.
@@ -50,10 +49,13 @@ end
 function Targeting.ClearTarget()
     if Config:GetSetting('DoAutoTarget') then
         Logger.log_debug("Clearing Target")
-        Config.Globals.AutoTargetID = 0
-        Config.Globals.ForceCombatID = 0
-        if Config.Globals.ForceTargetID > 0 and not Targeting.IsSpawnXTHater(Config.Globals.ForceTargetID) then Config.Globals.ForceTargetID = 0 end
+        Globals.AutoTargetID = 0
+        Globals.AutoTargetIsNamed = false
+        Globals.AggroTargetID = 0
+        if Globals.ForceTargetID > 0 and not Targeting.IsSpawnXTHater(Globals.ForceTargetID) then Globals.ForceTargetID = 0 end
+        Globals.ForceCombatID = 0
         if mq.TLO.Stick.Status():lower() == "on" then Movement:DoStickCmd("off") end
+        if mq.TLO.Me.Combat() then Core.DoCmd("/attack off") end
         Core.DoCmd("/target clear")
         if mq.TLO.Me.XTarget(1).TargetType() ~= "Auto Hater" then Targeting.ResetXTSlot(1) end
     end
@@ -132,6 +134,13 @@ function Targeting.GetTargetPctHPs(target)
     return useTarget.PctHPs() or 0
 end
 
+--- Returns the height of the target.
+--- @param target MQTarget|MQSpawn? The target entity
+--- @return number The distance to the target.
+function Targeting.GetTargetHeight(target)
+    return (target and target.Height() or (mq.TLO.Target.Height() or 0))
+end
+
 --- Retrieves the percentage of HPs for auto-targeting.
 ---
 --- @return number The percentage of HPs for auto-targeting.
@@ -161,6 +170,31 @@ function Targeting.GetTargetDead(target)
     return useTarget.Dead()
 end
 
+--- Checks if the specified target is in Line Of Sight.
+--- @param target MQTarget The name or identifier of the target to check.
+--- @return boolean Returns true if the target is in LoS, false otherwise.
+function Targeting.GetTargetLOS(target)
+    local useTarget = target
+    if not useTarget then useTarget = mq.TLO.Target end
+    if not useTarget or not useTarget() then return false end
+
+    return useTarget.LineOfSight()
+end
+
+--- Returns the max distance from this spawn for you to hit it.
+--- @param target MQTarget The name or identifier of the target to check.
+--- @param failHigh boolean Return 999 for an invalid target, otherwise return 0.
+--- @return number Returns The max distance to hit this target
+function Targeting.GetMaxMeleeRange(target, failHigh)
+    local useTarget = target
+    if not useTarget then useTarget = mq.TLO.Target end
+    if not useTarget or not useTarget() then
+        return failHigh and 999 or 0
+    end
+
+    return useTarget.MaxRangeTo() or (failHigh and 999 or 0)
+end
+
 --- Retrieves the name of the given target.
 --- @param target MQTarget? The target whose name is to be retrieved.
 --- @return string The name of the target.
@@ -179,6 +213,28 @@ end
 --- @return number The aggro percentage of the current target.
 function Targeting.GetTargetAggroPct()
     return (mq.TLO.Target.PctAggro() or 0)
+end
+
+--- Retrieves the aggro percentage of the current autotarget.
+--- @return number The aggro percentage of the current autotarget.
+function Targeting.GetAutoTargetAggroPct()
+    if Globals.AutoTargetID == 0 then return 0 end
+
+    if mq.TLO.Target.ID() == Globals.AutoTargetID then
+        return mq.TLO.Target.PctAggro() or 0
+    end
+
+    local xtCount = mq.TLO.Me.XTarget()
+
+    for i = 1, xtCount do
+        local xtSpawn = mq.TLO.Me.XTarget(i)
+
+        if xtSpawn() and (xtSpawn.ID() or 0) == Globals.AutoTargetID then
+            return xtSpawn.PctAggro() or 0
+        end
+    end
+
+    return 0
 end
 
 --- Determines the type of the given target.
@@ -235,7 +291,7 @@ function Targeting.GetHighestAggroPct()
     for i = 1, xtCount do
         local xtSpawn = mq.TLO.Me.XTarget(i)
 
-        if xtSpawn() and (xtSpawn.ID() or 0) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Config.Globals.ForceCombatID) then
+        if xtSpawn() and (xtSpawn.ID() or 0) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Globals.ForceTargetID) then
             if xtSpawn.PctAggro() > highestPct then highestPct = xtSpawn.PctAggro() end
         end
     end
@@ -257,7 +313,7 @@ function Targeting.IHaveAggro(pct)
     for i = 1, xtCount do
         local xtSpawn = mq.TLO.Me.XTarget(i)
 
-        if xtSpawn() and (xtSpawn.ID() or 0) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Config.Globals.ForceCombatID) then
+        if xtSpawn() and (xtSpawn.ID() or 0) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Globals.ForceTargetID) then
             if xtSpawn.PctAggro() >= pct then return true end
         end
     end
@@ -268,14 +324,13 @@ end
 --- Retrieves the IDs of the top haters.
 --- @param printDebug boolean?: If true, debug information will be printed.
 --- @return table: A table containing the IDs of the top haters.
-function Targeting.GetXTHaterIDs(printDebug)
+function Targeting.GetXTHaterIDsSet(printDebug)
     local xtCount = mq.TLO.Me.XTarget() or 0
     local uniqHaters = Set.new({})
 
-
     for i = 1, xtCount do
         local xtarg = mq.TLO.Me.XTarget(i)
-        if xtarg and xtarg.ID() > 0 and not xtarg.Dead() and (math.ceil(xtarg.PctHPs() or 0)) > 0 and (xtarg.Aggressive() or xtarg.TargetType():lower() == "auto hater" or xtarg.ID() == Config.Globals.ForceCombatID) then
+        if xtarg and xtarg.ID() > 0 and not xtarg.Dead() and (math.ceil(xtarg.PctHPs() or 0)) > 0 and (xtarg.Aggressive() or xtarg.TargetType():lower() == "auto hater" or xtarg.ID() == Globals.ForceTargetID) then
             if printDebug then
                 Logger.log_verbose("GetXTHaters(): XT(%d) Counting %s(%d) as a hater.", i, xtarg.CleanName() or "None", xtarg.ID())
             end
@@ -283,7 +338,14 @@ function Targeting.GetXTHaterIDs(printDebug)
         end
     end
 
-    return uniqHaters:toList()
+    return uniqHaters
+end
+
+--- Retrieves the IDs of the top haters.
+--- @param printDebug boolean?: If true, debug information will be printed.
+--- @return table: A table containing the IDs of the top haters.
+function Targeting.GetXTHaterIDs(printDebug)
+    return Targeting.GetXTHaterIDsSet(printDebug):toList()
 end
 
 --- Gets the count of XTHaters.
@@ -303,8 +365,34 @@ function Targeting.DiffXTHaterIDs(t, printDebug)
     local curHaters   = Targeting.GetXTHaterIDs(printDebug)
 
     for _, xtargID in ipairs(curHaters) do
+        Logger.log_verbose("DiffXTHaterIDs(): XT(%d) Checking list for known hater. %s", xtargID, Strings.TableToString(oldHaterSet:toList()))
         if not oldHaterSet:contains(xtargID) then return true end
     end
+
+    return false
+end
+
+--- Computes the difference in Hater IDs.
+---
+--- @param t table The table containing Hater IDs.
+--- @param printDebug boolean? Whether to print debug information.
+--- @return boolean True if there is a difference, false otherwise
+function Targeting.CrossDiffXTHaterIDs(t, printDebug)
+    local oldHaterSet  = Set.new(t)
+    local curHatersSet = Targeting.GetXTHaterIDsSet(printDebug)
+    local curHaters    = curHatersSet:toList()
+
+
+    for _, xtargID in ipairs(curHaters) do
+        Logger.log_verbose("CrossDiffXTHaterIDs(): XT(%d) Checking list for known hater. %s", xtargID, Strings.TableToString(oldHaterSet:toList()))
+        if not oldHaterSet:contains(xtargID) then return true end
+    end
+
+    for _, oldID in ipairs(t) do
+        Logger.log_verbose("CrossDiffXTHaterIDs(): Old XT(%d) Checking list for known hater. %s", oldID, Strings.TableToString(curHaters))
+        if not curHatersSet:contains(oldID) then return true end
+    end
+
 
     return false
 end
@@ -362,7 +450,7 @@ end
 --- @param slot number The slot number to reset.
 function Targeting.ResetXTSlot(slot)
     Core.DoCmd("/xtarget set %d ET", slot)
-    mq.delay(200, function() return (mq.TLO.Me.XTarget(slot).TargetType():lower() or "empty target") == "empty target" end)
+    mq.delay(500, function() return (mq.TLO.Me.XTarget(slot).TargetType():lower() or "empty target") == "empty target" end)
     Core.DoCmd("/xtarget set %d autohater", slot)
 end
 
@@ -462,8 +550,11 @@ end
 function Targeting.SetForceBurn(targetId)
     Targeting.ForceBurnTargetID = tonumber(targetId) or mq.TLO.Target.ID()
     local burnNowSpawn = mq.TLO.Spawn(Targeting.ForceBurnTargetID)
-    Logger.log_info("\aoForcing Burn Now: \at%s \aw(\am%d\aw)", burnNowSpawn and (burnNowSpawn() and burnNowSpawn.CleanName() or "None") or "None",
-        Targeting.ForceBurnTargetID)
+    local burnName = burnNowSpawn and (burnNowSpawn() and burnNowSpawn.CleanName() or "None") or "None"
+    Logger.log_info("\aoForcing Burn Now: \at%s \aw(\am%d\aw)", burnName, Targeting.ForceBurnTargetID)
+
+    Comms.HandleAnnounce(string.format("Force Burning: %s!", burnName), Config:GetSetting('BurnAnnounceGroup'), Config:GetSetting('BurnAnnounce'),
+        Config:GetSetting('AnnounceToRaidIfInRaid'))
 end
 
 function Targeting.TargetIsMA(target)
@@ -495,7 +586,7 @@ function Targeting.MobNotLowHP(target)
     if not target then target = Targeting.GetAutoTarget() or mq.TLO.Target end
     if not (target and target()) then return false end
 
-    local threshold = Targeting.IsNamed(target) and Config:GetSetting('NamedLowHP') or Config:GetSetting('MobLowHP')
+    local threshold = Globals.AutoTargetIsNamed and Config:GetSetting('NamedLowHP') or Config:GetSetting('MobLowHP')
     return Targeting.GetTargetPctHPs(target) >= threshold
 end
 
@@ -503,7 +594,7 @@ function Targeting.MobHasLowHP(target)
     if not target then target = Targeting.GetAutoTarget() or mq.TLO.Target end
     if not (target and target()) then return false end
 
-    local threshold = Targeting.IsNamed(target) and Config:GetSetting('NamedLowHP') or Config:GetSetting('MobLowHP')
+    local threshold = Globals.AutoTargetIsNamed and Config:GetSetting('NamedLowHP') or Config:GetSetting('MobLowHP')
     return threshold > Targeting.GetTargetPctHPs(target)
 end
 
@@ -528,7 +619,11 @@ function Targeting.BigGroupHealsNeeded()
 end
 
 function Targeting.CheckForAutoTargetID()
-    return mq.TLO.Target.ID() == Config.Globals.AutoTargetID and { Config.Globals.AutoTargetID, } or {}
+    return mq.TLO.Target.ID() == Globals.AutoTargetID and { Globals.AutoTargetID, } or {}
+end
+
+function Targeting.CheckForAggroTargetID()
+    return (Globals.AggroTargetID or 0) > 0 and { Globals.AggroTargetID, } or {}
 end
 
 function Targeting.InSpellRange(spell, target)
@@ -555,13 +650,13 @@ function Targeting.TargetNotStunned()
 end
 
 function Targeting.LostAutoTargetAggro()
-    if Config.Globals.AutoTargetID == 0 or mq.TLO.Target.ID() ~= Config.Globals.AutoTargetID then return false end
+    if Globals.AutoTargetID == 0 or mq.TLO.Target.ID() ~= Globals.AutoTargetID then return false end
     return mq.TLO.Me.PctAggro() < 100
 end
 
 function Targeting.HateToolsNeeded()
-    if Config.Globals.AutoTargetID == 0 or mq.TLO.Target.ID() ~= Config.Globals.AutoTargetID then return false end
-    return mq.TLO.Me.PctAggro() < 100 or (mq.TLO.Target.SecondaryPctAggro() or 0) > 60 or Targeting.IsNamed(Targeting.GetAutoTarget())
+    if Globals.AutoTargetID == 0 or mq.TLO.Target.ID() ~= Globals.AutoTargetID then return false end
+    return mq.TLO.Me.PctAggro() < 100 or (mq.TLO.Target.SecondaryPctAggro() or 0) > 60 or Globals.AutoTargetIsNamed
 end
 
 --- Checks spawn surname to check if it is a pet that has evaded other TLO checks.

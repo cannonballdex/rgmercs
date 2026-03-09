@@ -1,6 +1,8 @@
 local mq         = require('mq')
 local Set        = require("mq.Set")
 local Config     = require("utils.config")
+local Globals    = require("utils.globals")
+local Combat     = require("utils.combat")
 local Core       = require("utils.core")
 local Logger     = require("utils.logger")
 local Casting    = require("utils.casting")
@@ -138,6 +140,10 @@ function Rotation.ExecEntry(caller, entry, targetId, resolvedActionMap, bAllowMe
         local spell = resolvedActionMap[entry.name]
 
         if not spell or not spell() then return false end
+
+        if entry.waitReadyTime then
+            Casting.WaitCastReady(spell, type(entry.waitReadyTime) == "function" and entry.waitReadyTime() or entry.waitReadyTime, true)
+        end
 
         if Casting.SpellReady(spell, bAllowMem) then
             Rotation.RunPreActivate(caller, resolvedActionMap, entry)
@@ -287,31 +293,30 @@ function Rotation.Run(caller, rotationTable, targetId, resolvedActionMap, steps,
     for idx, entry in ipairs(rotationTable) do
         if enabledRotationEntries[entry.name] ~= false then
             if idx >= start_step then
-                local tStart = string.format("%.03f", mq.gettime() / 1000)
+                local tStart = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                 caller:SetCurrentRotationState(idx)
 
-                if Config.Globals.PauseMain then
+                if Globals.PauseMain then
                     break
                 end
 
                 if fnRotationCond then
-                    local start = string.format("%.03f", mq.gettime() / 1000)
-                    local curState = Targeting.GetXTHaterCount() > 0 and "Combat" or "Downtime"
+                    local start = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
 
-                    if not Core.SafeCallFunc("\tRotation Condition Loop Re-Check", fnRotationCond, caller, curState) then
+                    if not Core.SafeCallFunc("\tRotation Condition Loop Re-Check", fnRotationCond, caller, Combat.GetCachedCombatState()) then
                         Logger.log_verbose("\arStopping Rotation Due to condition check failure!")
                         break
                     end
-                    local stop = string.format("%.03f", mq.gettime() / 1000)
+                    local stop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                     entry.lastRotationCondTimeSpent = stop - start
                 end
 
                 if Config:GetSetting('ChaseOn') then
-                    local start = string.format("%.03f", mq.gettime() / 1000)
+                    local start = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                     if Config.ShouldPriorityFollow() then
                         break
                     end
-                    local stop = string.format("%.03f", mq.gettime() / 1000)
+                    local stop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                     entry.lastFollowTimeSpent = stop - start
                 else
                     entry.lastFollowTimeSpent = 0
@@ -319,17 +324,17 @@ function Rotation.Run(caller, rotationTable, targetId, resolvedActionMap, steps,
 
                 Logger.log_verbose("\aoDoing RunRotation(start(%d), step(%d), cur(%d))", start_step, steps, idx)
                 lastStepIdx = idx
-                local start = string.format("%.03f", mq.gettime() / 1000)
+                local start = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                 local pass = Rotation.TestConditionForEntry(caller, resolvedActionMap, entry, targetId)
-                local stop = string.format("%.03f", mq.gettime() / 1000)
+                local stop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                 entry.lastCondTimeSpent = stop - start
                 Logger.log_verbose("\aoDoing RunRotation(start(%d), step(%d), cur(%d)) :: TestConditionsForEntry() => %s", start_step, steps,
                     idx, Strings.BoolToColorString(pass))
 
                 if pass == true then
-                    local rStart = string.format("%.03f", mq.gettime() / 1000)
+                    local rStart = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                     local res = Rotation.ExecEntry(caller, entry, targetId, resolvedActionMap, bAllowMem)
-                    local rStop = string.format("%.03f", mq.gettime() / 1000)
+                    local rStop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                     entry.lastExecTimeSpent = rStop - rStart
                     Logger.log_verbose("\aoDoing RunRotation(start(%d), step(%d), cur(%d)) :: ExecEntry() => %s", start_step, steps,
                         idx, Strings.BoolToColorString(res))
@@ -341,7 +346,7 @@ function Rotation.Run(caller, rotationTable, targetId, resolvedActionMap, steps,
                             break
                         end
 
-                        if Config.Globals.PauseMain then
+                        if Globals.PauseMain then
                             break
                         end
                     end
@@ -350,17 +355,17 @@ function Rotation.Run(caller, rotationTable, targetId, resolvedActionMap, steps,
                 end
 
 
-                local tStop = string.format("%.03f", mq.gettime() / 1000)
+                local tStop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                 entry.lastTotalTimeSpent = tStop - tStart
             end
         end
     end
 
     if Targeting.GetXTHaterCount() == 0 then -- no magic numbers, just 4 u bb
-        if Config.Constants.LastGemRemem[Config:GetSetting('LastGemRemem')] == "Mem Previous Spell" and oldSpellInSlot() and mq.TLO.Me.Gem(Casting.UseGem)() ~= oldSpellInSlot.Name() then
+        if Globals.Constants.LastGemRemem[Config:GetSetting('LastGemRemem')] == "Mem Previous Spell" and oldSpellInSlot() and mq.TLO.Me.Gem(Casting.UseGem)() ~= oldSpellInSlot.Name() then
             Logger.log_debug("\ayRestoring %s in slot %d", oldSpellInSlot, Casting.UseGem)
             Casting.MemorizeSpell(Casting.UseGem, oldSpellInSlot.Name(), false, 15000)
-        elseif Config.Constants.LastGemRemem[Config:GetSetting('LastGemRemem')] == "Mem Loadout Spell" and loadoutSpell and mq.TLO.Me.Gem(Casting.UseGem)() ~= loadoutSpell.RankName() then
+        elseif Globals.Constants.LastGemRemem[Config:GetSetting('LastGemRemem')] == "Mem Loadout Spell" and loadoutSpell and mq.TLO.Me.Gem(Casting.UseGem)() ~= loadoutSpell.RankName() then
             Logger.log_debug("\ayRestoring %s in slot %d", loadoutSpell.RankName(), Casting.UseGem)
             Casting.MemorizeSpell(Casting.UseGem, loadoutSpell.RankName(), false, 15000)
         end
@@ -544,13 +549,8 @@ function Rotation.LoadSpellLoadOut(spellLoadOut)
     local selectedRank = ""
 
     for gem, loadoutData in pairs(spellLoadOut) do
-        -- Removing this because using basename doesnt seem to work at all.
-        --if mq.TLO.Me.SpellRankCap() > 1 then
         selectedRank = loadoutData.spell.RankName()
-        --else
-        --    selectedRank = loadoutData.spell.BaseName()
-        --end
-
+        Logger.log_debug("Loading \ay%s\ax into gem \ag%d\ax", selectedRank, gem)
         if mq.TLO.Me.Gem(gem)() ~= selectedRank then
             Casting.MemorizeSpell(gem, selectedRank, false, 15000)
         end

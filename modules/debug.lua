@@ -1,20 +1,19 @@
-local mq                         = require('mq')
-local Config                     = require('utils.config')
-local Core                       = require("utils.core")
-local Ui                         = require("utils.ui")
-local Comms                      = require("utils.comms")
-local Logger                     = require("utils.logger")
-local Strings                    = require("utils.strings")
-local Set                        = require("mq.Set")
-local Icons                      = require('mq.ICONS')
-local Zep                        = require('Zep')
-local CHANNEL_COLOR              = IM_COL32(215, 154, 66)
+local mq            = require('mq')
+local Config        = require('utils.config')
+local Globals       = require("utils.globals")
+local Core          = require("utils.core")
+local Ui            = require("utils.ui")
+local Logger        = require("utils.logger")
+local Icons         = require('mq.ICONS')
+local Zep           = require('Zep')
+local Base          = require("modules.base")
+local CHANNEL_COLOR = IM_COL32(215, 154, 66)
 
-local Module                     = { _version = '0.1a', _name = "Debug", _author = 'Derple', }
-Module.__index                   = Module
+local Module        = { _version = '0.1a', _name = "Debug", _author = 'Derple', }
+Module.__index      = Module
+setmetatable(Module, { __index = Base, })
 Module.FAQ                       = {}
-Module.SaveRequested             = nil
-
+Module.CommandHandlers           = {}
 Module.DefaultConfig             = {
     ['script'] = {
         Default = "",
@@ -46,62 +45,14 @@ Module.execCoroutine             = nil
 Module.status                    = "Idle..."
 Module.autoRun                   = false
 
-local function getConfigFileName()
-    return mq.configDir ..
-        '/rgmercs/PCConfigs/' .. Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-    self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-    if not self.SaveRequested then return end
-
-    mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-    if self.SaveRequested.doBroadcast == true then
-        Comms.BroadcastMessage(self._name, "LoadSettings")
-    end
-
-    Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-    self.SaveRequested = nil
+function Module:New()
+    return Base.New(self)
 end
 
 function Module:LoadSettings()
-    Logger.log_debug("Debug Module Loading Settings for: %s.", Config.Globals.CurLoadedChar)
-    local settings_pickle_path = getConfigFileName()
-    local settings = {}
-    local firstSaveRequired = false
-
-
-    local config, err = loadfile(settings_pickle_path)
-    if err or not config then
-        Logger.log_error("\ay[Debug]: Unable to load global settings file(%s), creating a new one!",
-            settings_pickle_path)
-        firstSaveRequired = true
-    else
-        settings = config()
-    end
-
-    Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
+    Base.LoadSettings(self)
 
     self.luaBuffer:SetText(Config:GetSetting('script') or "")
-end
-
-function Module.New()
-    local newModule = setmetatable({}, Module)
-    return newModule
-end
-
-function Module:Init()
-    Logger.log_debug("Debug Module Loaded.")
-    self:LoadSettings()
-
-    self.ModuleLoaded = true
-
-    return { self = self, defaults = self.DefaultConfig, }
 end
 
 function Module:LogTimestamp()
@@ -122,25 +73,29 @@ function Module:Exec(scriptText)
         return false, err
     end
 
-    local locals       = setmetatable({}, { __index = _G, })
-    locals.mq          = setmetatable({}, { __index = mq, })
-    locals.Config      = setmetatable({}, { __index = Config, })
-    locals.Core        = setmetatable({}, { __index = Core, })
-    locals.Targeting   = setmetatable({}, { __index = require('utils.targeting'), })
-    locals.Casting     = setmetatable({}, { __index = require('utils.casting'), })
-    locals.Combat      = setmetatable({}, { __index = require('utils.combat'), })
-    locals.Comms       = setmetatable({}, { __index = require('utils.comms'), })
-    locals.ItemManager = setmetatable({}, { __index = require('utils.item_manager'), })
-    locals.Logger      = setmetatable({}, { __index = require('utils.logger'), })
-    locals.Math        = setmetatable({}, { __index = require('utils.math'), })
-    locals.Modules     = setmetatable({}, { __index = require('utils.modules'), })
-    locals.Movement    = setmetatable({}, { __index = require('utils.movement'), })
-    locals.Nameds      = setmetatable({}, { __index = require('utils.nameds'), })
-    locals.Rotation    = setmetatable({}, { __index = require('utils.rotation'), })
-    locals.Strings     = setmetatable({}, { __index = require('utils.strings'), })
-    locals.Tables      = setmetatable({}, { __index = require('utils.tables'), })
-    locals.ConfigShare = setmetatable({}, { __index = require('utils.rg_config_share'), })
-    locals.Set         = setmetatable({}, { __index = require('mq.set'), })
+    local locals        = setmetatable({}, { __index = _G, })
+    locals.mq           = setmetatable({}, { __index = mq, })
+    locals.Config       = setmetatable({}, { __index = Config, })
+    locals.Core         = setmetatable({}, { __index = Core, })
+    locals.Globals      = setmetatable({}, { __index = Globals, })
+    locals.ImGui        = setmetatable({}, { __index = ImGui, })
+    locals.Targeting    = setmetatable({}, { __index = require('utils.targeting'), })
+    locals.Casting      = setmetatable({}, { __index = require('utils.casting'), })
+    locals.Combat       = setmetatable({}, { __index = require('utils.combat'), })
+    locals.Comms        = setmetatable({}, { __index = require('utils.comms'), })
+    locals.ItemManager  = setmetatable({}, { __index = require('utils.item_manager'), })
+    locals.Logger       = setmetatable({}, { __index = require('utils.logger'), })
+    locals.Math         = setmetatable({}, { __index = require('utils.math'), })
+    locals.Modules      = setmetatable({}, { __index = require('utils.modules'), })
+    locals.Movement     = setmetatable({}, { __index = require('utils.movement'), })
+    locals.NamedDefault = setmetatable({}, { __index = require('namedlist.named_default'), })
+    locals.NamedEQMight = setmetatable({}, { __index = require('namedlist.named_eqmight'), })
+    locals.Rotation     = setmetatable({}, { __index = require('utils.rotation'), })
+    locals.Strings      = setmetatable({}, { __index = require('utils.strings'), })
+    locals.Tables       = setmetatable({}, { __index = require('utils.tables'), })
+    locals.ConfigShare  = setmetatable({}, { __index = require('utils.rg_config_share'), })
+    locals.Set          = setmetatable({}, { __index = require('mq.set'), })
+    locals.DanNet       = setmetatable({}, { __index = require('lib.dannet.helpers'), })
 
 
     locals.print   = function(...)
@@ -290,8 +245,8 @@ function Module:ShouldRender()
 end
 
 function Module:Render()
-    Ui.RenderPopAndSettings(self._name)
-
+    Base.Render(self)
+    ImGui.NewLine()
     if self.ModuleLoaded then
         self:RenderEditor()
         self:RenderToolbar()
@@ -299,11 +254,8 @@ function Module:Render()
     end
 end
 
-function Module:Pop()
-    Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
-function Module:GiveTime(combat_state)
+function Module:DoEvents()
+    -- Process Events if needed
     if self.execRequested or (self.autoRun and self.execCoroutine == nil) then
         self.execRequested = false
         self.execCoroutine = self:ExecCoroutine()
@@ -317,6 +269,10 @@ function Module:GiveTime(combat_state)
         self.execCoroutine = nil
         self.status = "Idle..."
     end
+end
+
+function Module:GiveTime()
+    self:DoEvents()
 
     if self.luaBuffer:HasFlag(Zep.BufferFlags.Dirty) then
         Config:SetSetting('script', self.luaBuffer:GetText())
@@ -324,42 +280,9 @@ function Module:GiveTime(combat_state)
     end
 end
 
-function Module:OnDeath()
-    -- Death Handler
-end
-
-function Module:OnZone()
-    -- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
-end
-
 function Module:DoGetState()
     -- Reture a reasonable state if queried
     return self.status
-end
-
-function Module:GetCommandHandlers()
-    return { module = self._name, CommandHandlers = {}, }
-end
-
-function Module:GetFAQ()
-    return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-    local params = ...
-    local handled = false
-    -- /rglua cmd handler
-    return handled
-end
-
-function Module:Shutdown()
-    Logger.log_debug("Drag Module Unloaded.")
 end
 
 return Module

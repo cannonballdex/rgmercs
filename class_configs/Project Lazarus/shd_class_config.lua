@@ -1,6 +1,7 @@
 local mq           = require('mq')
 local ItemManager  = require("utils.item_manager")
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Ui           = require("utils.ui")
 local Targeting    = require("utils.targeting")
@@ -90,7 +91,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.2, g = 0.05, b = 0.05, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.5, g = 0.05, b = 0.05, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.2, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
@@ -185,6 +186,8 @@ local _ClassConfig = {
             "Blood of Pain", -- Level 41
             "Blood of Hate",
             "Blood of Discord",
+        },
+        ['AEPoisonDot'] = {
             "Blood of Inruku",
         },
         ['SpearNuke'] = {
@@ -376,14 +379,26 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
             end,
         },
+        { --Actions to lock down xtarg haters
+            name = 'HateTools(AggroTarget)',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            load_cond = function() return Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') end,
+            targetId = function(self) return Targeting.CheckForAggroTargetID() end,
+            cond = function(self, combat_state)
+                if mq.TLO.Me.PctHPs() <= Config:GetSetting('HPCritical') then return false end
+                return combat_state == "Combat"
+            end,
+        },
         { --Actions that establish or maintain hatred
-            name = 'HateTools',
+            name = 'HateTools(AutoTarget)',
             state = 1,
             steps = 1,
             doFullRotation = true,
@@ -445,8 +460,13 @@ local _ClassConfig = {
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or Targeting.IsNamed(Targeting.GetAutoTarget()) or
-                    self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true)
+                return combat_state == "Combat" and Targeting.IHaveAggro(100) and
+                    -- we are under our defense start HP
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or
+                        -- we have met our defense count threshold
+                        self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true) or
+                        -- we are fighting a named and we are (presumably) tanking it
+                        (Globals.AutoTargetIsNamed and Targeting.GetAutoTargetAggroPct() >= 100))
             end,
         },
         { --Keep things from running
@@ -457,7 +477,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') then return false end
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         { --Offensive actions to temporarily boost damage dealt
@@ -678,7 +698,33 @@ local _ClassConfig = {
                 end,
             },
         },
-        ['HateTools'] = {
+        ['HateTools(AggroTarget)'] = {
+            { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
+                name = "Taunt",
+                type = "Ability",
+                tooltip = Tooltips.Taunt,
+                cond = function(self, abilityName, target)
+                    return Targeting.GetTargetDistance(target) < 30
+                end,
+            },
+            { --pull does not work on Laz, it is just a hate tool
+                name = "Hate's Attraction",
+                type = "AA",
+            },
+            {
+                name = "Terror",
+                type = "Spell",
+                tooltip = Tooltips.Terror,
+                load_cond = function(self) return Config:GetSetting('DoTerror') end,
+            },
+            {
+                name = "Terror2",
+                type = "Spell",
+                tooltip = Tooltips.Terror,
+                load_cond = function(self) return Config:GetSetting('DoTerror') end,
+            },
+        },
+        ['HateTools(AutoTarget)'] = {
             { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
                 name = "Taunt",
                 type = "Ability",
@@ -693,7 +739,7 @@ local _ClassConfig = {
                 type = "AA",
                 tooltip = Tooltips.AgelessEnmity,
                 cond = function(self, aaName, target)
-                    return (Targeting.IsNamed(target) or Targeting.GetAutoTargetPctHPs() < 90) and Targeting.LostAutoTargetAggro()
+                    return (Globals.AutoTargetIsNamed or Targeting.GetAutoTargetPctHPs() < 90) and Targeting.LostAutoTargetAggro()
                 end,
             },
             { --pull does not work on Laz, it is just a hate tool
@@ -705,7 +751,7 @@ local _ClassConfig = {
                 type = "AA",
                 tooltip = Tooltips.ProjectionofDoom,
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -802,7 +848,7 @@ local _ClassConfig = {
                 tooltip = Tooltips.Terror,
                 load_cond = function(self) return Core.IsTanking() and Config:GetSetting('DoTerror') end,
                 cond = function(self, spell, target)
-                    return Targeting.IsNamed(target) and (Casting.CanUseAA("Cascading Theft of Defense") and not Casting.IHaveBuff("Cascading Theft of Defense"))
+                    return Globals.AutoTargetIsNamed and (Casting.CanUseAA("Cascading Theft of Defense") and not Casting.IHaveBuff("Cascading Theft of Defense"))
                 end,
             },
             {
@@ -810,7 +856,7 @@ local _ClassConfig = {
                 type = "Spell",
                 tooltip = Tooltips.Skin,
                 cond = function(self, spell, target)
-                    if not Core.IsTanking() or not Targeting.IsNamed(target) then return false end
+                    if not Core.IsTanking() or not Globals.AutoTargetIsNamed then return false end
                     return Casting.SelfBuffCheck(spell)
                         --laz specific deconflict
                         and not Casting.IHaveBuff("Necrotic Pustules")
@@ -851,7 +897,7 @@ local _ClassConfig = {
                 type = "Item",
                 tooltip = Tooltips.Epic,
                 cond = function(self, itemName, target)
-                    return self.ClassConfig.HelperFunctions.LeechCheck(self) or Targeting.IsNamed(target)
+                    return self.ClassConfig.HelperFunctions.LeechCheck(self) or Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -867,7 +913,6 @@ local _ClassConfig = {
                 type = "AA",
                 tooltip = Tooltips.PurityofDeath,
                 cond = function(self)
-                    ---@diagnostic disable-next-line: undefined-field
                     return mq.TLO.Me.TotalCounters() > 0
                 end,
             },
@@ -913,21 +958,12 @@ local _ClassConfig = {
         },
         ['Combat'] = {
             {
-                name = "BondTap",
-                type = "Spell",
-                tooltip = Tooltips.BondTap,
-                load_cond = function(self) return Config:GetSetting('DoBondTap') end,
-                cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
-                    return Casting.HaveManaToDot() and Casting.DotSpellCheck(spell)
-                end,
-            },
-            {
                 name = "AESpearNuke",
                 type = "Spell",
                 tooltip = Tooltips.AESpearNuke,
+                load_cond = function(self) return Config:GetSetting('DoAESpearNuke') and Core.GetResolvedActionMapItem('AESpearNuke') end,
                 cond = function(self, spell, target)
-                    if not (Config:GetSetting('DoAESpearNuke') and Config:GetSetting('DoAEDamage')) then return false end
+                    if not Config:GetSetting('DoAEDamage') then return false end
                     return Casting.HaveManaToNuke() and Targeting.InSpellRange(spell, target)
                 end,
             },
@@ -935,18 +971,40 @@ local _ClassConfig = {
                 name = "SpearNuke",
                 type = "Spell",
                 tooltip = Tooltips.SpearNuke,
+                load_cond = function(self) return not Config:GetSetting('DoAESpearNuke') or not Core.GetResolvedActionMapItem('AESpearNuke') end,
                 cond = function(self, spell, target)
                     return Casting.HaveManaToNuke()
+                end,
+            },
+            {
+                name = "AEPoisonDot",
+                type = "Spell",
+                tooltip = Tooltips.PoisonDot,
+                load_cond = function(self) return Config:GetSetting('DoPoisonDot') and Core.GetResolvedActionMapItem('AEPoisonDot') end,
+                cond = function(self, spell, target)
+                    if not Config:GetSetting('DoAEDamage') then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
+                    return Casting.HaveManaToDot() and Casting.DotSpellCheck(spell)
                 end,
             },
             {
                 name = "PoisonDot",
                 type = "Spell",
                 tooltip = Tooltips.PoisonDot,
-                load_cond = function(self) return Config:GetSetting('DoPoisonDot') end,
+                load_cond = function(self) return Config:GetSetting('DoPoisonDot') and not Core.GetResolvedActionMapItem('AEPoisonDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.HaveManaToDot() and Casting.DotSpellCheck(spell)
+                end,
+            },
+            {
+                name = "BondTap",
+                type = "Spell",
+                tooltip = Tooltips.BondTap,
+                load_cond = function(self) return Config:GetSetting('DoBondTap') end,
+                cond = function(self, spell, target)
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
+                    return Casting.HaveManaToDot() and Casting.SelfBuffCheck(spell) -- use for recourse --Casting.DotSpellCheck(spell)
                 end,
             },
             {
@@ -955,7 +1013,7 @@ local _ClassConfig = {
                 tooltip = Tooltips.DireDot,
                 load_cond = function(self) return Config:GetSetting('DoDireDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.HaveManaToDot() and Casting.DotSpellCheck(spell)
                 end,
             },
@@ -1012,7 +1070,7 @@ local _ClassConfig = {
                 type = "CustomFunc",
                 cond = function(self, target)
                     if mq.TLO.Me.Bandolier("Shield").Active() then return false end
-                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("Shield") end,
             },
@@ -1022,7 +1080,7 @@ local _ClassConfig = {
                 cond = function()
                     if mq.TLO.Me.Bandolier("2Hand").Active() then return false end
                     return mq.TLO.Me.PctHPs() >= Config:GetSetting('Equip2Hand') and mq.TLO.Me.ActiveDisc() ~= "Deflection Discipline" and not mq.TLO.Me.Song("Rampart")() and
-                        not (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                        not (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("2Hand") end,
             },
@@ -1550,14 +1608,14 @@ local _ClassConfig = {
             Header = "Bandolier",
             Category = "Bandolier",
             Index = 104,
-            Tooltip = "Keep Shield equipped for Named mobs(must be in SpawnMaster or named.lua)",
+            Tooltip = "Keep Shield equipped for mobs detected as 'named' by RGMercs (see Named tab).",
             Default = true,
             FAQ = "Why does my SHD switch to a Shield on puny gray named?",
             Answer = "The Shield on Named option doesn't check levels, so feel free to disable this setting (or Bandolier swapping entirely) if you are farming fodder.",
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

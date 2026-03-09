@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
 local Logger       = require("utils.logger")
@@ -23,10 +24,6 @@ local _ClassConfig = {
         ['Epic'] = {
             "Transcended Fistwraps of Immortality",
             "Fistwraps of Celestial Discipline",
-        },
-        ['OoW_Chest'] = {
-            "Fiercehand Shroud of the Focused",
-            "Stillmind Tunic",
         },
     },
     ['AbilitySets']     = {
@@ -125,7 +122,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and not Casting.IAmFeigning() and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -185,7 +182,7 @@ local _ClassConfig = {
                 type = "AA",
                 load_cond = function(self) return Config:GetSetting('AggroFeign') end,
                 cond = function(self, aaName, target)
-                    return (mq.TLO.Me.PctHPs() <= 40 and Targeting.IHaveAggro(100)) or (Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 99)
+                    return (mq.TLO.Me.PctHPs() <= 40 and Targeting.IHaveAggro(100)) or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99)
                         and not Core.IAmMA()
                 end,
             },
@@ -221,10 +218,6 @@ local _ClassConfig = {
             },
             {
                 name = "Epic",
-                type = "Item",
-            },
-            {
-                name = "OoW_Chest",
                 type = "Item",
             },
         },
@@ -397,7 +390,7 @@ local _ClassConfig = {
             Header = "Utility",
             Category = "Emergency",
             Index = 102,
-            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a RGMercsNamed/SpawnMaster mob.",
+            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a mob detected as a 'named' by RGMercs (see Named tab)..",
             Default = true,
             RequiresLoadoutChange = true,
         },
@@ -425,11 +418,11 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

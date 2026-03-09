@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
 local Logger    = require("utils.logger")
@@ -22,7 +23,7 @@ return {
     },
     ['AbilitySets']     = {
         ['EndRegen'] = {
-            "Third Wind",
+            "Third Wind Discipline",
             --"Second Wind",
         },
         ['BerAura'] = {
@@ -77,6 +78,9 @@ return {
         ['DmgModProc'] = {
             "Unpredictable Rage Discipline",
         },
+        ['BattleFocus'] = {
+            "Battle Focus Discipline",
+        },
     },
     ['RotationOrder']   = {
         {
@@ -84,7 +88,7 @@ return {
             state = 1,
             steps = 1,
             targetId = function(self)
-                return mq.TLO.Target.ID() == Config.Globals.AutoTargetID and { Config.Globals.AutoTargetID, } or { mq.TLO.Me.ID(), }
+                return mq.TLO.Target.ID() == Globals.AutoTargetID and { Globals.AutoTargetID, } or { mq.TLO.Me.ID(), }
             end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" or (combat_state == "Downtime" and Casting.OkayToBuff())
@@ -98,7 +102,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         { --Keep things from running
@@ -108,7 +112,7 @@ return {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         {
@@ -173,11 +177,18 @@ return {
         },
         ['Emergency'] = {
             {
+                name = "BattleFocus",
+                type = "Disc",
+                cond = function(self, discSpell)
+                    return mq.TLO.Me.PctHPs() < 35
+                end,
+            },
+            {
                 name = "Armor of Experience",
                 type = "AA",
                 load_cond = function(self) return Config:GetSetting('DoVetAA') end,
                 cond = function(self, aaName)
-                    return mq.TLO.Me.PctHPs() < 35
+                    return mq.TLO.Me.PctHPs() < 35 and not mq.TLO.Me.Buff("Battle Focus Effect")()
                 end,
             },
             {
@@ -332,7 +343,7 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     if not Config:GetSetting('DoStun') then return false end
-                    return Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
         },
@@ -529,7 +540,7 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

@@ -1,20 +1,23 @@
-local mq           = require('mq')
-local GitCommit    = require('extras.version')
-local OptionsUI    = require("ui.options")
-local ImGui        = require('ImGui')
-local Config       = require('utils.config')
-local Ui           = require('utils.ui')
-local Icons        = require('mq.ICONS')
-local ImageUI      = require('ui.images')
-local Core         = require('utils.core')
-local Targeting    = require('utils.targeting')
-local Casting      = require('utils.casting')
-local Modules      = require('utils.modules')
-local Movement     = require('utils.movement')
-local ConsoleUI    = require('ui.console')
+local mq            = require('mq')
+local CommitVersion = require('extras.version')
+local OptionsUI     = require("ui.options")
+local ImGui         = require('ImGui')
+local Config        = require('utils.config')
+local Globals       = require('utils.globals')
+local Comms         = require('utils.comms')
+local Ui            = require('utils.ui')
+local Icons         = require('mq.ICONS')
+local ImageUI       = require('ui.images')
+local Core          = require('utils.core')
+local Targeting     = require('utils.targeting')
+local Casting       = require('utils.casting')
+local Combat        = require('utils.combat')
+local Modules       = require('utils.modules')
+local Movement      = require('utils.movement')
+local ConsoleUI     = require('ui.console')
 
-local StandardUI   = { _version = '1.0', _name = "StandardUI", _author = 'Derple', }
-StandardUI.__index = StandardUI
+local StandardUI    = { _version = '1.0', _name = "StandardUI", _author = 'Derple', }
+StandardUI.__index  = StandardUI
 
 function StandardUI:renderModulesTabs()
     if not Config:SettingsLoaded() then return end
@@ -29,9 +32,118 @@ function StandardUI:renderModulesTabs()
     end
 end
 
+function StandardUI:RenderTargetInfo()
+    ImGui.TableNextColumn()
+    ImGui.Text("Target")
+    ImGui.TableNextColumn()
+
+    local assistSpawn = mq.TLO.Target
+
+    if not assistSpawn or assistSpawn.ID() == 0 then
+        ImGui.Text("None")
+        return
+    end
+
+    if math.floor(assistSpawn.Distance() or 0) >= 350 then
+        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.AssistSpawnFarColor)
+    else
+        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.BrightWhite)
+    end
+
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, ImVec2(0, 0))
+    ImGui.Text("%s (%s) [", assistSpawn.CleanName() or "", assistSpawn.ID() or 0)
+    ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(Ui.GetConColorBySpawn(assistSpawn)))
+
+    ImGui.SameLine()
+    ImGui.Text("%d %s", assistSpawn.Level() or 0, assistSpawn.Class.ShortName() or "N/A")
+
+    ImGui.PopStyleColor(1)
+
+    ImGui.SameLine()
+    ImGui.Text("] HP: %d%% Dist: %d ", assistSpawn.PctHPs() or 0, assistSpawn.Distance() or 0)
+    ImGui.PopStyleVar(1)
+    ImGui.PopStyleColor(1)
+
+    ImGui.SameLine()
+    local los = assistSpawn.LineOfSight()
+    ImGui.TextColored(los and Globals.Constants.Colors.ConditionPassColor or Globals.Constants.Colors.ConditionFailColor, los and Icons.FA_EYE or Icons.FA_EYE_SLASH)
+end
+
+function StandardUI:RenderAutoTargetInfo()
+    local assistSpawn = Targeting.GetAutoTarget()
+    local pctHPs = assistSpawn and (assistSpawn.PctHPs() or 0) or 0
+
+    if not assistSpawn or assistSpawn.ID() == 0 then
+        ImGui.Text("No Auto Target")
+        return
+    end
+
+    if math.floor(assistSpawn.Distance() or 0) >= 350 then
+        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.AssistSpawnFarColor)
+    else
+        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.BrightWhite)
+    end
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, ImVec2(0, 0))
+    ImGui.Text("%s (%s) [", assistSpawn.CleanName() or "", assistSpawn.ID() or 0)
+
+    ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(Ui.GetConColorBySpawn(assistSpawn)))
+    ImGui.SameLine()
+    ImGui.Text("%d %s", assistSpawn.Level() or 0, assistSpawn.Class.ShortName() or "N/A")
+    ImGui.PopStyleColor(1)
+
+    ImGui.SameLine()
+    ImGui.Text("] HP: %d%% Dist: %d ", assistSpawn.PctHPs() or 0, assistSpawn.Distance() or 0)
+    ImGui.PopStyleVar(1)
+    ImGui.PopStyleColor(1)
+
+    ImGui.SameLine()
+    local los = assistSpawn.LineOfSight()
+    ImGui.TextColored(los and Globals.Constants.Colors.ConditionPassColor or Globals.Constants.Colors.ConditionFailColor, los and Icons.FA_EYE or Icons.FA_EYE_SLASH)
+    Ui.Tooltip("Line of Sight")
+
+    if Globals.AutoTargetIsNamed then
+        ImGui.SameLine()
+        ImGui.TextColored(IM_COL32(52, 200, 52, 255), Icons.FA_ID_BADGE)
+        Ui.Tooltip("Named")
+    end
+
+    if assistSpawn.ID() == Globals.ForceTargetID then
+        ImGui.SameLine()
+        ImGui.TextColored(IM_COL32(52, 200, 200, 255), Icons.FA_BULLSEYE)
+        Ui.Tooltip("Forced Target")
+    end
+
+    local burning = Globals.LastBurnCheck and assistSpawn.ID() > 0
+
+    if burning then
+        ImGui.SameLine()
+        ImGui.TextColored(Globals.GetAlternatingColor(), Icons.FA_FIRE)
+        Ui.Tooltip("Burning")
+    end
+
+    return pctHPs, burning
+end
+
+function StandardUI:RenderForceBurnButton()
+    ImGui.PushStyleColor(ImGuiCol.Button, Globals.Constants.Colors.BurnFlashColorOne)
+    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Globals.Constants.Colors.BurnFlashColorTwo)
+    local burnLabel = (Targeting.ForceBurnTargetID > 0 and Targeting.ForceBurnTargetID == mq.TLO.Target.ID()) and " FORCE BURN ACTIVATED " or " FORCE BURN THIS TARGET! "
+    if ImGui.SmallButton(Icons.FA_FIRE .. burnLabel .. Icons.FA_FIRE) then
+        local assistSpawn = Targeting.GetAutoTarget()
+        Comms.SendAllPeersDoCmd(true, true, "/squelch /rgl burnnow %d", assistSpawn.ID())
+    end
+    ImGui.PopStyleColor(2)
+end
+
 function StandardUI:RenderTarget()
-    if Config.TempSettings.AssistWarning then
-        ImGui.TextColored(IM_COL32(200, math.floor(os.clock() % 2) == 1 and 52 or 200, 52, 255), Config.TempSettings.AssistWarning)
+    local warningMessage = Config.TempSettings.AssistWarning
+
+    if mq.TLO.Plugin("MQ2AdvPath").IsLoaded() and mq.TLO.AdvPath ~= nil and mq.TLO.AdvPath.Following() then
+        warningMessage = 'AFOLLOW ("FOLLOW ME") ENGAGED - THIS MAY INTERFERE WITH RGMERCS!'
+    end
+
+    if warningMessage then
+        ImGui.TextColored(Globals.GetAlternatingColor(), warningMessage)
     end
 
     local assistSpawn = Targeting.GetAutoTarget()
@@ -40,58 +152,16 @@ function StandardUI:RenderTarget()
         assistSpawn = mq.TLO.Target
     end
 
-    ImGui.Text("Auto Target: ")
-    ImGui.SameLine()
-    if not assistSpawn or assistSpawn.ID() == 0 then
-        ImGui.Text("None")
-        Ui.RenderProgressBar(0, -1, 25)
-        ImGui.Dummy(32, 16)
-    else
-        local pctHPs = assistSpawn.PctHPs() or 0
-        if not pctHPs then pctHPs = 0 end
-        local ratioHPs = pctHPs / 100
-        ImGui.PushStyleColor(ImGuiCol.PlotHistogram, 1 - ratioHPs, ratioHPs, 0.2, 0.7)
-        if math.floor(assistSpawn.Distance() or 0) >= 350 then
-            ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 0.0, 1)
-        else
-            ImGui.PushStyleColor(ImGuiCol.Text, 1, 1, 1, 1)
-        end
-        ImGui.Text(string.format("%s (%s) [%d %s] HP: %d%% Dist: %d", assistSpawn.CleanName() or "",
-            assistSpawn.ID() or 0, assistSpawn.Level() or 0,
-            assistSpawn.Class.ShortName() or "N/A", assistSpawn.PctHPs() or 0, assistSpawn.Distance() or 0))
-        if Targeting.IsNamed(assistSpawn) then
-            ImGui.SameLine()
-            ImGui.TextColored(IM_COL32(52, 200, 52, 255),
-                string.format("**Named**"))
-        end
-        if assistSpawn.ID() == Config.Globals.ForceTargetID then
-            ImGui.SameLine()
-            ImGui.TextColored(IM_COL32(52, 200, 200, 255),
-                string.format("**ForcedTarget**"))
-        end
-        if Casting.LastBurnCheck and assistSpawn.ID() > 0 then
-            ImGui.SameLine()
-            ImGui.TextColored(IM_COL32(200, math.floor(os.clock() % 2) == 1 and 52 or 200, 52, 255),
-                string.format("**BURNING**"))
-        end
-        Ui.RenderProgressBar(ratioHPs, -1, 25)
-        ImGui.PopStyleColor(2)
-        ImGui.PushStyleColor(ImGuiCol.Button, 0.6, 0.2, 0.01, 0.8)
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.3, 0.1, 0.01, 1.0)
-        local burnLabel = (Targeting.ForceBurnTargetID > 0 and Targeting.ForceBurnTargetID == mq.TLO.Target.ID()) and " FORCE BURN ACTIVATED " or " FORCE BURN THIS TARGET! "
-        if ImGui.SmallButton(Icons.FA_FIRE .. burnLabel .. Icons.FA_FIRE) then
-            Core.DoCmd("/squelch /dgga /rgl burnnow %d", assistSpawn.ID())
-        end
-        ImGui.PopStyleColor(2)
-    end
+    local pctHPs, burning = self:RenderAutoTargetInfo()
+    Ui.RenderFancyHPBar("##AutoTargetHPBar", pctHPs, 25, burning)
+    self:RenderForceBurnButton()
 end
 
 function StandardUI:RenderWindowControls()
-    --local draw_list = ImGui.GetWindowDrawList()
     local position = ImGui.GetCursorPosVec()
     local smallButtonSize = 32
 
-    local windowControlPos = ImVec2(ImGui.GetWindowWidth() - (smallButtonSize * 3), smallButtonSize)
+    local windowControlPos = ImVec2(ImGui.GetWindowWidth() - (smallButtonSize * 3), 0)
     ImGui.SetCursorPos(windowControlPos)
 
     if ImGui.SmallButton(Icons.MD_SETTINGS) then
@@ -108,36 +178,41 @@ function StandardUI:RenderWindowControls()
     ImGui.SameLine()
 
     if ImGui.SmallButton(Icons.FA_WINDOW_MINIMIZE) then
-        Config.Globals.Minimized = true
+        Globals.Minimized = true
     end
     Ui.Tooltip("Activate Mini Mode")
 
     ImGui.SetCursorPos(position)
 end
 
-function StandardUI:RenderMainWindow(imgui_style, curState, openGUI)
+function StandardUI:RenderMainWindow(imgui_style, openGUI, flags)
     local shouldDrawGUI = true
 
-    if not Config.Globals.Minimized then
-        local flags = ImGuiWindowFlags.None
-
+    if not Globals.Minimized then
         if Config:GetSetting('MainWindowLocked') then
             flags = bit32.bor(flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
         end
 
-        openGUI, shouldDrawGUI = ImGui.Begin(('RGMercs%s###rgmercsui'):format(Config.Globals.PauseMain and " [Paused]" or ""), openGUI, flags)
+        ImGui.SetNextWindowSize(ImVec2(600, 400), ImGuiCond.FirstUseEver)
 
-        ImGui.PushID("##RGMercsUI_" .. Config.Globals.CurLoadedChar)
+        openGUI, shouldDrawGUI = ImGui.Begin(Ui.GetWindowTitle(('RGMercs%s'):format(Globals.PauseMain and " [Paused]" or ""), 'rgmercsui'), openGUI, flags)
+
+        ImGui.PushID("##RGMercsUI_" .. Globals.CurLoadedChar)
 
         if shouldDrawGUI then
-            local imgDisplayed = Casting.LastBurnCheck and ImageUI.burnImg or ImageUI.derpImg
+            ImGui.BeginChild("##RGMercsMainHeader", ImVec2(0, 0), bit32.bor(ImGuiChildFlags.AlwaysAutoResize, ImGuiChildFlags.AutoResizeY),
+                bit32.bor(ImGuiWindowFlags.NoScrollbar))
+
+            local imgDisplayed = Globals.LastBurnCheck and ImageUI.burnImg or ImageUI.derpImg
             Ui.RenderLogo(imgDisplayed:GetTextureID())
             ImGui.SameLine()
             local titlePos = ImGui.GetCursorPosVec()
-            Ui.RenderText("RGMercs %s [%s]",
+            ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * 1.05)
+            Ui.RenderText("RGMercs %s [Build: %s]",
                 Config._version,
-                GitCommit.commitId or "None"
+                CommitVersion.version or "None"
             )
+            ImGui.PopFont()
             titlePos = ImVec2(titlePos.x, titlePos.y + ImGui.GetTextLineHeightWithSpacing())
             ImGui.SetCursorPos(titlePos)
 
@@ -165,41 +240,103 @@ function StandardUI:RenderMainWindow(imgui_style, curState, openGUI)
 
             self:RenderWindowControls()
 
-            if not Config.Globals.PauseMain then
-                ImGui.PushStyleColor(ImGuiCol.Button, 0.3, 0.7, 0.3, 1)
+            if not Globals.PauseMain then
+                ImGui.PushStyleColor(ImGuiCol.Button, Globals.Constants.Colors.MainButtonUnpausedColor)
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Ui.ImVec4ToColor(Globals.Constants.Colors.MainButtonUnpausedColor))
             else
-                ImGui.PushStyleColor(ImGuiCol.Button, 0.7, 0.3, 0.3, 1)
+                ImGui.PushStyleColor(ImGuiCol.Button, Globals.Constants.Colors.MainButtonPausedColor)
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Ui.ImVec4ToColor(Globals.Constants.Colors.MainButtonPausedColor))
             end
 
-            local pauseLabel = Config.Globals.PauseMain and "PAUSED" or "Running"
-            if Config.Globals.BackOffFlag then
+            local pauseLabel = Globals.PauseMain and "PAUSED" or "Running"
+            if Globals.BackOffFlag then
                 pauseLabel = pauseLabel .. " [Backoff]"
             end
 
-            if ImGui.Button(pauseLabel, (ImGui.GetWindowWidth() - ImGui.GetCursorPosX() - (ImGui.GetScrollMaxY() == 0 and 0 or imgui_style.ScrollbarSize) - imgui_style.WindowPadding.x), 40) then
-                Config.Globals.PauseMain = not Config.Globals.PauseMain
+            local availableWidth = ImGui.GetContentRegionAvailVec().x
+
+            ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * 1.25)
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (availableWidth * .05) / 2)
+            if Ui.AnimatedButton("##mercsmainbutton", pauseLabel, ImVec2(availableWidth * .95, 40)) then
+                Globals.PauseMain = not Globals.PauseMain
             end
-            ImGui.PopStyleColor()
+            ImGui.PopFont()
+
+            ImGui.PopStyleColor(2)
 
             self:RenderTarget()
 
-            ImGui.NewLine()
+            ImGui.EndChild()
+
             ImGui.Separator()
+
+            ImGui.BeginChild("##RGMercsMainBody", ImVec2(0, 0), bit32.bor(ImGuiChildFlags.None), bit32.bor(ImGuiWindowFlags.None))
+
+            ImGui.NewLine()
 
             if ImGui.BeginTabBar("RGMercsTabs", ImGuiTabBarFlags.Reorderable) then
                 ImGui.SetItemDefaultFocus()
                 if ImGui.BeginTabItem("RGMercsMain") then
-                    ImGui.Text("Current State: " .. curState)
-                    ImGui.Text("Hater Count: " .. tostring(Targeting.GetXTHaterCount()))
+                    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, ImVec2(0, 0))
+
+                    ImGui.BeginTable("##MainInfoTable", 2, bit32.bor(ImGuiTableFlags.BordersInner, ImGuiTableFlags.SizingFixedFit))
+                    ImGui.TableNextColumn()
+                    ImGui.Text("Current State")
+                    ImGui.TableNextColumn()
+                    Ui.RenderColoredText(Combat.GetCachedCombatState() == "Combat" and Globals.Constants.Colors.MainCombatColor or Globals.Constants.Colors.MainDowntimeColor,
+                        "%s", Combat.GetCachedCombatState() or "N/A")
+                    ImGui.TableNextColumn()
+                    ImGui.Text("Hater Count")
+                    ImGui.TableNextColumn()
+                    Ui.RenderColoredText((Targeting.GetXTHaterCount() or 0) > 0 and Globals.Constants.Colors.ConditionMidColor or Globals.Constants.Colors.ConditionPassColor, "%d",
+                        Targeting.GetXTHaterCount() or 0)
+                    ImGui.TableNextColumn()
+                    ImGui.Text("MA")
+                    ImGui.TableNextColumn()
+
                     if Config.TempSettings.AssistWarning and Core.IAmMA() then
-                        ImGui.Text("MA: %s (Fallback Mode)", (Core.GetMainAssistSpawn().CleanName() or "None"))
+                        Ui.RenderColoredText(Globals.Constants.Colors.ConditionMidColor, "%s (Fallback Mode)", (Core.GetMainAssistSpawn().CleanName() or "None"))
                     else
-                        ImGui.Text("MA: %s", (Core.GetMainAssistSpawn().CleanName() or "None"))
+                        Ui.RenderColoredText(Globals.Constants.Colors.ConditionPassColor, "%s", (Core.GetMainAssistSpawn().CleanName() or "None"))
                     end
-                    ImGui.Text(string.format("Stuck To: %s [%s] <%s ago>",
-                        (mq.TLO.Stick.Active() and (mq.TLO.Stick.StickTargetName() or "None") or "None"),
-                        (mq.TLO.Stick.Active() and Movement:GetLastStickCmd() or "N/A"),
-                        Movement:GetTimeSinceLastStick() or "0"))
+                    self:RenderTargetInfo()
+                    ImGui.TableNextColumn()
+                    ImGui.Text("Stuck To")
+                    ImGui.TableNextColumn()
+                    Ui.RenderColoredText(mq.TLO.Stick.Active() and ImVec4(Ui.GetConColorBySpawn(mq.TLO.Spawn(mq.TLO.Stick.StickTarget()))) or ImVec4(1, 1, 1, 1),
+                        "%s ", (mq.TLO.Stick.Active() and (mq.TLO.Stick.StickTargetName() or "None") or "None"))
+                    ImGui.SameLine()
+                    ImGui.Text("[")
+                    ImGui.SameLine()
+                    Ui.RenderColoredText(mq.TLO.Stick.Active() and Globals.Constants.Colors.ConditionPassColor or Globals.Constants.Colors.ConditionDisabledColor,
+                        "%s", (mq.TLO.Stick.Active() and Movement:GetLastStickCmd() or "N/A"))
+                    ImGui.SameLine()
+                    ImGui.Text("] ")
+                    ImGui.SameLine()
+                    ImGui.Text("<")
+                    ImGui.SameLine()
+                    Ui.RenderColoredText(Globals.Constants.Colors.LightBlue, "%s", Movement:GetTimeSinceLastStick() or "0s")
+                    ImGui.SameLine()
+                    ImGui.Text(">")
+                    ImGui.TableNextColumn()
+                    ImGui.Text("Last Nav")
+                    ImGui.TableNextColumn()
+                    if mq.TLO.Navigation.MeshLoaded() then
+                        Ui.RenderColoredText(Globals.Constants.Colors.ConditionPassColor, "%s ", Movement:GetLastNavCmd() or "N/A")
+                    else
+                        Ui.RenderColoredText(Globals.GetAlternatingColor(), "%s ", "Mesh Not Loaded")
+                    end
+                    ImGui.SameLine()
+                    ImGui.Text("<")
+                    ImGui.SameLine()
+                    Ui.RenderColoredText(Globals.Constants.Colors.LightBlue, "%s", Movement:GetTimeSinceLastNav() or "0s")
+                    ImGui.SameLine()
+                    ImGui.Text(">")
+                    ImGui.PopStyleVar(1)
+
+                    ImGui.EndTable()
+
+                    ImGui.NewLine()
 
                     if ImGui.CollapsingHeader("Assist List") then
                         ImGui.Indent()
@@ -207,7 +344,7 @@ function StandardUI:RenderMainWindow(imgui_style, curState, openGUI)
                         ImGui.Unindent()
                     end
 
-                    if Core.IAmMA() and not Config:GetSetting('PopOutForceTarget') then
+                    if not Config:GetSetting('PopOutForceTarget') then
                         if ImGui.CollapsingHeader("Force Target") then
                             ImGui.Indent()
                             Ui.RenderForceTargetList(true)
@@ -236,6 +373,8 @@ function StandardUI:RenderMainWindow(imgui_style, curState, openGUI)
                     ConsoleUI:DrawConsole(true)
                 end
             end
+
+            ImGui.EndChild()
         end
 
         ImGui.PopID()

@@ -10,6 +10,7 @@
 
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Modules   = require("utils.modules")
 local Targeting = require("utils.targeting")
@@ -30,8 +31,8 @@ local Tooltips  = {
     UnityBuff           = "AA: Casts Highest Level of Scribed Buffs (ParryProcBuff, Hunt, Protectionbuff, Eyes)",
     Protectionbuff      = "Spell Line: Increase AC + Self Damage Shield",
     ShoutBuff           = "Spell Line: Increase Attack and Double Attack Chance",
-    AgroBuff            = "Spell Line: Harms Target HP and Hatred Increase",
-    AgroReducerBuff     = "Spell Line: Hatred Decrease Proc",
+    AggroBuff           = "Spell Line: Harms Target HP and Hatred Increase",
+    AggroReducerBuff    = "Spell Line: Hatred Decrease Proc",
     AggroKick           = "Spell Line: Two Kicks w/ Increased Accuracy that Increase Hatred",
     ParryProcBuff       = "Spell Line: Magic Nuke w/ Parry Chance Proc",
     Eyes                = "Spell Line: Increase Chance to Hit with Archery",
@@ -61,7 +62,6 @@ local Tooltips  = {
     SkinLike            = "Spell Line: Increase AC + Increase Max HP",
     MoveSpells          = "Spell Line: Increase Movement Speed",
     Alliance            = "Spell Line: Alliance (Requires Multiple of Same Class). Adds Fire Damage to other Ranger Spells and triggers a massive Fire and Cold Nuke",
-    AgiBuff             = "Spell Line: Increase Agility",
     Cloak               = "Spell Line: Melee Absorb Proc + ATK/AC/Fire Resist Debuff",
     Veil                = "Spell Line: Add Parry Proc",
     JoltingKicks        = "Spell Line: Two Kicks w/ Increased Accuracy that Decrease Hatred",
@@ -202,7 +202,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.2, g = 0.05, b = 0.05, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.5, g = 0.05, b = 0.05, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.2, g = 0.05, b = 0.05, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.5, g = 0.05, b = 0.05, a = .8, }, },
@@ -221,7 +221,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.5, g = 0.05, b = 1.0, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.4, g = 0.05, b = 0.8, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.2, g = 0.05, b = 0.6, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.1, g = 0.05, b = 0.5, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
@@ -240,7 +240,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.05, g = 0.5, b = 0.05, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
@@ -259,7 +259,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.275, g = 0.275, b = 0.525, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.225, g = 0.275, b = 0.425, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.125, g = 0.125, b = 0.325, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.125, g = 0.275, b = 0.325, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.125, g = 0.275, b = 0.325, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.125, g = 0.275, b = 0.325, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.075, g = 0.075, b = 0.275, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.125, g = 0.275, b = 0.325, a = .8, }, },
@@ -399,7 +399,7 @@ local _ClassConfig = {
             "Shout of the Arbor Stalker",
             "Shout of the Dusksage Stalker",
         },
-        ["AgroBuff"] = {
+        ["AggroBuff"] = {
             "Devastating Blades XII",
             "Devastating Blades",
             "Devastating Edges",
@@ -410,7 +410,7 @@ local _ClassConfig = {
             "Devastating Velium",
             "Devastating Barrage",
         },
-        ["AgroReducerBuff"] = {
+        ["AggroReducerBuff"] = {
             "Jolting Blades",
             "Jolting Strikes",
             "Jolting Swings",
@@ -763,9 +763,6 @@ local _ClassConfig = {
             "Dusksage Stalker's Conjunction",
             "Fernstalker's Covariance",
         },
-        ["AgiBuff"] = {
-            "Feet Like Cat",
-        },
         ["Cloak"] = {
             "Ro's Burning Cloak VI",
             "Shalowain's Crucible Cloak",
@@ -795,6 +792,7 @@ local _ClassConfig = {
             "Jolting Axe Kicks",
             "Jolting Roundhouse Kicks",
             "Jolting Drop Kicks",
+            "Jolting Kicks",
         },
         ["AEBlades"] = {
             "Storm of Blades VII",
@@ -878,10 +876,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -938,8 +935,9 @@ local _ClassConfig = {
             state = 1,
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
+            load_cond = function(self, spell) return Core.IsTanking() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.IsTanking()
+                return combat_state == "Combat"
             end,
         },
     },
@@ -985,54 +983,10 @@ local _ClassConfig = {
                 name = "Eyes",
                 type = "Spell",
                 tooltip = Tooltips.Eyes,
+                load_cond = function(self) return not Config:GetSetting('DoMask') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
-                    return not castWSU() and Casting.SelfBuffCheck(spell) and not Config:GetSetting('DoMask')
-                end,
-            },
-            {
-                name = "GroupPredatorBuff",
-                type = "Spell",
-                tooltip = Tooltips.GroupPredatorBuff,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell)
-                end,
-            },
-            {
-                name = "ShoutBuff",
-                type = "Spell",
-                tooltip = Tooltips.ShoutBuff,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell) and not Casting.IHaveBuff("Shared " .. spell.Name())
-                end,
-            },
-            {
-                name = "GroupStrengthBuff",
-                type = "Spell",
-                tooltip = Tooltips.GroupStrengthBuff,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell) and not Casting.IHaveBuff("Shared " .. spell.Name())
-                end,
-            },
-            {
-                name = "Rathe",
-                type = "Spell",
-                tooltip = Tooltips.Rathe,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell) and not Casting.IHaveBuff("Shared " .. spell.Name())
-                end,
-            },
-            {
-                name = "GroupEnrichmentBuff",
-                type = "Spell",
-                tooltip = Tooltips.GroupEnrichmentBuff,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell)
+                    return not castWSU() and Casting.SelfBuffCheck(spell)
                 end,
             },
             {
@@ -1048,18 +1002,20 @@ local _ClassConfig = {
                 name = "Mask",
                 type = "Spell",
                 tooltip = Tooltips.Mask,
+                load_cond = function(self) return Config:GetSetting('DoMask') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell) and Config:GetSetting('DoMask')
+                    return Casting.SelfBuffCheck(spell)
                 end,
             },
             {
                 name = "FireFist",
                 type = "Spell",
                 tooltip = Tooltips.FireFist,
+                load_cond = function(self) return Config:GetSetting('DoFireFist') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
-                    return Config:GetSetting('DoFireFist') and Casting.SelfBuffCheck(spell)
+                    return Casting.SelfBuffCheck(spell)
                 end,
             },
             {
@@ -1075,25 +1031,6 @@ local _ClassConfig = {
                 name = "SkinLike",
                 type = "Spell",
                 tooltip = Tooltips.SkinLike,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell)
-                end,
-            },
-            {
-                name = "MoveSpells",
-                type = "Spell",
-                tooltip = Tooltips.MoveSpells,
-                active_cond = function(self, spell) Casting.IHaveBuff(spell) end,
-                cond = function(self, spell)
-                    if not Config:GetSetting('DoRunSpeed') then return false end
-                    return Casting.SelfBuffCheck(spell)
-                end,
-            },
-            {
-                name = "AgiBuff",
-                type = "Spell",
-                tooltip = Tooltips.AgiBuff,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
                     return Casting.SelfBuffCheck(spell)
@@ -1118,30 +1055,23 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "AgroReducerBuff",
+                name = "AggroReducerBuff",
                 type = "Spell",
-                tooltip = Tooltips.AgroReducerBuff,
-                active_cond = function(self, spell) return not Core.IsTanking() end,
+                tooltip = Tooltips.AggroReducerBuff,
+                load_cond = function(self, spell) return not Core.IsTanking() end,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
-                    return Config:GetSetting('DoAgroReducerBuff') and Casting.SelfBuffCheck(spell)
+                    return Config:GetSetting('DoAggroReducerBuff') and Casting.SelfBuffCheck(spell)
                 end,
             },
             {
-                name = "AgroBuff",
+                name = "AggroBuff",
                 type = "Spell",
-                tooltip = Tooltips.AgroBuff,
-                active_cond = function(self, spell) return Core.IsTanking() end,
+                tooltip = Tooltips.AggroBuff,
+                load_cond = function(self, spell) return Core.IsTanking() end,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
-                    return not Config:GetSetting('DoAgroReducerBuff') and Casting.SelfBuffCheck(spell)
-                end,
-            },
-            {
-                name = "RegenSpells",
-                type = "Spell",
-                tooltip = Tooltips.RegenSpells,
-                active_cond = function(self, spell) return Config:GetSetting('DoRegen') end,
-                cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell)
+                    return not Config:GetSetting('DoAggroReducerBuff') and Casting.SelfBuffCheck(spell)
                 end,
             },
             {
@@ -1168,6 +1098,63 @@ local _ClassConfig = {
                 name = "Rathe",
                 type = "Spell",
                 tooltip = Tooltips.Rathe,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "GroupStrengthBuff",
+                type = "Spell",
+                tooltip = Tooltips.GroupStrengthBuff,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "GroupPredatorBuff",
+                type = "Spell",
+                tooltip = Tooltips.GroupPredatorBuff,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "ShoutBuff",
+                type = "Spell",
+                tooltip = Tooltips.ShoutBuff,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "GroupEnrichmentBuff",
+                type = "Spell",
+                tooltip = Tooltips.GroupEnrichmentBuff,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "MoveSpells",
+                type = "Spell",
+                tooltip = Tooltips.MoveSpells,
+                load_cond = function(self) return Config:GetSetting('DoRunSpeed') end,
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
+                    return Casting.GroupBuffCheck(spell, target)
+                end,
+            },
+            {
+                name = "RegenSpells",
+                type = "Spell",
+                tooltip = Tooltips.RegenSpells,
+                load_cond = function(self) return Config:GetSetting('DoRegen') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
                     return Casting.GroupBuffCheck(spell, target)
@@ -1261,7 +1248,6 @@ local _ClassConfig = {
                 name = "SummerNuke",
                 type = "Spell",
                 tooltip = Tooltips.SummerNuke,
-                active_cond = function(self, spell) return Core.IsTanking() end,
                 cond = function(self, spell)
                     return Casting.DetSpellCheck(spell) and (mq.TLO.Me.PctAggro() < 100 or mq.TLO.Me.SecondaryPctAggro() > 50)
                 end,
@@ -1510,7 +1496,7 @@ local _ClassConfig = {
                 type = "Disc",
                 tooltip = Tooltips.JoltingKicks,
                 cond = function(self)
-                    return Casting.NoDiscActive() and Targeting.GetTargetDistance() <= 50
+                    return Targeting.GetTargetDistance() <= 50
                 end,
             },
             {
@@ -1680,13 +1666,14 @@ local _ClassConfig = {
                     Core.DoCmd('/squelch face fast')
                     Movement:DoStickCmd("10 moveback")
                 elseif tooFar or forceMove then
-                    Core.DoCmd("/squelch /nav id %d distance=%d lineofsight=on", Config.Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
-                    Core.DoCmd('/squelch face fast')
+                    Movement:DoNav(true, "id %d distance=%d lineofsight=on", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
+                    Core.DoCmd('/squelch /face fast')
                 end
             end
         end,
 
         PreEngage = function(target)
+            if not target or not target() then return end
             local openerAbility = Core.GetResolvedActionMapItem('ArrowOpener')
 
             if not Config:GetSetting("DoOpener") or not openerAbility then return end
@@ -1718,7 +1705,7 @@ local _ClassConfig = {
         },
     },
     ['DefaultConfig']     = {
-        ['Mode']              = {
+        ['Mode']               = {
             DisplayName = "Mode",
             Category = "Combat",
             Tooltip = "Select the Combat Mode for this Toon",
@@ -1735,7 +1722,7 @@ local _ClassConfig = {
                 "4. Hybrid - This mode is a combination of the other 3 and will attempt to be a jack of all trades.",
         },
         --Archery
-        ['BowNavDistance']    = {
+        ['BowNavDistance']     = {
             DisplayName = "Bow Nav Distance",
             Group = "Combat",
             Header = "Positioning",
@@ -1750,7 +1737,7 @@ local _ClassConfig = {
             Answer = "Some terrain blocks line of sight while MQ reports that the ranger has line of sight.\n" ..
                 "Reducing Bow Nav Distance to a value near the minimum or maximum may solve for some of these (not RG-Mercs) issues, as a workaround.",
         },
-        ['NavCircle']         = {
+        ['NavCircle']          = {
             DisplayName = "Nav Circle",
             Group = "Combat",
             Header = "Positioning",
@@ -1760,7 +1747,7 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true, -- this is a load condition
         },
-        ['DoSnare']           = {
+        ['DoSnare']            = {
             DisplayName = "Cast Snares",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1768,7 +1755,7 @@ local _ClassConfig = {
             Tooltip = "Enable casting Snare spells.",
             Default = true,
         },
-        ['DoDot']             = {
+        ['DoDot']              = {
             DisplayName = "Cast DOTs",
             Group = "Abilities",
             Header = "Damage",
@@ -1776,7 +1763,7 @@ local _ClassConfig = {
             Tooltip = "Enable casting Damage Over Time spells.",
             Default = true,
         },
-        ['DoHeals']           = {
+        ['DoHeals']            = {
             DisplayName = "Cast Heals",
             Group = "Abilities",
             Header = "Recovery",
@@ -1784,7 +1771,7 @@ local _ClassConfig = {
             Tooltip = "Enable casting of Healing spells.",
             Default = true,
         },
-        ['DoRegen']           = {
+        ['DoRegen']            = {
             DisplayName = "Cast Regen Spells",
             Group = "Abilities",
             Header = "Buffs",
@@ -1792,7 +1779,7 @@ local _ClassConfig = {
             Tooltip = "Enable casting of Regen spells.",
             Default = true,
         },
-        ['DoRunSpeed']        = {
+        ['DoRunSpeed']         = {
             DisplayName = "Cast Run Speed Buffs",
             Group = "Abilities",
             Header = "Buffs",
@@ -1800,7 +1787,7 @@ local _ClassConfig = {
             Tooltip = "Use Ranger Run Speed Buffs.",
             Default = true,
         },
-        ['DoMask']            = {
+        ['DoMask']             = {
             DisplayName = "Cast Mask Spell",
             Group = "Abilities",
             Header = "Buffs",
@@ -1808,7 +1795,7 @@ local _ClassConfig = {
             Tooltip = "Use Ranger Mask Spell",
             Default = false,
         },
-        ['DoFireFist']        = {
+        ['DoFireFist']         = {
             DisplayName = "Cast FireFist",
             Group = "Abilities",
             Header = "Buffs",
@@ -1816,7 +1803,7 @@ local _ClassConfig = {
             Tooltip = "Use Ranger FireFist Line of Spells",
             Default = true,
         },
-        ['DoAoE']             = {
+        ['DoAoE']              = {
             DisplayName = "Use AoEs",
             Group = "Abilities",
             Header = "Damage",
@@ -1824,7 +1811,7 @@ local _ClassConfig = {
             Tooltip = "Enable AoE abilities and spells.",
             Default = false,
         },
-        ['DoOpener']          = {
+        ['DoOpener']           = {
             DisplayName = "Use Openers",
             Group = "Abilities",
             Header = "Damage",
@@ -1832,7 +1819,7 @@ local _ClassConfig = {
             Tooltip = "Use Opening Arrow Shot Silent Shot Line.",
             Default = true,
         },
-        ['DoPoisonArrow']     = {
+        ['DoPoisonArrow']      = {
             DisplayName = "Use Poison Arrow",
             Group = "Abilities",
             Header = "Buffs",
@@ -1840,7 +1827,7 @@ local _ClassConfig = {
             Tooltip = "Enable use of Poison Arrow.",
             Default = true,
         },
-        ['DoReagentArrow']    = {
+        ['DoReagentArrow']     = {
             DisplayName = "Use Reagent Arrow",
             Group = "Abilities",
             Header = "Damage",
@@ -1848,17 +1835,17 @@ local _ClassConfig = {
             Tooltip = "Toggle usage of Spells and Openers that require Reagent arrows.",
             Default = false,
         },
-        ['DoAgroReducerBuff'] = {
-            DisplayName = "Cast Agro Reducer Buff",
+        ['DoAggroReducerBuff'] = {
+            DisplayName = "Cast Aggro Reducer Buff",
             Group = "Abilities",
             Header = "Buffs",
             Category = "Self",
-            Tooltip = "Use Agro Reduction Buffs.",
+            Tooltip = "Use Aggro Reduction Buffs.",
             Default = true,
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config is largely a port from older code, and has seen only minor adjustments. It has been flagged for revamp when we have the chance!\n\n" ..

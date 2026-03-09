@@ -5,6 +5,7 @@
 
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
 local Core      = require("utils.core")
@@ -156,6 +157,7 @@ return {
             "Lesser Evacuate",
         },
         ['HarvestSpell'] = {
+            "Patient Harvest",
             "Harvest",
         },
         ['JoltSpell'] = {
@@ -215,11 +217,12 @@ return {
         --     "Tears of Arlyxir",
         -- },
         ['PBTimer4'] = {
-            "Circle of Thunder", -- Level 70, Magic
-            "Circle of Fire",    -- Level 67, Fire
-            "Winds of Gelid",    -- Level 60, Ice
-            "Supernova",         -- Level 45, Fire
-            "Thunderclap",       -- Level 30, Magic
+            "Magmaraug's Presence", -- Level 71, Fire
+            "Circle of Thunder",    -- Level 70, Magic
+            "Circle of Fire",       -- Level 67, Fire
+            "Winds of Gelid",       -- Level 60, Ice
+            "Supernova",            -- Level 45, Fire
+            "Thunderclap",          -- Level 30, Magic
         },
         ['FireJyll'] = {
             "Jyll's Wave of Heat", -- Level 59
@@ -312,7 +315,7 @@ return {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         { --Keep things from doing
@@ -402,7 +405,7 @@ return {
             name = 'CombatBuff',
             state = 1,
             steps = 1,
-            timer = 30, -- only run every 30 seconds at most.
+            timer = 10,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat"
@@ -450,7 +453,7 @@ return {
                 type = "AA",
                 load_cond = function(self) return Config:GetSetting('DoManaBurn') end,
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() < 70 and Casting.OkayToNuke(true) and not mq.TLO.Target.FindBuff("detspa 350")()
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() < 70 and Casting.OkayToNuke(true) and not mq.TLO.Target.FindBuff("detspa 350")()
                 end,
             },
             {
@@ -471,14 +474,14 @@ return {
                 name = "Mind Crash",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 90
                 end,
             },
             {
                 name = "Arcane Whisper",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 90
                 end,
             },
             {
@@ -510,7 +513,7 @@ return {
                 name = "StunSpell",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToDebuff() and Targeting.TargetNotStunned() and not Targeting.IsNamed(target) and not Casting.StunImmuneTarget(target)
+                    return Casting.HaveManaToDebuff() and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed and not Casting.StunImmuneTarget(target)
                 end,
             },
         },
@@ -559,7 +562,7 @@ return {
                 type = "AA",
                 load_condtion = function(self) return Casting.CanUseAA("Pyromancy") end,
                 cond = function(self, aaName)
-                    return not mq.TLO.Me.Buff(aaName)()
+                    return Casting.SelfBuffAACheck(aaName)
                 end,
             },
             {
@@ -592,7 +595,7 @@ return {
                 type = "AA",
                 load_condtion = function(self) return Casting.CanUseAA("Cryomancy") end,
                 cond = function(self, aaName)
-                    return not mq.TLO.Me.Buff(aaName)()
+                    return Casting.SelfBuffAACheck(aaName)
                 end,
             },
             {
@@ -625,7 +628,7 @@ return {
                 type = "AA",
                 load_condtion = function(self) return Casting.CanUseAA("Acromancy") end,
                 cond = function(self, aaName)
-                    return not mq.TLO.Me.Buff(aaName)()
+                    return Casting.SelfBuffAACheck(aaName)
                 end,
             },
             {
@@ -691,6 +694,7 @@ return {
                 type = "Spell",
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
+                    if not Casting.CastReady(spell) then return false end
                     return Casting.SelfBuffCheck(spell)
                 end,
             },
@@ -757,7 +761,7 @@ return {
                 { name = "SnareSpell",   cond = function() return Config:GetSetting('DoSnare') and not Casting.CanUseAA("Atol's Shackles") end, },
                 { name = "EvacSpell",    cond = function() return Config:GetSetting('KeepEvacMemmed') end, },
                 { name = "StunSpell",    cond = function() return Config:GetSetting('DoStun') end, },
-                { name = "JoltSpell", },
+                { name = "JoltSpell",    cond = function() return Config:GetSetting('DoJoltSpell') end, },
                 { name = "PBTimer4",     cond = function() return Core.IsModeActive('PBAE') end, },
                 { name = "FireJyll",     cond = function() return Core.IsModeActive('PBAE') end, },
                 { name = "IceJyll",      cond = function() return Core.IsModeActive('PBAE') end, },
@@ -932,13 +936,23 @@ return {
         },
 
         -- Utility
+        ['DoJoltSpell']          = {
+            DisplayName = "Use Jolt Spell",
+            Group = "Abilities",
+            Header = "Utility",
+            Category = "Hate Reduction",
+            Index = 101,
+            Tooltip = "Memorize and cast your jolt line of spells.",
+            Default = true,
+            RequiresLoadoutChange = true,
+        },
         ['JoltAggro']            = {
             DisplayName = "Jolt Aggro %",
             Group = "Abilities",
             Header = "Utility",
             Category = "Hate Reduction",
-            Index = 101,
-            Tooltip = "Aggro at which to use Jolt",
+            Index = 102,
+            Tooltip = "Aggro at which to use Jolt and other similar abilities.",
             Default = 90,
             Min = 1,
             Max = 100,
@@ -1011,7 +1025,7 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
                 "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..

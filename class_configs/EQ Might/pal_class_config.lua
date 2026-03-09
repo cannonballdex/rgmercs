@@ -1,5 +1,6 @@
 local mq          = require('mq')
 local Config      = require('utils.config')
+local Globals     = require("utils.globals")
 local Core        = require("utils.core")
 local Targeting   = require("utils.targeting")
 local Casting     = require("utils.casting")
@@ -117,20 +118,20 @@ return {
         },
         ["UndeadProc"] = {
             --- Undead Proc Strike : does not stack with Fury Proc, will be used until Fury is available even if setting not enabled.
-            "Instrument of Nife",      -- Level 26, 243pt
-            "Ward of Nife",            -- Level 62, 500pt
-            "Silvered Fury",           -- Level 67, 750pt
+            "Instrument of Nife", -- Level 26, 243pt
+            "Ward of Nife",       -- Level 62, 500pt
+            "Silvered Fury",      -- Level 67, 750pt
         },
-        ["StunTimer5"] = {             -- mq.TLO.Target.ID() == target and not mq.TLO.Spawn(target).Stunned()
-            "Desist",                  -- Level 13 - Not Timer 5, use for TLP Low Level Stun
+        ["StunTimer5"] = {
+            "Desist",                  -- Level 13 - Not Timer 5, filler
             "Stun",                    -- Level 28
             "Force of Akera",          -- Level 53
             "Ancient: Force of Chaos", -- Level 65
             "Ancient: Force of Jeron", -- Level 70
         },
         ["StunTimer4"] = {
-            "Cease",           -- Level 7 - Not Timer 4, use for TLP Low Level Stun
-            "Force",           -- Level 52 - Not Timer 4, use for TLP Low Level Stun
+            "Cease",           -- Level 7 - Not Timer 4, filler
+            "Force",           -- Level 52 - Not Timer 4, filler
             "Force of Akilae", -- Level 62
             "Force of Piety",  -- Level 66
             "Sacred Force",    -- EQM Custom
@@ -178,6 +179,7 @@ return {
             "Wave of Life",
         },
         ["Cleansing"] = {
+            "Sacred Cleansing",    -- Level 71
             "Pious Cleansing",     -- Level 69
             "Supernal Cleansing",  -- Level 64
             "Celestial Cleansing", -- Level 59
@@ -185,9 +187,10 @@ return {
         },
         ["ArmorSelfBuff"] = {
             --- Self Buff Armor Line Ac/Hp/Mana regen
-            "Armor of the Divine",   -- Level 60
-            "Aura of the Crusader",  -- Level 64
-            "Armor of the Champion", -- Level 69
+            "Armor of the Divine",        -- Level 60
+            "Aura of the Crusader",       -- Level 64
+            "Armor of the Champion",      -- Level 69
+            "Armor of Unrelenting Faith", -- Level 71
         },
         ["SymbolBuff"] = {
             "Jeron's Mark",
@@ -203,6 +206,7 @@ return {
             "Quellious' Word of Tranquility", -- Level 54
             "Quellious' Word of Serenity",    -- Level 64
             "Serene Command",                 -- Level 68
+            "Lesson of Penitence",
         },
         ["TouchHeal"] = {
             -- Target Light Heal
@@ -222,6 +226,7 @@ return {
             "Light of Nife",  -- Level 63
             "Light of Order", -- Level 65
             "Light of Piety", -- Level 68
+            "Gleaming Light", -- Level 71
         },
         ["LightHeal2"] = {
             -- ToT Light Heal
@@ -229,6 +234,10 @@ return {
             "Light of Nife",  -- Level 63
             "Light of Order", -- Level 65
             "Light of Piety", -- Level 68
+            "Gleaming Light", -- Level 71
+        },
+        ['BurstHeal'] = {
+            "Burst of Sunlight",
         },
         -- ["Pacify"] = {
         --     "Pacify",
@@ -294,6 +303,7 @@ return {
         --     "Justice of Marr",
         -- },
         ['GuardDisc'] = {
+            "Armor of Righteousness",
             "Ancient: Guard of Chivalry",
             "Guard of Righteousness",
             "Guard of Humility",
@@ -318,6 +328,9 @@ return {
         ['SpellResistBuff'] = {
             "Silent Piety",
         },
+        ["ForHonor"] = { -- Hate Over Time with small absorb recourse
+            "Challenge for Honor",
+        },
     },
     ['SpellList']         = {
         {
@@ -330,8 +343,10 @@ return {
                 { name = "WaveHeal",        cond = function(self) return Config:GetSetting('DoWaveHeal') < 3 end, },
                 { name = "WaveHeal2",       cond = function(self) return Config:GetSetting('DoWaveHeal') == 2 end, },
                 { name = "SelfHeal", },
+                { name = "BurstHeal", },
                 { name = "Cleansing",       cond = function(self) return Config:GetSetting('DoCleansing') < 3 end, },
                 { name = "SereneStun",      cond = function(self) return Config:GetSetting('DoSereneStun') end, },
+                { name = "ForHonor",        cond = function(self) return Core.IsTanking() end, },
                 { name = "StunTimer4",      cond = function(self) return Core.IsTanking() end, },
                 { name = "StunTimer5",      cond = function(self) return Core.IsTanking() end, },
                 { name = "PBAEStun",        cond = function(self) return Config:GetSetting('AEStunUse') > 1 end, },
@@ -513,6 +528,10 @@ return {
                 end,
             },
             {
+                name = "BurstHeal",
+                type = "Spell",
+            },
+            {
                 name = "Mantle of the Wyrmguard",
                 type = "Item",
                 load_cond = function(self) return mq.TLO.FindItem("=Mantle of the Wyrmguard")() and Config:GetSetting('WaveHealUse') == 1 end,
@@ -592,16 +611,27 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff() and Core.OkayToNotHeal()
             end,
         },
+        { --Actions to lock down xtarg haters
+            name = 'HateTools(AggroTarget)',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            load_cond = function() return Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') end,
+            targetId = function(self) return Targeting.CheckForAggroTargetID() end,
+            cond = function(self, combat_state)
+                if mq.TLO.Me.PctHPs() <= Config:GetSetting('HPCritical') then return false end
+                return combat_state == "Combat"
+            end,
+        },
         { --Actions that establish or maintain hatred
-            name = 'HateTools',
+            name = 'HateTools(AutoTarget)',
             state = 1,
             steps = 1,
             doFullRotation = true,
@@ -666,8 +696,13 @@ return {
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and (mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or Targeting.IsNamed(Targeting.GetAutoTarget()) or
-                    self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                return combat_state == "Combat" and Targeting.IHaveAggro(100) and
+                    -- we are under our defense start HP
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or
+                        -- we have met our defense count threshold
+                        self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true) or
+                        -- we are fighting a named and we are (presumably) tanking it
+                        (Globals.AutoTargetIsNamed and Targeting.GetAutoTargetAggroPct() >= 100))
             end,
         },
         { --Offensive actions to temporarily boost damage dealt
@@ -778,7 +813,7 @@ return {
                 load_cond = function() return Config:GetSetting('AegoSymbol') == 3 or Config:GetSetting('AegoSymbol') == 3 end,
                 cond = function(self, spell, target)
                     if (spell.TargetType() or ""):lower() == "single" and target.ID() ~= Core.GetMainAssistId() then return false end
-                    return Casting.GroupBuffCheck(spell, target)
+                    return Casting.GroupBuffCheck(spell, target) and Casting.AddedBuffCheck(3047, target) -- don't try to overwrite Kazad's Mark
                 end,
             },
             {
@@ -841,7 +876,40 @@ return {
                 end,
             },
         },
-        ['HateTools'] = {
+        ['HateTools(AggroTarget)'] = {
+            { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
+                name = "Taunt",
+                type = "Ability",
+                cond = function(self, abilityName, target)
+                    return Targeting.GetTargetDistance(target) < 30
+                end,
+            },
+            {
+                name = "Xeno's Faceguard",
+                type = "Item",
+                load_cond = function(self) return mq.TLO.FindItem("=Xeno's Faceguard")() end,
+            },
+            {
+                name = "Force of Disruption",
+                type = "AA",
+            },
+            {
+                name = "ForHonor",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    return Casting.DetSpellCheck(spell)
+                end,
+            },
+            {
+                name = "StunTimer5",
+                type = "Spell",
+            },
+            {
+                name = "StunTimer4",
+                type = "Spell",
+            },
+        },
+        ['HateTools(AutoTarget)'] = {
             { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
                 name = "Taunt",
                 type = "Ability",
@@ -850,8 +918,20 @@ return {
                 end,
             },
             {
+                name = "Xeno's Faceguard",
+                type = "Item",
+                load_cond = function(self) return mq.TLO.FindItem("=Xeno's Faceguard")() end,
+            },
+            {
                 name = "Force of Disruption",
                 type = "AA",
+            },
+            {
+                name = "ForHonor",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    return Casting.DetSpellCheck(spell)
+                end,
             },
             {
                 name = "StunTimer5",
@@ -866,6 +946,7 @@ return {
             {
                 name = "BladeDisc",
                 type = "Disc",
+                load_cond = function(self) return Config:GetSetting('BladeDiscUse') > 1 end,
                 cond = function(self, discSpell)
                     return Config:GetSetting('DoAEDamage')
                 end,
@@ -909,6 +990,10 @@ return {
                 load_cond = function(self) return Config:GetSetting('DoValorousRage') end,
             },
             {
+                name = "Inquisitor's Judgment",
+                type = "AA",
+            },
+            {
                 name = "WardProc",
                 type = "Spell",
                 load_cond = function(self) return Config:GetSetting('DoWardProc') and Core.IsTanking() end,
@@ -922,7 +1007,7 @@ return {
                 load_cond = function(self) return not Core.IsTanking() end,
                 cond = function(self, discSpell, target)
                     if not Targeting.TargetBodyIs(target, "Undead") then return false end
-                    return Targeting.IsNamed(target) and Casting.NoDiscActive()
+                    return Globals.AutoTargetIsNamed and Casting.NoDiscActive()
                 end,
             },
         },
@@ -977,6 +1062,14 @@ return {
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoAEDamage') then return false end
                     return self.ClassConfig.HelperFunctions.AETargetCheck(true)
+                end,
+            },
+            {
+                name = "ForHonor",
+                type = "Spell",
+                load_cond = function(self) return Core.IsTanking() end,
+                cond = function(self, spell, target)
+                    return Casting.DetSpellCheck(spell)
                 end,
             },
             {
@@ -1048,7 +1141,7 @@ return {
                 type = "CustomFunc",
                 cond = function(self, target)
                     if mq.TLO.Me.Bandolier("Shield").Active() then return false end
-                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("Shield") end,
             },
@@ -1058,7 +1151,7 @@ return {
                 cond = function()
                     if mq.TLO.Me.Bandolier("2Hand").Active() then return false end
                     return mq.TLO.Me.PctHPs() >= Config:GetSetting('Equip2Hand') and mq.TLO.Me.ActiveDisc() ~= "Deflection Discipline" and
-                        not (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                        not (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("2Hand") end,
             },
@@ -1341,7 +1434,7 @@ return {
             Header = "Bandolier",
             Category = "Bandolier",
             Index = 104,
-            Tooltip = "Keep Shield equipped for Named mobs(must be in SpawnMaster or named.lua)",
+            Tooltip = "Keep Shield equipped for mobs detected as 'named' by RGMercs (see Named tab).",
             Default = true,
         },
 
@@ -1370,7 +1463,7 @@ return {
             Tooltip = "Choose how many ToT heals (\"Light of\" line) to keep memorized, if any.",
             RequiresLoadoutChange = true,
             Type = "Combo",
-            ComboOptions = { 'Current Tier', 'Current Tier + Last Tier', 'Never', },
+            ComboOptions = { 'Current Tier', 'Current Tier + Last Tier', 'None', },
             Default = 2,
             Min = 1,
             Max = 3,
@@ -1583,11 +1676,11 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Comms        = require("utils.comms")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
@@ -520,7 +521,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -528,10 +529,9 @@ local _ClassConfig = {
         },
         { --Spells that should be checked on group members
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and Casting.OkayToBuff()
             end,
@@ -572,8 +572,7 @@ local _ClassConfig = {
             steps = 3,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Casting.BurnCheck() and
-                    (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
+                return combat_state == "Combat" and Casting.BurnCheck() and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
             end,
         },
         {
@@ -582,10 +581,9 @@ local _ClassConfig = {
             state = 1,
             steps = 1,
             load_cond = function(self) return self:GetResolvedActionMapItem('MeleeProcBuff') end,
-            targetId = function(self) return { Core.GetMainAssistId(), } or {} end,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and
-                    (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
+                return combat_state == "Combat" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
             end,
         },
         {
@@ -594,8 +592,7 @@ local _ClassConfig = {
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and
-                    (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
+                return combat_state == "Combat" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
             end,
         },
         {
@@ -605,8 +602,7 @@ local _ClassConfig = {
             load_cond = function() return Config:GetSetting('DoArcanumWeave') and Casting.CanUseAA("Acute Focus of Arcanum") end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and not mq.TLO.Me.Buff("Focus of Arcanum")() and
-                    (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
+                return combat_state == "Combat" and not mq.TLO.Me.Buff("Focus of Arcanum")() and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal())
             end,
         },
 
@@ -639,7 +635,7 @@ local _ClassConfig = {
                 name = "Focus of Arcanum",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -672,7 +668,7 @@ local _ClassConfig = {
                 name = "Spear of Fate",
                 type = "Item",
                 cond = function(self, itemName, target)
-                    return Targeting.IsNamed(target) and Casting.DotItemCheck(itemName, target)
+                    return Globals.AutoTargetIsNamed and Casting.DotItemCheck(itemName, target)
                 end,
             },
             {
@@ -743,6 +739,7 @@ local _ClassConfig = {
                 end,
                 load_cond = function(self) return Config:GetSetting('DoSTSlow') and (not Casting.CanUseAA("Turgur's Swarm") or Config:GetSetting('DoDiseaseSlow')) end,
                 type = "Spell",
+                waitReadyTime = function() return Config:GetSetting('DiseaseSlowWaitTime') end,
                 cond = function(self, spell, target)
                     return Casting.DetSpellCheck(spell) and not Casting.SlowImmuneTarget(target)
                 end,
@@ -770,7 +767,7 @@ local _ClassConfig = {
                 name = "CurseDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoCurseDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoCurseDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -778,7 +775,7 @@ local _ClassConfig = {
                 name = "SaryrnDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoSaryrnDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoSaryrnDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -786,7 +783,7 @@ local _ClassConfig = {
                 name = "UltorDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoUltorDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoUltorDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -821,7 +818,7 @@ local _ClassConfig = {
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoColdNuke') then return false end
-                    return (Targeting.MobHasLowHP or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target))) and Casting.OkayToNuke(true)
+                    return (Targeting.MobHasLowHP or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed)) and Casting.OkayToNuke(true)
                 end,
             },
             {
@@ -829,7 +826,7 @@ local _ClassConfig = {
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoPoisonNuke') then return false end
-                    return (Targeting.MobHasLowHP or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target))) and Casting.OkayToNuke(true)
+                    return (Targeting.MobHasLowHP or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed)) and Casting.OkayToNuke(true)
                 end,
             },
         },
@@ -916,7 +913,7 @@ local _ClassConfig = {
                 name = "Spirit Guardian",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -1006,7 +1003,7 @@ local _ClassConfig = {
                 active_cond = function(self) return mq.TLO.Me.Height() < 2 end,
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('DoGroupShrink') then return false end
-                    return target.Height() > 2.2
+                    return Targeting.GetTargetHeight(target) > 2.2
                 end,
             },
             {
@@ -1015,7 +1012,7 @@ local _ClassConfig = {
                 active_cond = function(self) return mq.TLO.Me.Height() < 2 end,
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoGroupShrink') or Casting.CanUseAA("Group Shrink") then return false end
-                    return target.Height() > 2.2
+                    return Targeting.GetTargetHeight(target) > 2.2
                 end,
             },
             {
@@ -1191,7 +1188,7 @@ local _ClassConfig = {
         },
     },
     ['DefaultConfig']     = {
-        ['Mode']              = {
+        ['Mode']                = {
             DisplayName = "Mode",
             Category = "Combat",
             Tooltip = "Select the Combat Mode for this Toon",
@@ -1206,7 +1203,7 @@ local _ClassConfig = {
         },
 
         -- Damage
-        ['DoColdNuke']        = {
+        ['DoColdNuke']          = {
             DisplayName = "Cold Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1216,7 +1213,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = true,
         },
-        ['DoPoisonNuke']      = {
+        ['DoPoisonNuke']        = {
             DisplayName = "Poison Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1226,7 +1223,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = true,
         },
-        ['DoTwinHealNuke']    = {
+        ['DoTwinHealNuke']      = {
             DisplayName = "Twinheal Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1236,7 +1233,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = true,
         },
-        ['DoSaryrnDot']       = {
+        ['DoSaryrnDot']         = {
             DisplayName = "Poison Dot",
             Group = "Abilities",
             Header = "Damage",
@@ -1246,7 +1243,7 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true,
         },
-        ['DoUltorDot']        = {
+        ['DoUltorDot']          = {
             DisplayName = "Disease Dot",
             Group = "Abilities",
             Header = "Damage",
@@ -1256,7 +1253,7 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true,
         },
-        ['DoCurseDot']        = {
+        ['DoCurseDot']          = {
             DisplayName = "Magic Dot",
             Group = "Abilities",
             Header = "Damage",
@@ -1266,7 +1263,7 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true,
         },
-        ['DotNamedOnly']      = {
+        ['DotNamedOnly']        = {
             DisplayName = "Only Dot Named",
             Group = "Abilities",
             Header = "Damage",
@@ -1277,7 +1274,7 @@ local _ClassConfig = {
         },
 
         -- Healing
-        ['DoSingleHot']       = {
+        ['DoSingleHot']         = {
             DisplayName = "Use Single HoT",
             Group = "Abilities",
             Header = "Recovery",
@@ -1288,7 +1285,7 @@ local _ClassConfig = {
             Default = true,
             ConfigType = "Advanced",
         },
-        ['DoSnareHot']        = {
+        ['DoSnareHot']          = {
             DisplayName = "Use Snare HoT",
             Group = "Abilities",
             Header = "Recovery",
@@ -1299,7 +1296,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['KeepPoisonMemmed']  = {
+        ['KeepPoisonMemmed']    = {
             DisplayName = "Mem Cure Poison",
             Group = "Abilities",
             Header = "Recovery",
@@ -1311,7 +1308,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['KeepDiseaseMemmed'] = {
+        ['KeepDiseaseMemmed']   = {
             DisplayName = "Mem Cure Disease",
             Group = "Abilities",
             Header = "Recovery",
@@ -1323,7 +1320,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['KeepCurseMemmed']   = {
+        ['KeepCurseMemmed']     = {
             DisplayName = "Mem Remove Curse",
             Group = "Abilities",
             Header = "Recovery",
@@ -1335,7 +1332,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['GroupHealAsCure']   = {
+        ['GroupHealAsCure']     = {
             DisplayName = "Use Group Heal to Cure",
             Group = "Abilities",
             Header = "Recovery",
@@ -1348,7 +1345,7 @@ local _ClassConfig = {
         },
 
         -- Canni
-        ['DoAACanni']         = {
+        ['DoAACanni']           = {
             DisplayName = "Use AA Canni",
             Group = "Abilities",
             Header = "Recovery",
@@ -1359,7 +1356,7 @@ local _ClassConfig = {
             Default = true,
             ConfigType = "Advanced",
         },
-        ['AACanniManaPct']    = {
+        ['AACanniManaPct']      = {
             DisplayName = "AA Canni Mana %",
             Group = "Abilities",
             Header = "Recovery",
@@ -1371,7 +1368,7 @@ local _ClassConfig = {
             Max = 100,
             ConfigType = "Advanced",
         },
-        ['AACanniMinHP']      = {
+        ['AACanniMinHP']        = {
             DisplayName = "AA Canni HP %",
             Group = "Abilities",
             Header = "Recovery",
@@ -1383,7 +1380,7 @@ local _ClassConfig = {
             Max = 100,
             ConfigType = "Advanced",
         },
-        ['DoSpellCanni']      = {
+        ['DoSpellCanni']        = {
             DisplayName = "Use Spell Canni",
             Group = "Abilities",
             Header = "Recovery",
@@ -1394,7 +1391,7 @@ local _ClassConfig = {
             Default = true,
             ConfigType = "Advanced",
         },
-        ['SpellCanniManaPct'] = {
+        ['SpellCanniManaPct']   = {
             DisplayName = "Spell Canni Mana %",
             Group = "Abilities",
             Header = "Recovery",
@@ -1406,7 +1403,7 @@ local _ClassConfig = {
             Max = 100,
             ConfigType = "Advanced",
         },
-        ['SpellCanniMinHP']   = {
+        ['SpellCanniMinHP']     = {
             DisplayName = "Spell Canni HP %",
             Group = "Abilities",
             Header = "Recovery",
@@ -1418,7 +1415,7 @@ local _ClassConfig = {
             Max = 100,
             ConfigType = "Advanced",
         },
-        ['DoCombatCanni']     = {
+        ['DoCombatCanni']       = {
             DisplayName = "Canni in Combat",
             Group = "Abilities",
             Header = "Recovery",
@@ -1430,7 +1427,7 @@ local _ClassConfig = {
         },
 
         -- Buffs
-        ['UseEpic']           = {
+        ['UseEpic']             = {
             DisplayName = "Epic Use:",
             Group = "Items",
             Header = "Clickies",
@@ -1444,7 +1441,7 @@ local _ClassConfig = {
             Max = 3,
             ConfigType = "Advanced",
         },
-        ['DoRunSpeed']        = {
+        ['DoRunSpeed']          = {
             DisplayName = "Do Run Speed",
             Group = "Abilities",
             Header = "Buffs",
@@ -1455,7 +1452,7 @@ local _ClassConfig = {
             FAQ = "Why are my buffers in a run speed buff war?",
             Answer = "Many run speed spells freely stack and overwrite each other, you will need to disable Run Speed Buffs on some of the buffers.",
         },
-        ['DoGroupShrink']     = {
+        ['DoGroupShrink']       = {
             DisplayName = "Group Shrink",
             Group = "Abilities",
             Header = "Buffs",
@@ -1467,7 +1464,7 @@ local _ClassConfig = {
             Answer =
             "For simplicity, the check to use it is keyed to the Shaman's height, rather than checking each group member.",
         },
-        ['DoRegenBuff']       = {
+        ['DoRegenBuff']         = {
             DisplayName = "Regen Buff",
             Group = "Abilities",
             Header = "Buffs",
@@ -1478,7 +1475,7 @@ local _ClassConfig = {
             FAQ = "Why am I spamming my Group Regen buff?",
             Answer = "Certain Shaman and Druid group regen buffs report cross-stacking. You should deselect the option on one of the PCs if they are grouped together.",
         },
-        ['DoHaste']           = {
+        ['DoHaste']             = {
             DisplayName = "Use Haste",
             Group = "Abilities",
             Header = "Buffs",
@@ -1488,7 +1485,7 @@ local _ClassConfig = {
             Default = true,
             ConfigType = "Advanced",
         },
-        ['DoArcanumWeave']    = {
+        ['DoArcanumWeave']      = {
             DisplayName = "Weave Arcanums",
             Group = "Abilities",
             Header = "Buffs",
@@ -1498,7 +1495,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true, --this setting is used as a load condition
             Default = true,
         },
-        ['DoVetAA']           = {
+        ['DoVetAA']             = {
             DisplayName = "Use Vet AA",
             Group = "Abilities",
             Header = "Buffs",
@@ -1511,7 +1508,7 @@ local _ClassConfig = {
         },
 
         -- Debuffs
-        ['DoSTMalo']          = {
+        ['DoSTMalo']            = {
             DisplayName = "Do ST Malo",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1521,7 +1518,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = true,
         },
-        ['DoAEMalo']          = {
+        ['DoAEMalo']            = {
             DisplayName = "Do AE Malo",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1531,7 +1528,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = false,
         },
-        ['DoSTSlow']          = {
+        ['DoSTSlow']            = {
             DisplayName = "Do ST Slow",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1542,7 +1539,7 @@ local _ClassConfig = {
             Default = true,
 
         },
-        ['DoAESlow']          = {
+        ['DoAESlow']            = {
             DisplayName = "Do AE Slow",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1552,7 +1549,7 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = false,
         },
-        ['AESlowCount']       = {
+        ['AESlowCount']         = {
             DisplayName = "AE Slow Count",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1564,7 +1561,7 @@ local _ClassConfig = {
             Max = 10,
             ConfigType = "Advanced",
         },
-        ['AEMaloCount']       = {
+        ['AEMaloCount']         = {
             DisplayName = "AE Malo Count",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1576,7 +1573,7 @@ local _ClassConfig = {
             Max = 10,
             ConfigType = "Advanced",
         },
-        ['DoDiseaseSlow']     = {
+        ['DoDiseaseSlow']       = {
             DisplayName = "Disease Slow",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1590,7 +1587,19 @@ local _ClassConfig = {
             Answer =
             "During early eras of play, a slow that checked against disease resist was added to slow magic-resistant mobs. If selected, this will be used instead of a magic-based slow until the Turgur's AA becomes available.",
         },
-        ['DoPutrid']          = {
+        ['DiseaseSlowWaitTime'] = {
+            DisplayName = "Disease Slow Wait",
+            Group = "Abilities",
+            Header = "Debuffs",
+            Category = "Slow",
+            Index = 105,
+            Tooltip = "Maximum amount of time (in miliseconds) to wait for Disease Slow to be ready before giving up.",
+            Default = 100,
+            Min = 0,
+            Max = 10000,
+            ConfigType = "Advanced",
+        },
+        ['DoPutrid']            = {
             DisplayName = "Putrid Decay",
             Group = "Abilities",
             Header = "Debuffs",
@@ -1603,7 +1612,7 @@ local _ClassConfig = {
         },
 
         -- Low Level Buffs
-        ['DoLLHPBuff']        = {
+        ['DoLLHPBuff']          = {
             DisplayName = "HP Buff (LowLvl)",
             Group = "Abilities",
             Header = "Buffs",
@@ -1613,7 +1622,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['DoLLAgiBuff']       = {
+        ['DoLLAgiBuff']         = {
             DisplayName = "Agility Buff (LowLvl)",
             Group = "Abilities",
             Header = "Buffs",
@@ -1623,7 +1632,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['DoLLStaBuff']       = {
+        ['DoLLStaBuff']         = {
             DisplayName = "Stamina Buff (LowLvl)",
             Group = "Abilities",
             Header = "Buffs",
@@ -1633,7 +1642,7 @@ local _ClassConfig = {
             Default = false,
             ConfigType = "Advanced",
         },
-        ['DoLLStrBuff']       = {
+        ['DoLLStrBuff']         = {
             DisplayName = "Strength Buff (LowLvl)",
             Group = "Abilities",
             Header = "Buffs",
@@ -1645,7 +1654,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

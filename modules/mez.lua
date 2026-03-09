@@ -1,31 +1,31 @@
 -- Sample Basic Class Module
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require('utils.globals')
 local Combat    = require("utils.combat")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
-local Ui        = require("utils.ui")
 local Comms     = require("utils.comms")
 local Modules   = require("utils.modules")
 local Strings   = require("utils.strings")
 local Tables    = require("utils.tables")
-local Files     = require("utils.files")
 local Logger    = require("utils.logger")
-
+local Events    = require("utils.events")
+local Base      = require("modules.base")
 require('utils.datatypes')
 
-local Module                   = { _version = '0.1a', _name = "Mez", _author = 'Derple', }
-Module.__index                 = Module
+local Module   = { _version = '0.1a', _name = "Mez", _author = 'Derple', }
+Module.__index = Module
+setmetatable(Module, { __index = Base, })
+Module.FAQ                     = {}
+Module.CommandHandlers         = {}
 
-Module.ModuleLoaded            = false
 Module.CombatState             = "None"
-Module.SaveRequested           = nil
 
 Module.TempSettings            = {}
 Module.TempSettings.MezImmune  = {}
 Module.TempSettings.MezTracker = {}
-Module.FAQ                     = {}
 
 Module.DefaultConfig           = {
     --General
@@ -162,7 +162,7 @@ Module.DefaultConfig           = {
         Header = "Mez",
         Category = "Mez Targets",
         Index = 3,
-        Default = 0,
+        Default = 1,
         Min = 1,
         Max = 200,
         Tooltip = "If Auto Level Range is disabled, the minimum level of a potential mez target for mez spells.",
@@ -174,7 +174,7 @@ Module.DefaultConfig           = {
         Header = "Mez",
         Category = "Mez Targets",
         Index = 4,
-        Default = 0,
+        Default = 200,
         Min = 1,
         Max = 200,
         Tooltip = "If Auto Level Range is disabled, the maximum level of a potential mez target for mez spells.",
@@ -188,79 +188,8 @@ Module.DefaultConfig           = {
     },
 }
 
-local function getConfigFileName()
-    local oldFile = mq.configDir ..
-        '/rgmercs/PCConfigs/' ..
-        Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-    local newFile = mq.configDir ..
-        '/rgmercs/PCConfigs/' ..
-        Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. "_" .. Config.Globals.CurLoadedClass:lower() .. '.lua'
-
-    if Files.file_exists(newFile) then
-        return newFile
-    end
-
-    Files.copy_file(oldFile, newFile)
-
-    return newFile
-end
-
-function Module:SaveSettings(doBroadcast)
-    self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-    if not self.SaveRequested then return end
-
-    mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-    if self.SaveRequested.doBroadcast == true then
-        Comms.BroadcastMessage(self._name, "LoadSettings")
-    end
-
-    Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-    self.SaveRequested = nil
-end
-
-function Module:LoadSettings()
-    Logger.log_debug("\ar%s\ao Mez Module Loading Settings for: %s.", Config.Globals.CurLoadedClass,
-        Config.Globals.CurLoadedChar)
-    local settings_pickle_path = getConfigFileName()
-    local settings = {}
-    local firstSaveRequired = false
-
-    local config, err = loadfile(settings_pickle_path)
-    if err or not config then
-        Logger.log_error("\ay[%s]: Unable to load module settings file(%s), creating a new one!",
-            Config.Globals.CurLoadedClass, settings_pickle_path)
-        firstSaveRequired = true
-    else
-        settings = config()
-    end
-
-    if not self.DefaultConfig then
-        Logger.log_error("\arFailed to Load Mez Config for Classs: %s", Config.Globals.CurLoadedClass)
-        return
-    end
-
-    Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-
-    self.SettingsLoaded = true
-end
-
-function Module.New()
-    local newModule = setmetatable({}, Module)
-    return newModule
-end
-
-function Module:Init()
-    Logger.log_debug("\agInitializing Mez Module...")
-    self:LoadSettings()
-
-    self.ModuleLoaded = true
-
-    return { self = self, defaults = self.DefaultConfig, }
+function Module:New()
+    return Base.New(self)
 end
 
 function Module:ShouldRender()
@@ -268,30 +197,30 @@ function Module:ShouldRender()
 end
 
 function Module:Render()
-    Ui.RenderPopAndSettings(self._name)
+    Base.Render(self)
+
+    ImGui.NewLine()
 
     if self.ModuleLoaded then
         -- CCEd targets
         if ImGui.CollapsingHeader("CC Target List") then
             ImGui.Indent()
             if ImGui.BeginTable("MezzedList", 4, bit32.bor(ImGuiTableFlags.Resizable, ImGuiTableFlags.Borders)) then
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
                 ImGui.TableSetupColumn('Id', (ImGuiTableColumnFlags.WidthFixed), 70.0)
                 ImGui.TableSetupColumn('Duration', (ImGuiTableColumnFlags.WidthFixed), 150.0)
                 ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthFixed), 250.0)
                 ImGui.TableSetupColumn('Spell', (ImGuiTableColumnFlags.WidthStretch), 150.0)
-                ImGui.PopStyleColor()
                 ImGui.TableHeadersRow()
                 for id, data in pairs(self.TempSettings.MezTracker) do
                     ImGui.TableNextColumn()
                     ImGui.Text(tostring(id))
                     ImGui.TableNextColumn()
                     if data.duration > 30000 then
-                        ImGui.PushStyleColor(ImGuiCol.Text, 0.02, 0.8, 0.02, 1)
+                        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.ConditionPassColor)
                     elseif data.duration > 15000 then
-                        ImGui.PushStyleColor(ImGuiCol.Text, 0.8, 0.8, 0.02, 1)
+                        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.ConditionMidColor)
                     else
-                        ImGui.PushStyleColor(ImGuiCol.Text, 0.8, 0.02, 0.02, 1)
+                        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.ConditionFailColor)
                     end
                     ImGui.Text(tostring(Strings.FormatTime(math.max(0, data.duration / 1000))))
                     ImGui.PopStyleColor()
@@ -310,10 +239,8 @@ function Module:Render()
         if ImGui.CollapsingHeader("Immune Target List") then
             ImGui.Indent()
             if ImGui.BeginTable("Immune", 2, bit32.bor(ImGuiTableFlags.None, ImGuiTableFlags.Borders)) then
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
                 ImGui.TableSetupColumn('Id', (ImGuiTableColumnFlags.WidthFixed), 70.0)
                 ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthStretch), 250.0)
-                ImGui.PopStyleColor()
                 ImGui.TableHeadersRow()
                 for id, data in pairs(self.TempSettings.MezImmune) do
                     ImGui.TableNextColumn()
@@ -328,14 +255,11 @@ function Module:Render()
     end
 end
 
-function Module:Pop()
-    Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
 function Module:HandleMezBroke(mobName, breakerName)
     Logger.log_debug("%s broke mez on ==> %s", breakerName, mobName)
-    Comms.HandleAnnounce(string.format("\ar MEZ Broken: %s woke up \ag -> \ay %s \ag <- \ax", breakerName, mobName), Config:GetSetting('MezAnnounceGroup'),
-        Config:GetSetting('MezAnnounce'))
+    Comms.HandleAnnounce(
+        Comms.FormatChatEvent("Mez Broken", mobName, breakerName), Config:GetSetting('MezAnnounceGroup'),
+        Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
 end
 
 function Module:AddImmuneTarget(mobId, mobData)
@@ -394,12 +318,11 @@ function Module:MezNow(mezId, useAE, useAA)
                 Core.DoCmd("/face fast")
                 -- Delay to wait till face finishes
                 mq.delay(5)
-                Comms.HandleAnnounce(string.format("\aw I AM \ar AE AA MEZZING \ag Beam of Slumber"), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+                Comms.HandleAnnounce(Comms.FormatChatEvent("Mez", "AoE Around " .. (mq.TLO.Spawn(mezId).CleanName() or "Unknown"), "AA: Beam of Slumber"),
+                    Config:GetSetting('MezAnnounceGroup'),
+                    Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
                 Casting.UseAA("Beam of Slumber", mezId)
-                Comms.HandleAnnounce(string.format("\aw I JUST CAST \ar AE AA MEZ \ag Beam of Slumber"), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
-                mq.doevents()
+                mq.doevents('ImmuneMez')
                 return
             elseif (mq.TLO.Me.GemTimer(aeMezSpell.RankName())() or -1) == 0 then
                 local maxWaitToMez = 1500 + (mq.TLO.Window("CastingWindow").Open() and (mq.TLO.Me.Casting.MyCastTime() or 3000) or 0)
@@ -410,6 +333,7 @@ function Module:MezNow(mezId, useAE, useAA)
                     end
                     mq.delay(50)
                     mq.doevents()
+                    Events.DoEvents()
                     maxWaitToMez = maxWaitToMez - 50
                 end
                 if maxWaitToMez <= 0 and not Casting.SpellReady(aeMezSpell) then
@@ -419,46 +343,46 @@ function Module:MezNow(mezId, useAE, useAA)
             else
                 Logger.log_verbose("Mez: Our AEMez Spell (%s) or AA does not appear to be ready.", aeMezSpell)
             end
+        end
 
-            if Casting.SpellReady(aeMezSpell) then
-                Comms.HandleAnnounce(string.format("\aw I AM \ar AE SPELL MEZZING \ag %s", aeMezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+        -- we might have waited.
+        if Casting.SpellReady(aeMezSpell) then
+            Comms.HandleAnnounce(
+                Comms.FormatChatEvent("Mez", "AoE Around " .. (mq.TLO.Spawn(mezId).CleanName() or "Unknown"), aeMezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
+                Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
 
-                if Core.MyClassIs("brd") then
-                    Casting.UseSong(aeMezSpell.RankName(), mezId, false, 2)
-                else
-                    Casting.UseSpell(aeMezSpell.RankName(), mezId, false, true, 2)
-                end
-                Comms.HandleAnnounce(string.format("\aw I JUST CAST \ar AE SPELL MEZ \ag %s", aeMezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+            if Core.MyClassIs("brd") then
+                Casting.UseSong(aeMezSpell.RankName(), mezId, false, 2)
+            else
+                Casting.UseSpell(aeMezSpell.RankName(), mezId, false, true, 2)
             end
         end
+
         -- In case they're mez immune
-        mq.doevents()
+        mq.doevents('ImmuneMez')
     else
         Logger.log_debug("Performing Single Target MEZ --> %d", mezId)
         if useAA and Core.MyClassIs("brd") and Casting.AAReady("Dirge of the Sleepwalker") and Config:GetSetting('DoAAMez') then
             -- Bard AA Mez is Dirge of the Sleepwalker
             -- Only bards have single target AA Mez
             -- Cast and Return
-            Comms.HandleAnnounce("\aw I AM USING \ar BRD AA MEZ \ag Dirge of the Sleepwalker", Config:GetSetting('MezAnnounceGroup'),
-                Config:GetSetting('MezAnnounce'))
+            Comms.HandleAnnounce(
+                Comms.FormatChatEvent("Mez", mq.TLO.Spawn(mezId).CleanName(), "AA: Dirge of the Sleepwalker"),
+                Config:GetSetting('MezAnnounceGroup'),
+                Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
             Casting.UseAA("Dirge of the Sleepwalker", mezId)
-            Comms.HandleAnnounce("\aw I JUST CAST \ar BRD AA MEZ \ag Dirge of the Sleepwalker", Config:GetSetting('MezAnnounceGroup'),
-                Config:GetSetting('MezAnnounce'))
 
-            mq.doevents()
-
-            if Casting.GetLastCastResultId() == Config.Constants.CastResults.CAST_SUCCESS then
-                Comms.HandleAnnounce(string.format("\ar JUST MEZZED \aw -> \ay %s <- Using: \at%s",
-                    mq.TLO.Spawn(mezId).CleanName(), "Dirge of the Sleepwalker"), Config:GetSetting('CharmAnnounceGroup'), Config:GetSetting('CharmAnnounce'))
+            mq.doevents('ImmuneMez')
+            if Casting.GetLastCastResultId() == Globals.Constants.CastResults.CAST_SUCCESS then
+                Comms.HandleAnnounce(Comms.FormatChatEvent("Mez Success", mq.TLO.Spawn(mezId).CleanName(), "AA:Dirge of the Sleepwalker"), Config:GetSetting('MezAnnounceGroup'),
+                    Config:GetSetting('MezAnnounce'),
+                    Config:GetSetting('AnnounceToRaidIfInRaid'))
             else
-                Comms.HandleAnnounce(string.format("\ar MEZ Failed: \ag -> \ay %s \ag <-", mq.TLO.Spawn(mezId).CleanName()), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+                Comms.HandleAnnounce(Comms.FormatChatEvent("Mez Failed", mq.TLO.Spawn(mezId).CleanName(), "AA:Dirge of the Sleepwalker"), Config:GetSetting('MezAnnounceGroup'),
+                    Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
             end
 
-            mq.doevents()
-
+            mq.doevents('ImmuneMez')
             return
         end
 
@@ -479,6 +403,7 @@ function Module:MezNow(mezId, useAE, useAA)
                     end
                     mq.delay(50)
                     mq.doevents()
+                    Events.DoEvents()
                     maxWaitToMez = maxWaitToMez - 50
                 end
                 if maxWaitToMez <= 0 and not Casting.SpellReady(mezSpell) then
@@ -489,9 +414,9 @@ function Module:MezNow(mezId, useAE, useAA)
             end
         end
 
+        -- we might have waited.
         if Casting.SpellReady(mezSpell) then
             if Core.MyClassIs("brd") then
-                -- TODO SongNow MezSpell
                 Casting.UseSong(mezSpell.RankName(), mezId, false, 2)
             else
                 -- This may not work for Bards but will work for NEC/ENCs
@@ -499,19 +424,18 @@ function Module:MezNow(mezId, useAE, useAA)
             end
 
             -- In case they're mez immune
-            mq.doevents()
+            mq.doevents('ImmuneMez')
 
-            if Casting.GetLastCastResultId() == Config.Constants.CastResults.CAST_SUCCESS then
-                Comms.HandleAnnounce(string.format("\ar JUST MEZZED \aw -> \ay %s \aw <- Using: \at%s",
-                        mq.TLO.Spawn(mezId).CleanName(), mezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+            if Casting.GetLastCastResultId() == Globals.Constants.CastResults.CAST_SUCCESS then
+                Comms.HandleAnnounce(Comms.FormatChatEvent("Mez Success", mq.TLO.Spawn(mezId).CleanName(), mezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
+                    Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
             else
-                Comms.HandleAnnounce(string.format("\ar MEZ Failed \ag -> \ay %s \ag <-", mq.TLO.Spawn(mezId).CleanName()), Config:GetSetting('MezAnnounceGroup'),
-                    Config:GetSetting('MezAnnounce'))
+                Comms.HandleAnnounce(Comms.FormatChatEvent("Mez Failed", mq.TLO.Spawn(mezId).CleanName(), mezSpell.RankName()), Config:GetSetting('MezAnnounceGroup'),
+                    Config:GetSetting('MezAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
             end
         end
 
-        mq.doevents()
+        mq.doevents('ImmuneMez')
     end
 
     Targeting.SetTarget(currentTargetID, true)
@@ -568,12 +492,14 @@ function Module:AEMezCheck()
     -- Call MezNow and pass the AE flag and allow it to use the AA if the Spell isn't ready.
     Logger.log_debug("\awNOTICE:\ax Re-targeting to our main assist's mob.")
 
-    if Combat.FindBestAutoTargetCheck() then
+    if not Globals.BackOffFlag then
         Combat.FindBestAutoTarget()
-        self:MezNow(Config.Globals.AutoTargetID, true, true)
+        if Globals.AutoTargetID > 0 then
+            self:MezNow(Globals.AutoTargetID, true, true)
+        end
     end
 
-    mq.doevents()
+    mq.doevents('ImmuneMez')
 end
 
 function Module:RemoveCCTarget(mobId)
@@ -601,7 +527,7 @@ function Module:AddCCTarget(mobId)
     self.TempSettings.MezTracker[mobId] = {
         name = mq.TLO.Target.CleanName(),
         duration = mq.TLO.Target.Mezzed.Duration() or 0,
-        last_check = os.clock() * 1000,
+        last_check = Globals.GetTimeMS(),
         mez_spell = mq.TLO
             .Target.Mezzed() or "None",
     }
@@ -612,14 +538,14 @@ function Module:IsValidMezTarget(mobId)
 
     if Targeting.IsTempPet(spawn) then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d as it is a temp PC pet.",
-            spawn.ID(), spawn.CleanName(), spawn.Level())
+            spawn.ID(), spawn.CleanName(), spawn.Level() or 0)
         return false
     end
 
     -- Is the mob ID in our mez immune list? If so, skip.
     if self:IsMezImmune(mobId) then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d as it is in our immune list.",
-            spawn.ID(), spawn.CleanName(), spawn.Level())
+            spawn.ID(), spawn.CleanName(), spawn.Level() or 0)
         return false
     end
     -- Here's where we can add a necro check to see if the spawn is undead or not. If it's not
@@ -635,19 +561,19 @@ function Module:IsValidMezTarget(mobId)
 
     if spawn and not spawn.LineOfSight() then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d - No LOS.", spawn.ID(),
-            spawn.CleanName(), spawn.Level())
+            spawn.CleanName(), spawn.Level() or 0)
         return false
     end
 
     if (spawn.PctHPs() or 0) < Config:GetSetting('MezStopHPs') then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d - HPs too low.", spawn.ID(),
-            spawn.CleanName(), spawn.Level())
+            spawn.CleanName(), spawn.Level() or 0)
         return false
     end
 
     if (spawn.Distance() or 999) > Config:GetSetting('MezRadius') then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d - Out of Mez Radius",
-            spawn.ID(), spawn.CleanName(), spawn.Level())
+            spawn.ID(), spawn.CleanName(), spawn.Level() or 0)
         return false
     end
 
@@ -723,7 +649,7 @@ function Module:ProcessMezList()
         local spawn = mq.TLO.Spawn(id)
         Logger.log_debug("\ayProcessMezList(%d) :: Checking...", id)
 
-        if not spawn or not spawn() or spawn.Dead() or Targeting.TargetIsType("corpse", spawn) or (spawn.ID() or 0) == Config.Globals.AutoTargetID then
+        if not spawn or not spawn() or spawn.Dead() or Targeting.TargetIsType("corpse", spawn) or (spawn.ID() or 0) == Globals.AutoTargetID then
             table.insert(removeList, id)
             Logger.log_debug("\ayProcessMezList(%d) :: Can't find mob removing...", id)
         else
@@ -743,7 +669,7 @@ function Module:ProcessMezList()
                         Strings.FormatTime(spell.MyCastTime() / 100), spawn.Distance(),
                         Strings.BoolToColorString(spawn.LineOfSight()))
                 else
-                    if id == Config.Globals.AutoTargetID then
+                    if id == Globals.AutoTargetID then
                         Logger.log_debug("\ayProcessMezList(%d) :: Mob is MA's target skipping", id)
                         table.insert(removeList, id)
                     else
@@ -761,7 +687,6 @@ function Module:ProcessMezList()
 
                         --mez the thing, if it isn't (an AE mez or someone else's mez may have hit it before we got to it). If it is, we will update timer below.
                         Targeting.SetTarget(id)
-                        ---@diagnostic disable-next-line: undefined-field -- [Doesn't like the .ID on group assist target, but it is valid]
                         if Config:GetSetting('DoAEMez') and not mq.TLO.Target.Mezzed() and mq.TLO.Me.GroupAssistTarget.ID() ~= id then
                             --lets make sure we didn't have more mobs dogpile on, making an AE mez more appropriate
                             local aeMezSpell = self:GetAEMezSpell()
@@ -773,7 +698,7 @@ function Module:ProcessMezList()
 
                         --lets check to see if it is mezzed now/again and use a single target mez if necessary:
                         Targeting.SetTarget(id)
-                        if id ~= Config.Globals.AutoTargetID and Config:GetSetting('DoSTMez') and not mq.TLO.Target.Mezzed() then
+                        if id ~= Globals.AutoTargetID and Config:GetSetting('DoSTMez') and not mq.TLO.Target.Mezzed() then
                             Logger.log_debug("Single target mez is (still) needed.")
                             self:MezNow(id, false, true)
                         end
@@ -820,15 +745,17 @@ end
 
 function Module:UpdateTimings()
     for _, data in pairs(self.TempSettings.MezTracker) do
-        local timeDelta = (os.clock() * 1000) - data.last_check
+        local timeDelta = (Globals.GetTimeMS()) - data.last_check
 
         data.duration = data.duration - timeDelta
 
-        data.last_check = os.clock() * 1000
+        data.last_check = Globals.GetTimeMS()
     end
 end
 
-function Module:GiveTime(combat_state)
+function Module:GiveTime()
+    local combat_state = Combat.GetCachedCombatState()
+
     if not Core.IsMezzing() then return end
 
     -- dead... whoops
@@ -843,53 +770,11 @@ function Module:GiveTime(combat_state)
     self:DoMez()
 end
 
-function Module:OnDeath()
-end
-
-function Module:OnZone()
-    self:ResetMezStates()
-    -- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
-end
-
-function Module:DoGetState()
-    -- Reture a reasonable state if queried
-    return "TODO"
-end
-
-function Module:GetCommandHandlers()
-    return { module = self._name, CommandHandlers = {}, }
-end
-
-function Module:GetFAQ()
-    return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-    local params = ...
-    local handled = false
-    -- /rglua cmd handler
-    return handled
-end
-
-function Module:Shutdown()
-    Logger.log_debug("Mez Module Unloaded.")
-end
-
-mq.bind("/rgupmez", function()
-    Modules:ExecModule("Mez", "UpdateMezList")
-end)
-
 function Module:StopAttack()
     if mq.TLO.Me.Combat() then
         Logger.log_debug("\awMEZ:\ax Stopping attack to avoid breaking mez.")
         Core.DoCmd("/attack off")
-        mq.delay(500, function() return not mq.TLO.Me.Combat() end)
+        mq.delay(500, function() return mq.TLO.Me.Combat() == false end)
     end
 end
 
@@ -897,7 +782,7 @@ function Module:StopCast()
     if mq.TLO.Me.Casting() then
         Logger.log_debug("\awMEZ:\ax Stopping cast or song so I can mez.")
         mq.TLO.Me.StopCast()
-        mq.delay("3s", function() return not mq.TLO.Window("CastingWindow").Open() end)
+        mq.delay("3s", function() return mq.TLO.Window("CastingWindow").Open() == false end)
     end
 end
 

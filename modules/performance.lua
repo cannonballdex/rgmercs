@@ -1,18 +1,22 @@
 -- Sample Performance Monitor Class Module
 local mq                  = require('mq')
 local Config              = require('utils.config')
+local Globals             = require("utils.globals")
 local Ui                  = require("utils.ui")
 local Comms               = require("utils.comms")
 local Modules             = require("utils.modules")
 local Logger              = require("utils.logger")
 local Strings             = require("utils.strings")
 local ImPlot              = require('ImPlot')
-local Set                 = require('mq.Set')
 local ScrollingPlotBuffer = require('utils.scrolling_plot_buffer')
+local Base                = require("modules.base")
 
 local Module              = { _version = '0.1a', _name = "Perf", _author = 'Derple', }
 Module.__index            = Module
-Module.DefaultConfig      = {}
+setmetatable(Module, { __index = Base, })
+Module.FAQ                = {}
+Module.CommandHandlers    = {}
+
 Module.MaxFrameStep       = 5.0
 Module.GoalMaxFrameTime   = 0
 Module.CurMaxMaxFrameTime = 0
@@ -20,11 +24,10 @@ Module.xAxes              = {}
 Module.SettingsLoaded     = false
 Module.FrameTimingData    = {}
 Module.MaxFrameTime       = 0
-Module.LastExtentsCheck   = os.clock()
-Module.FAQ                = {}
-Module.SaveRequested      = nil
+Module.LastExtentsCheck   = Globals.GetTimeSeconds()
 
-Module.DefaultConfig      = {
+
+Module.DefaultConfig = {
     ['SecondsToStore']                         = {
         DisplayName = "Seconds to Store",
         Group = "General",
@@ -59,59 +62,8 @@ Module.DefaultConfig      = {
     },
 }
 
-local function getConfigFileName()
-    return mq.configDir ..
-        '/rgmercs/PCConfigs/' .. Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-    self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-    if not self.SaveRequested then return end
-
-    mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-    if self.SaveRequested.doBroadcast == true then
-        Comms.BroadcastMessage(self._name, "LoadSettings")
-    end
-
-    Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-    self.SaveRequested = nil
-end
-
-function Module:LoadSettings()
-    Logger.log_debug("Performance Monitor Module Loading Settings for: %s.", Config.Globals.CurLoadedChar)
-    local settings_pickle_path = getConfigFileName()
-    local settings = {}
-    local firstSaveRequired = false
-
-    local config, err = loadfile(settings_pickle_path)
-    if err or not config then
-        Logger.log_error("\ay[Performance Monitor]: Unable to load global settings file(%s), creating a new one!",
-            settings_pickle_path)
-        firstSaveRequired = true
-    else
-        settings = config()
-    end
-
-    Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-
-    self.SettingsLoaded = true
-end
-
-function Module.New()
-    local newModule = setmetatable({}, Module)
-    return newModule
-end
-
-function Module:Init()
-    Logger.log_debug("Performance Monitor Module Loaded.")
-    self:LoadSettings()
-
-    return { self = self, defaults = self.DefaultConfig, }
+function Module:New()
+    return Base.New(self)
 end
 
 function Module:ShouldRender()
@@ -119,19 +71,18 @@ function Module:ShouldRender()
 end
 
 function Module:Render()
-    Ui.RenderPopAndSettings(self._name)
+    Base.Render(self)
 
-    local pressed
     if not self.SettingsLoaded then return end
 
-    if os.clock() - self.LastExtentsCheck > 0.01 then
+    if Globals.GetTimeSeconds() - self.LastExtentsCheck > 0.01 then
         self.GoalMaxFrameTime = 0
-        self.LastExtentsCheck = os.clock()
+        self.LastExtentsCheck = Globals.GetTimeSeconds()
         for _, data in pairs(self.FrameTimingData) do
             for idx, time in ipairs(data.frameTimes.DataY) do
                 -- is this entry visible?
-                local visible = data.frameTimes.DataX[idx] > os.clock() - Config:GetSetting('SecondsToStore') and
-                    data.frameTimes.DataX[idx] < os.clock()
+                local visible = data.frameTimes.DataX[idx] > Globals.GetTimeSeconds() - Config:GetSetting('SecondsToStore') and
+                    data.frameTimes.DataX[idx] < Globals.GetTimeSeconds()
                 if visible and time > self.GoalMaxFrameTime then
                     self.GoalMaxFrameTime = math.ceil(time / self.MaxFrameStep) * self.MaxFrameStep
                 end
@@ -145,7 +96,7 @@ function Module:Render()
 
     if ImPlot.BeginPlot("Frame Times for RGMercs Modules") then
         ImPlot.SetupAxes("Time (s)", "Frame Time (ms)")
-        ImPlot.SetupAxisLimits(ImAxis.X1, os.clock() - Config:GetSetting('SecondsToStore'), os.clock(), ImGuiCond.Always)
+        ImPlot.SetupAxisLimits(ImAxis.X1, Globals.GetTimeSeconds() - Config:GetSetting('SecondsToStore'), Globals.GetTimeSeconds(), ImGuiCond.Always)
         ImPlot.SetupAxisLimits(ImAxis.Y1, 1, self.CurMaxMaxFrameTime, ImGuiCond.Always)
 
         for _, module in pairs(Modules:GetModuleOrderedNames()) do
@@ -165,66 +116,26 @@ function Module:Render()
     end
 end
 
-function Module:Pop()
-    Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
-function Module:GiveTime(combat_state)
-end
-
 function Module:OnFrameExec(module, frameTime)
     if not Config:GetSetting('EnablePerfMonitoring') then return end
 
     if not self.FrameTimingData[module] then
         self.FrameTimingData[module] = {
             mutexLock = false,
-            lastFrame = os.clock(),
+            lastFrame = Globals.GetTimeSeconds(),
             frameTimes =
                 ScrollingPlotBuffer:new(),
         }
     end
 
-    self.FrameTimingData[module].lastFrame = os.clock()
-    self.FrameTimingData[module].frameTimes:AddPoint(os.clock(), frameTime)
-end
-
-function Module:OnDeath()
-    -- Death Handler
-end
-
-function Module:OnZone()
-    -- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
+    self.FrameTimingData[module].lastFrame = Globals.GetTimeSeconds()
+    self.FrameTimingData[module].frameTimes:AddPoint(Globals.GetTimeSeconds(), frameTime)
 end
 
 function Module:DoGetState()
     if not Config:GetSetting('EnablePerfMonitoring') then return "Disabled" end
 
     return "Enabled"
-end
-
-function Module:GetCommandHandlers()
-    return { module = self._name, CommandHandlers = {}, }
-end
-
-function Module:GetFAQ()
-    return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-    local params = ...
-    local handled = false
-    -- /rglua cmd handler
-    return handled
-end
-
-function Module:Shutdown()
-    Logger.log_debug("Performance Monitor Module Unloaded.")
 end
 
 return Module

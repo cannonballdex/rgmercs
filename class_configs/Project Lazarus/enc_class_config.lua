@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Comms        = require("utils.comms")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
@@ -321,10 +322,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -338,7 +338,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -382,7 +382,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         { --AA Stuns, Runes, etc, moved from previous home in DPS
@@ -426,7 +426,7 @@ local _ClassConfig = {
     },
     ['HelperFunctions'] = { --used to autoinventory our crystals after summon. Crystal is a group-wide spell on Laz.
         StashCrystal = function(aaName)
-            mq.delay("2s", function() return mq.TLO.Cursor() and mq.TLO.Cursor.ID() == mq.TLO.Me.AltAbility(aaName).Spell.Base(1)() end)
+            mq.delay("2s", function() return mq.TLO.Cursor.ID() == mq.TLO.Me.AltAbility(aaName).Spell.Base(1)() end)
 
             if not mq.TLO.Cursor() then
                 Logger.log_debug("No valid item found on cursor, item handling aborted.")
@@ -607,7 +607,7 @@ local _ClassConfig = {
                 active_cond = function(self, spell) return mq.TLO.Me.FindBuff("id " .. tostring(spell.ID()))() ~= nil end,
                 cond = function(self, spell, target)
                     if self:GetResolvedActionMapItem('HasteManaCombo') or not Targeting.TargetIsAMelee(target) then return false end
-                    return Casting.GroupBuffCheck(spell, target) and Casting.GroupBuffCheck(mq.TLO.Spell("Unified Alacrity"), target) -- Fixes bad stacking check
+                    return Casting.GroupBuffCheck(spell, target) and Casting.AddedBuffCheck(40597, target) -- Fixes bad stacking check
                 end,
             },
             {
@@ -615,7 +615,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoHateBuff') end,
                 cond = function(self, spell, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.CastReady(spell) and Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -733,7 +733,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoSpinStun') > 1 end,
                 cond = function(self, spell, target)
                     if (Config:GetSetting('DoSpinStun') == 2 and Core.GetMainAssistPctHPs() > Config:GetSetting('EmergencyStart')) then return false end
-                    return Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -750,7 +750,7 @@ local _ClassConfig = {
                 type = "AA",
                 load_cond = function() return Config:GetSetting("DoSoothing") end,
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and (mq.TLO.Me.TargetOfTarget.ID() or Core.GetMainAssistId()) ~= Core.GetMainAssistId()
+                    return Globals.AutoTargetIsNamed and (mq.TLO.Me.TargetOfTarget.ID() or Core.GetMainAssistId()) ~= Core.GetMainAssistId()
                 end,
             },
 
@@ -760,7 +760,7 @@ local _ClassConfig = {
                 name = "Self Stasis",
                 type = "AA",
                 cond = function(self, aaName)
-                    return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Config.Globals.AutoTargetID
+                    return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Globals.AutoTargetID
                 end,
                 post_activate = function(self, aaName, success)
                     if success and mq.TLO.Me.Buff("Self Stasis")() then
@@ -781,8 +781,8 @@ local _ClassConfig = {
                 type = "AA",
                 load_cond = function() return Config:GetSetting("DoBeguilers") end,
                 cond = function(self, aaName, target)
-                    if target.ID() == Config.Globals.AutoTargetID then return false end
-                    return Targeting.IHaveAggro(100) and not Targeting.IsNamed(target)
+                    if target.ID() == Globals.AutoTargetID then return false end
+                    return Targeting.IHaveAggro(100) and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -809,7 +809,7 @@ local _ClassConfig = {
                 name = "Arcane Whisper",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -868,7 +868,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting("DoStrangleDot") end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -893,7 +893,7 @@ local _ClassConfig = {
             {
                 name = "Focus of Arcanum",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Calculated Insanity",
@@ -902,7 +902,7 @@ local _ClassConfig = {
             {
                 name = "Mental Contortion",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Chromatic Haze",
@@ -919,7 +919,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting("DoCrippleAA") end,
                 cond = function(self, aaName, target)
                     return Targeting.GetXTHaterCount() >= Config:GetSetting('AECount') or
-                        (not Config:GetSetting('DoCrippleSpell') and Targeting.IsNamed(target) and Casting.DetSpellAACheck(aaName))
+                        (not Config:GetSetting('DoCrippleSpell') and Globals.AutoTargetIsNamed and Casting.DetSpellAACheck(aaName))
                 end,
             },
             {
@@ -927,7 +927,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting("DoCrippleSpell") end,
                 cond = function(self, spell, target)
-                    return Targeting.IsNamed(target) and Casting.DetSpellCheck(spell)
+                    return Globals.AutoTargetIsNamed and Casting.DetSpellCheck(spell)
                 end,
             },
             -- { --Temporarily commented out due to high prevalance of xtarget bugs with this pet. will revisit.
@@ -964,7 +964,7 @@ local _ClassConfig = {
                 name = "TashSpell",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return Casting.DetSpellCheck(spell) and (not Casting.TargetHasBuff("Bite of Tashani") or Targeting.IsNamed(target))
+                    return Casting.DetSpellCheck(spell) and (not Casting.TargetHasBuff("Bite of Tashani") or Globals.AutoTargetIsNamed)
                 end,
             },
         },
@@ -1403,7 +1403,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

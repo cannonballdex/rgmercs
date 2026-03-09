@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -288,6 +289,23 @@ return {
             "Jarring Shock",
             "Jarring Impact",
         },
+        ['SnareDisc'] = {
+            "Tendon Slice",
+            "Tendon Shred",
+            "Tendon Rip",
+            "Tendon Rupture",
+            "Tendon Tear",
+            "Tendon Gash",
+            "Tendon Slash",
+            "Tendon Lacerate",
+            "Tendon Shear",
+            "Tendon Sever",
+            "Tendon Cleave",
+            "Crippling Strike",
+            "Leg Slice",
+            "Leg Cut",
+            "Leg Strike",
+        },
     },
     ['RotationOrder']   = {
         -- Downtime doesn't have state because we run the whole rotation at once.
@@ -297,6 +315,16 @@ return {
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and
                     Casting.OkayToBuff() and Casting.AmIBuffable()
+            end,
+        },
+        { --Keep things from running
+            name = 'Snare',
+            state = 1,
+            steps = 1,
+            load_cond = function() return Config:GetSetting('Timer10Disc') == 2 end,
+            targetId = function(self) return Targeting.CheckForAutoTargetID() end,
+            cond = function(self, combat_state)
+                return combat_state == "Combat" and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         {
@@ -393,6 +421,7 @@ return {
                         { name = 'Daxethrow', count_name = 'AutoAxeCount', },
                         { name = 'Daxeof',    count_name = 'AutoAxeCount', },
                         { name = 'Dicho',     count_name = 'DichoAxeCount', },
+                        { name = 'SnareDisc', count_name = 'AutoAxeCount', },
                     }
 
                     local summonNeededItem = function(summonSkill, itemId, count)
@@ -467,6 +496,15 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell)
                     return Casting.SelfBuffCheck(discSpell)
+                end,
+            },
+        },
+        ['Snare'] = {
+            {
+                name = "SnareDisc",
+                type = "Disc",
+                cond = function(self, discSpell, target)
+                    return Casting.DetSpellCheck(discSpell) and Targeting.MobHasLowHP(target) and not Casting.SnareImmuneTarget(target)
                 end,
             },
         },
@@ -648,6 +686,7 @@ return {
             {
                 name = "Daxethrow",
                 type = "Disc",
+                load_cond = function(self) return Config:GetSetting('Timer10Disc') == 1 end,
             },
             {
                 name = "SharedBuff",
@@ -701,8 +740,8 @@ return {
                 custom_func = function(self)
                     if not Casting.AAReady("Braxi's Howl") then return false end
                     local ret = false
-                    ret = ret or Casting.UseAA("Braxi's Howl", Config.Globals.AutoTargetID)
-                    ret = ret or Casting.UseDisc(self.ResolvedActionMap['Dicho'], Config.Globals.AutoTargetID)
+                    ret = ret or Casting.UseAA("Braxi's Howl", Globals.AutoTargetID)
+                    ret = ret or Casting.UseDisc(self.ResolvedActionMap['Dicho'], Globals.AutoTargetID)
 
                     return ret
                 end,
@@ -751,7 +790,6 @@ return {
                 cond = function(self, aaName)
                     return Config:GetSetting('DoBattleLeap') and not Casting.IHaveBuff("Battle Leap Warcry") and
                         not Casting.IHaveBuff("Group Bestial Alignment")
-                        ---@diagnostic disable-next-line: undefined-field --Defs are not updated with HeadWet
                         and not mq.TLO.Me.HeadWet() --Stops Leap from launching us above the water's surface
                 end,
             },
@@ -796,6 +834,7 @@ return {
             return ret
         end,
         PreEngage = function(target)
+            if not target or not target() then return end
             local openerAbility = Core.GetResolvedActionMapItem('CheapShot')
 
             if not openerAbility then return end
@@ -803,7 +842,7 @@ return {
             Logger.log_debug("\ayPreEngage(): Testing Opener ability = %s", openerAbility or "None")
 
             if openerAbility and mq.TLO.Me.CombatAbilityReady(openerAbility)() and mq.TLO.Me.PctEndurance() >= 5 and Config:GetSetting("DoOpener") and Targeting.GetTargetDistance() < 50 then
-                Casting.UseDisc(openerAbility, target)
+                Casting.UseDisc(openerAbility, target.ID())
                 Logger.log_debug("\agPreEngage(): Using Opener ability = %s", openerAbility or "None")
             else
                 Logger.log_debug("\arPreEngage(): NOT using Opener ability = %s, DoOpener = %s, Distance to Target = %d, Endurance = %d", openerAbility or "None",
@@ -904,9 +943,34 @@ return {
             Tooltip = "Enable using Disconcerting Discipline",
             Default = true,
         },
+        ['Timer10Disc']     = {
+            DisplayName = "Timer 10 Disc Choice",
+            Group = "Abilities",
+            Header = "Damage",
+            Category = "Direct",
+            Index = 101,
+            Tooltip = "Choose between your Axe Throw Disc or Snare Disc (Leg/Tendon line). The timer is shared.",
+            Type = "Combo",
+            ComboOptions = { 'Throw Disc', 'Snare Disc', },
+            Default = 1,
+            Min = 1,
+            Max = 2,
+            RequiresLoadoutChange = true,
+        },
+        ['SnareCount']      = {
+            DisplayName = "Snare Max Mob Count",
+            Group = "Abilities",
+            Header = "Debuffs",
+            Category = "Snare",
+            Index = 101,
+            Tooltip = "Only use snare if there are [x] or fewer mobs on aggro. Helpful for AoE groups.",
+            Default = 3,
+            Min = 1,
+            Max = 99,
+        },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

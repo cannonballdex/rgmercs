@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require('utils.globals')
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -21,7 +22,7 @@ return {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.05, g = 0.5, b = 0.05, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
@@ -260,10 +261,9 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -286,7 +286,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         { --Keep things from running
@@ -296,7 +296,7 @@ return {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.OkayToNotHeal() and not Targeting.IsNamed(Targeting.GetAutoTarget()) and
+                return combat_state == "Combat" and Core.OkayToNotHeal() and not Globals.AutoTargetIsNamed and
                     Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
@@ -359,8 +359,8 @@ return {
                     Core.DoCmd('/squelch face fast')
                     Movement:DoStickCmd("10 moveback")
                 elseif tooFar or forceMove then
-                    Core.DoCmd("/squelch /nav id %d distance=%d lineofsight=on", Config.Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
-                    Core.DoCmd('/squelch face fast')
+                    Movement:DoNav(true, "id %d distance=%d lineofsight=on", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
+                    Core.DoCmd('/squelch /face fast')
                 end
             end
         end,
@@ -466,7 +466,7 @@ return {
                 type = "Spell",
                 load_cond = function(self) return Config:GetSetting('DoJoltSpell') end,
                 cond = function(self, spell, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 80
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 80
                 end,
             },
             {
@@ -525,7 +525,7 @@ return {
                 name = "SwarmDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoSwarmDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoSwarmDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -630,6 +630,7 @@ return {
                     return Casting.IHaveBuff(Casting.GetAASpell(aaName))
                 end,
                 cond = function(self, aaName, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -639,6 +640,7 @@ return {
                 load_cond = function() return Config:GetSetting('DoMoveBuffs') and not Casting.CanUseAA("Spirit of Eagle") end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1003,7 +1005,7 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
                 "  Up until T1 progression, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..

@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
@@ -113,7 +114,6 @@ local _ClassConfig = {
         },
         ['GroupHeal'] = { -- Laz specific, some taken from cleric, some custom
             "Word of Reconstitution",
-            -- "Moonshadow", -- The above spell is superior and both level 70
             "Word of Redemption",
             "Word of Restoration",
             "Word of Vigor",
@@ -338,6 +338,9 @@ local _ClassConfig = {
             "Succor",
             "Lesser Succor",
         },
+        ['QuickGroupHeal'] = {
+            "Moon Shadow",
+        },
     },
     ['HealRotationOrder'] = {
         {
@@ -369,6 +372,10 @@ local _ClassConfig = {
                 end,
             },
             {
+                name = "QuickGroupHeal",
+                type = "Spell",
+            },
+            {
                 name = "Convergence of Spirits",
                 type = "AA",
             },
@@ -386,6 +393,13 @@ local _ClassConfig = {
             },
         },
         ['GroupHealPoint'] = {
+            {
+                name = "QuickGroupHeal",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    return Targeting.BigGroupHealsNeeded()
+                end,
+            },
             {
                 name = "GroupHeal",
                 type = "Spell",
@@ -426,7 +440,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -434,10 +448,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds tops.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Core.OkayToNotHeal() and Casting.OkayToBuff()
             end,
@@ -463,7 +476,7 @@ local _ClassConfig = {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.OkayToNotHeal() and not Targeting.IsNamed(Targeting.GetAutoTarget()) and
+                return combat_state == "Combat" and Core.OkayToNotHeal() and not Globals.AutoTargetIsNamed and
                     Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
@@ -532,7 +545,7 @@ local _ClassConfig = {
                 name = "Nature Walkers Scimitar",
                 type = "Item",
                 cond = function(self, itemName, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Targeting.MobNotLowHP(target) and Casting.DetItemCheck(itemName, target)
                 end,
             },
@@ -541,7 +554,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoFlameLickDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -558,7 +571,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoSwarmDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -567,40 +580,53 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoVengeanceDot') end,
                 cond = function(self, spell, target)
-                    if Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target) then return false end
+                    if Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
             {
                 name = "StunNuke",
                 type = "Spell",
-                load_cond = function() return Config:GetSetting('DoStunNuke') end,
+                load_cond = function() return Config:GetSetting('StunNukeUse') > 1 end,
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke() and Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    if Config:GetSetting('StunNukeUse') == 2 and not mq.TLO.Me.Song("Wrath of the Wilderness")() then return false end
+                    return Casting.HaveManaToNuke() and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             { -- in-game description is incorrect, mob must be targeted.
                 name = "TwinHealNuke",
                 type = "Spell",
-                load_cond = function() return Config:GetSetting('DoTwinHealNuke') end,
+                load_cond = function() return Config:GetSetting('TwinHealNukeUse') > 1 end,
                 cond = function(self, spell, target)
+                    if Config:GetSetting('TwinHealNukeUse') == 2 and not mq.TLO.Me.Song("Wrath of the Wilderness")() then return false end
                     return Casting.OkayToNuke() and not mq.TLO.Me.Buff("Twincast")()
+                end,
+            },
+            {
+                name = "Dawnstrike",
+                type = "Spell",
+                load_cond = function() return Config:GetSetting('DawnstrikeUse') > 1 end,
+                cond = function(self, spell, target)
+                    if Config:GetSetting('DawnstrikeUse') == 2 and not mq.TLO.Me.Song("Wrath of the Wilderness")() then return false end
+                    return Casting.OkayToNuke(true) and not mq.TLO.Me.Song("Shadow of Dawn")()
                 end,
             },
             {
                 name = "FireNuke",
                 type = "Spell",
-                load_cond = function() return Config:GetSetting('DoFireNuke') end,
+                load_cond = function() return Config:GetSetting('FireNukeUse') > 1 end,
                 cond = function(self, spell, target)
-                    return Casting.OkayToNuke(true)
+                    if Config:GetSetting('FireNukeUse') == 2 and not mq.TLO.Me.Song("Wrath of the Wilderness")() then return false end
+                    return Casting.OkayToNuke(true) and not mq.TLO.Me.Song("Shadow of Dawn")()
                 end,
             },
             {
                 name = "IceNuke",
                 type = "Spell",
-                load_cond = function() return Config:GetSetting('DoIceNuke') end,
+                load_cond = function() return Config:GetSetting('IceNukeUse') > 1 end,
                 cond = function(self, spell, target)
-                    return Casting.OkayToNuke(true)
+                    if Config:GetSetting('IceNukeUse') == 2 and not mq.TLO.Me.Song("Wrath of the Wilderness")() then return false end
+                    return Casting.OkayToNuke(true) and not mq.TLO.Me.Song("Shadow of Dawn")()
                 end,
             },
         },
@@ -663,7 +689,7 @@ local _ClassConfig = {
             },
             { -- Spire, the SpireChoice setting will determine which ability is displayed/used.
                 name_func = function(self)
-                    local spireAbil = string.format("Fundament: %s Spire of Nature", Config.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
+                    local spireAbil = string.format("Fundament: %s Spire of Nature", Globals.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
                     return Casting.CanUseAA(spireAbil) and spireAbil or "Spire Not Purchased/Selected"
                 end,
                 type = "AA",
@@ -744,6 +770,7 @@ local _ClassConfig = {
                     return Casting.IHaveBuff(Casting.GetAASpell(aaName))
                 end,
                 cond = function(self, aaName, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -753,6 +780,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoMoveBuffs') and not Casting.CanUseAA("Flight of Eagles") end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -796,7 +824,7 @@ local _ClassConfig = {
                 load_cond = function() return Config:GetSetting('DoGroupDmgShield') end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
-                    if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsMA(target) then return false end
+                    if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -805,7 +833,7 @@ local _ClassConfig = {
                 type = "AA",
                 active_cond = function(self, aaName) return true end,
                 cond = function(self, aaName, target)
-                    if Targeting.TargetIsMA(target) then return false end
+                    if Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -910,13 +938,14 @@ local _ClassConfig = {
             cond = function(self) return Core.IsModeActive("Heal") end,
             spells = {
                 { name = "HealSpell", },
+                { name = "QuickGroupHeal", },
                 { name = "GroupHeal", },
-                { name = "Elixir",      cond = function(self) return Config:GetSetting('DoElixir') end, },
-                { name = "SnareSpell",  cond = function(self) return Config:GetSetting('DoSnare') and not Casting.CanUseAA("Entrap") end, },
+                { name = "Elixir",         cond = function(self) return Config:GetSetting('DoElixir') end, },
+                { name = "SnareSpell",     cond = function(self) return Config:GetSetting('DoSnare') and not Casting.CanUseAA("Entrap") end, },
                 { name = "ReptileBuff", },
-                { name = "ATKDebuff",   cond = function(self) return Config:GetSetting('DoATKDebuff') end, },
-                { name = "FireDebuff",  cond = function(self) return Config:GetSetting('DoFireDebuff') and not Casting.CanUseAA("Hand of Ro") end, },
-                { name = "ColdDebuff",  cond = function(self) return Config:GetSetting('DoColdDebuff') end, },
+                { name = "ATKDebuff",      cond = function(self) return Config:GetSetting('DoATKDebuff') end, },
+                { name = "FireDebuff",     cond = function(self) return Config:GetSetting('DoFireDebuff') and not Casting.CanUseAA("Hand of Ro") end, },
+                { name = "ColdDebuff",     cond = function(self) return Config:GetSetting('DoColdDebuff') end, },
                 {
                     name = "PureBlood",
                     cond = function(self)
@@ -940,10 +969,11 @@ local _ClassConfig = {
                 },
                 { name = "CureCurse",      cond = function(self) return Config:GetSetting('KeepCurseMemmed') end, },
                 { name = "EvacSpell",      cond = function(self) return Config:GetSetting('KeepEvacMemmed') and not Casting.CanUseAA("Exodus") end, },
-                { name = "StunNuke",       cond = function(self) return Config:GetSetting('DoStunNuke') end, },
-                { name = "TwinHealNuke",   cond = function(self) return Config:GetSetting('DoTwinHealNuke') end, },
-                { name = "FireNuke",       cond = function(self) return Config:GetSetting('DoFireNuke') end, },
-                { name = "IceNuke",        cond = function(self) return Config:GetSetting('DoIceNuke') end, },
+                { name = "StunNuke",       cond = function(self) return Config:GetSetting('StunNukeUse') > 1 end, },
+                { name = "TwinHealNuke",   cond = function(self) return Config:GetSetting('TwinHealNukeUse') > 1 end, },
+                { name = "Dawnstrike",     cond = function(self) return Config:GetSetting('DawnstrikeUse') > 1 end, },
+                { name = "FireNuke",       cond = function(self) return Config:GetSetting('FireNukeUse') > 1 end, },
+                { name = "IceNuke",        cond = function(self) return Config:GetSetting('IceNukeUse') > 1 end, },
                 { name = "PBAEMagic",      cond = function(self) return Config:GetSetting('DoPBAE') end, },
                 { name = "IceRain",        cond = function(self) return Config:GetSetting('DoRain') end, },
                 { name = "FlameLickDot",   cond = function(self) return Config:GetSetting('DoFlameLickDot') end, },
@@ -1087,10 +1117,10 @@ local _ClassConfig = {
                 "Second Spire: Healing Power Buff to Self.\n" ..
                 "Third Spire: Large Group HP Buff.",
             Type = "Combo",
-            ComboOptions = Config.Constants.SpireChoices,
+            ComboOptions = Globals.Constants.SpireChoices,
             Default = 3,
             Min = 1,
-            Max = #Config.Constants.SpireChoices,
+            Max = #Globals.Constants.SpireChoices,
         },
         ['WolfSpiritChoice']  = {
             DisplayName = "Self Wolfbuff Choice:",
@@ -1162,7 +1192,7 @@ local _ClassConfig = {
         },
 
         --Damage
-        ['DoFireNuke']        = {
+        ['FireNukeUse']       = {
             DisplayName = "Fire Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1170,9 +1200,13 @@ local _ClassConfig = {
             Index = 101,
             Tooltip = "Use your single-target fire nukes.",
             RequiresLoadoutChange = true,
-            Default = true,
+            Type = "Combo",
+            ComboOptions = { 'Never', 'Epic Procs Only', 'All Combat', },
+            Default = 3,
+            Min = 1,
+            Max = 3,
         },
-        ['DoIceNuke']         = {
+        ['IceNukeUse']        = {
             DisplayName = "Cold Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1180,9 +1214,13 @@ local _ClassConfig = {
             Index = 102,
             Tooltip = "Use your single-target cold nukes.",
             RequiresLoadoutChange = true,
-            Default = false,
+            Type = "Combo",
+            ComboOptions = { 'Never', 'Epic Procs Only', 'All Combat', },
+            Default = 1,
+            Min = 1,
+            Max = 3,
         },
-        ['DoStunNuke']        = {
+        ['StunNukeUse']       = {
             DisplayName = "Stun Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1190,9 +1228,14 @@ local _ClassConfig = {
             Index = 103,
             Tooltip = "Use your stun nukes (magic damage with stun component).",
             RequiresLoadoutChange = true,
-            Default = true,
+            Type = "Combo",
+            ComboOptions = { 'Never', 'Epic Procs Only', 'All Combat', },
+            Default = 1,
+            Min = 1,
+            Max = 3,
+            lt = true,
         },
-        ['DoTwinHealNuke']    = {
+        ['TwinHealNukeUse']   = {
             DisplayName = "Twinheal Nuke",
             Group = "Abilities",
             Header = "Damage",
@@ -1200,7 +1243,25 @@ local _ClassConfig = {
             Index = 104,
             Tooltip = "Use your twinheal nuke (fire damage with a twinheal buff effect).",
             RequiresLoadoutChange = true,
-            Default = true,
+            Type = "Combo",
+            ComboOptions = { 'Never', 'Epic Procs Only', 'All Combat', },
+            Default = 3,
+            Min = 1,
+            Max = 3,
+        },
+        ['DawnstrikeUse']     = {
+            DisplayName = "Dawnstrike",
+            Group = "Abilities",
+            Header = "Damage",
+            Category = "Direct",
+            Index = 105,
+            Tooltip = "Use your Dawnstrike spell (quick nuke with a chance to proc a self- beneficial or detrimental spell damage buff.).",
+            RequiresLoadoutChange = true,
+            Type = "Combo",
+            ComboOptions = { 'Never', 'Epic Procs Only', 'All Combat', },
+            Default = 3,
+            Min = 1,
+            Max = 3,
         },
         ['DoFlameLickDot']    = {
             DisplayName = "Fire Debuff Dot",
@@ -1413,13 +1474,18 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..
                 "  Clickies that aren't already included should be managed via the clickies tab, or by customizing the config to add them directly.\n" ..
                 "  Additionally, those wishing more fine-tune control for specific encounters or raids should customize this config to their preference. \n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
+            Settings_Used = "",
+        },
+        {
+            Question = "Why would I only want to nuke on an 'Epic Proc'",
+            Answer = "Epic 1.5, 2,0, and 2.5 worn foci have the chance to proc 'Wrath of the Wilderness', which makes your next nuke an instant cast.",
             Settings_Used = "",
         },
     },

@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require('utils.globals')
 local Core         = require("utils.core")
 local Targeting    = require("utils.Targeting")
 local Ui           = require("utils.ui")
@@ -942,16 +943,27 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
         },
+        { --Actions to lock down xtarg haters
+            name = 'HateTools(AggroTarget)',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            load_cond = function() return Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') end,
+            targetId = function(self) return Targeting.CheckForAggroTargetID() end,
+            cond = function(self, combat_state)
+                if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyLockout') then return false end
+                return combat_state == "Combat"
+            end,
+        },
         { --Actions that establish or maintain hatred
-            name = 'HateTools',
+            name = 'HateTools(AutoTarget)',
             state = 1,
             steps = 1,
             load_cond = function(self) return Core.IsTanking() end,
@@ -1260,7 +1272,36 @@ local _ClassConfig = {
                 type = "AA",
             },
         },
-        ['HateTools'] = {
+        ['HateTools(AggroTarget)'] = {
+            --used when we've lost hatred after it is initially established
+            {
+                name = "Force of Disruption",
+                type = "AA",
+            },
+            {
+                name = "CrushTimer6",
+                type = "Spell",
+            },
+            {
+                name = "StunTimer4",
+                type = "Spell",
+            },
+            {
+                name = "Taunt",
+                type = "Ability",
+                cond = function(self, abilityName, target)
+                    return Targeting.GetTargetDistance(target) < 30
+                end,
+            },
+            {
+                name = "ForHonor",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    return Casting.DetSpellCheck(spell)
+                end,
+            },
+        },
+        ['HateTools(Autotarget)'] = {
             --used when we've lost hatred after it is initially established
             {
                 name = "Ageless Enmity",
@@ -1274,7 +1315,7 @@ local _ClassConfig = {
                 name = "Affirmation",
                 type = "Disc",
                 cond = function(self, discSpell, target)
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -1305,8 +1346,7 @@ local _ClassConfig = {
                 name = "Projection of Piety",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    ---@diagnostic disable-next-line: undefined-field
-                    return Targeting.IsNamed(target) and (mq.TLO.Target.SecondaryPctAggro() or 0) > 80
+                    return Globals.AutoTargetIsNamed and (mq.TLO.Target.SecondaryPctAggro() or 0) > 80
                 end,
             },
             {
@@ -1366,7 +1406,7 @@ local _ClassConfig = {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     if not Core.IsTanking() then return false end
-                    return Casting.NoDiscActive() and (Targeting.IsNamed(target) or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                    return Casting.NoDiscActive() and (Globals.AutoTargetIsNamed or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
                 end,
             },
             {
@@ -1374,7 +1414,7 @@ local _ClassConfig = {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     if not Core.IsTanking() then return false end
-                    return Casting.NoDiscActive() and (Targeting.IsNamed(target) or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                    return Casting.NoDiscActive() and (Globals.AutoTargetIsNamed or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
                 end,
             },
             {
@@ -1382,7 +1422,7 @@ local _ClassConfig = {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     if not Core.IsTanking() then return false end
-                    return Casting.NoDiscActive() and (Targeting.IsNamed(target) or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                    return Casting.NoDiscActive() and (Globals.AutoTargetIsNamed or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
                 end,
             },
             {
@@ -1397,7 +1437,6 @@ local _ClassConfig = {
                 name = "Purification",
                 type = "AA",
                 cond = function(self, aaName)
-                    ---@diagnostic disable-next-line: undefined-field
                     return mq.TLO.Me.TotalCounters() > 0
                 end,
             },
@@ -1517,7 +1556,7 @@ local _ClassConfig = {
                 end,
                 cond = function(self, target)
                     if mq.TLO.Me.Bandolier("Shield").Active() then return false end
-                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("Shield") end,
             },
@@ -1530,7 +1569,7 @@ local _ClassConfig = {
                 cond = function()
                     if mq.TLO.Me.Bandolier("2Hand").Active() then return false end
                     return mq.TLO.Me.PctHPs() >= Config:GetSetting('Equip2Hand') and mq.TLO.Me.ActiveDisc.Name() ~= "Deflection Discipline" and
-                        (mq.TLO.Me.AltAbilityTimer("Shield Flash")() or 0) < 234000 and not (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                        (mq.TLO.Me.AltAbilityTimer("Shield Flash")() or 0) < 234000 and not (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("2Hand") end,
             },
@@ -1941,7 +1980,7 @@ local _ClassConfig = {
             Header = "Bandolier",
             Category = "Bandolier",
             Index = 104,
-            Tooltip = "Keep Shield equipped for Named mobs(must be in SpawnMaster or named.lua)",
+            Tooltip = "Keep Shield equipped for mobs detected as 'named' by RGMercs (see Named tab).",
             Default = true,
             FAQ = "Why does my PAL switch to a Shield on puny gray named?",
             Answer = "The Shield on Named option doesn't check levels, so feel free to disable this setting (or Bandolier swapping entirely) if you are farming fodder.",
@@ -1977,7 +2016,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is an Alpha config aimed at late game live.\n\n" ..
                 "  It should perform well as a group tank, but may be lacking typical options or configuration.\n\n" ..

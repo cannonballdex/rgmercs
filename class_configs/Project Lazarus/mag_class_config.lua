@@ -1,5 +1,6 @@
 local mq          = require('mq')
 local Config      = require('utils.config')
+local Globals     = require("utils.globals")
 local Core        = require("utils.core")
 local Targeting   = require("utils.targeting")
 local Casting     = require("utils.casting")
@@ -9,34 +10,12 @@ local DanNet      = require('lib.dannet.helpers')
 local Logger      = require("utils.logger")
 
 _ClassConfig      = {
-    _version              = "1.2 - Project Lazarus",
+    _version              = "1.3 - Project Lazarus",
     _author               = "Derple, Morisato, Algar",
-    ['ModeChecks']        = {
-        IsTanking = function() return Core.IsModeActive("PetTank") end,
-    },
     ['Modes']             = {
         'DPS',
-        'PetTank',
         'PBAE',
     },
-    ['OnModeChange']      = function(self, mode)
-        if mode == "PetTank" then
-            Core.DoCmd("/pet taunt on")
-            Core.DoCmd("/pet resume on")
-            Config:SetSetting('DoPetCommands', true)
-            Config:SetSetting('AutoAssistAt', 100)
-            Config:SetSetting('StayOnTarget', false)
-            Config:SetSetting('DoAutoEngage', true)
-            Config:SetSetting('DoAutoTarget', true)
-            Config:SetSetting('AllowMezBreak', true)
-        else
-            Core.DoCmd("/pet taunt off")
-            if Config:GetSetting('AutoAssistAt') == 100 then
-                Config:SetSetting('AutoAssistAt', 98)
-            end
-            Config:SetSetting('StayOnTarget', true)
-        end
-    end,
     ['ItemSets']          = {
         ['Epic'] = {
             "Focus of Primal Elements",
@@ -50,109 +29,15 @@ _ClassConfig      = {
     ['AbilitySets']       = {
         --- Nukes
         ['SwarmPet'] = {
-            -- Swarm Pet* >= LVL 70
-            -- "Ravening Servant",
-            -- "Roiling Servant",
-            -- "Riotous Servant",
-            -- "Reckless Servant",
-            -- "Remorseless Servant",
-            -- "Relentless Servant",
-            -- "Ruthless Servant",
-            -- "Ruinous Servant",
-            -- "Rumbling Servant",
-            -- "Rancorous Servant",
-            -- "Rampaging Servant",
             "Raging Servant",
-            "Rage of Zomm",
         },
         ['SpearNuke'] = {
             -- Spear Nuke* >= LVL 70
             "Spear of Ro",
         },
         ['ChaoticNuke'] = {
-            -- Chaotic Nuke with Beneficial Effect >= LVL69
-            -- "Fickle Inferno",
             "Fickle Fire",
         },
-        -- ['FireNuke'] = {
-        --     -- Fire Nuke 1 <= LVL <= 70
-        --     "Cremating Sands",
-        --     "Ravaging Sands",
-        --     "Incinerating Sands",
-        --     "Crash of Sand",
-        --     "Blistering Sands",
-        --     "Searing Sands",
-        --     "Broiling Sands",
-        --     "Blast of Sand",
-        --     "Burning Sands",
-        --     "Burst of Sand",
-        --     "Strike of Sand",
-        --     "Torrid Sands",
-        --     "Scorching Sands",
-        --     "Scalding Sands",
-        --     "Sun Vortex",
-        --     "Star Strike", -- Changed to another spell on Lazarus
-        --     "Ancient: Nova Strike",
-        --     "Burning Sand",
-        --     "Shock of Fiery Blades",
-        --     "Char",
-        --     "Blaze",
-        --     "Shock of Flame",
-        --     "Burn",
-        --     "Burst of Flame",
-        -- },
-        -- ['FireBoltNuke'] = {
-        --     -- Fire Bolt Nukes
-        --     "Bolt of Molten Dacite",
-        --     "Bolt of Molten Olivine",
-        --     "Bolt of Molten Komatiite",
-        --     "Bolt of Skyfire",
-        --     "Bolt of Molten Shieldstone",
-        --     "Bolt of Molten Magma",
-        --     "Bolt of Molten Steel",
-        --     "Bolt of Rhyolite",
-        --     "Bolt of Molten Scoria",
-        --     "Bolt of Molten Dross",
-        --     "Bolt of Molten Slag",
-        --     "Bolt of Jerikor",
-        --     "Firebolt of Tallon",
-        --     "Seeking Flame of Seukor",
-        --     "Scars of Sigil",
-        --     "Lava Bolt",
-        --     "Cinder Bolt",
-        --     "Bolt of Flame",
-        --     "Flame Bolt",
-        -- },
-        -- ['MagicNuke'] = {
-        --     -- Nuke 1 <= LVL <= 69
-        --     "Shock of Memorial Steel",
-        --     "Shock of Carbide Steel",
-        --     "Shock of Burning Steel",
-        --     "Shock of Arcronite Steel",
-        --     "Shock of Darksteel",
-        --     "Shock of Blistersteel",
-        --     "Shock of Argathian Steel",
-        --     "Shock of Ethereal Steel",
-        --     "Shock of Discordant Steel",
-        --     "Shock of Cineral Steel",
-        --     "Shock of Silvered Steel",
-        --     "Blade Strike",
-        --     "Rock of Taelosia",
-        --     "Black Steel",
-        --     "Shock of Steel",
-        --     "Shock of Swords",
-        --     "Shock of Spikes",
-        --     "Shock of Blades",
-        -- },
-        -- ['MagicBolt'] = {
-        --     -- Magic Bolt Nukes
-        --     "Voidstone Bolt",
-        --     "Luclinite Bolt",
-        --     "Komatiite Bolt",
-        --     "Korascian Bolt",
-        --     "Meteoric Bolt",
-        --     "Iron Bolt",
-        -- },
         ['FireDD'] = { --Mix of Fire Nukes and Bolts appropriate for use at lower levels.
             "Burning Sand",
             "Scars of Sigil",
@@ -170,87 +55,18 @@ _ClassConfig      = {
             "Seeking Flame of Seukor",
         },
         ['MagicDD'] = { -- Magic does not have any faster casts like Fire, we have only these.
-            "Blade Strike",
             "Rock of Taelosia",
-            "Black Steel",
             "Shock of Steel",
             "Shock of Swords",
             "Shock of Spikes",
             "Shock of Blades",
         },
+        ['QuickMagicDD'] = {
+            "Blade Strike",
+            "Black Steel",
+        },
         ['TwinCast'] = {
             "Twincast",
-        },
-        ['BeamNuke'] = {
-            -- Beam Frontal AOE Spell*
-            "Beam of Molten Dacite",
-            "Beam of Molten Olivine",
-            "Beam of Molten Komatiite",
-            "Beam of Molten Rhyolite",
-            "Beam of Molten Shieldstone",
-            "Beam of Brimstone",
-            "Beam of Molten Steel",
-            "Beam of Rhyolite",
-            "Beam of Molten Scoria",
-            "Beam of Molten Dross",
-            "Beam of Molten Slag",
-        },
-        ['RainNuke'] = {
-            --- Rain AOE Spell*
-            "Rain of Molten Dacite",
-            "Rain of Molten Olivine",
-            "Rain of Molten Komatiite",
-            "Rain of Molten Rhyolite",
-            "Coronal Rain",
-            "Rain of Blistersteel",
-            "Rain of Molten Steel",
-            "Rain of Rhyolite",
-            "Rain of Molten Scoria",
-            "Rain of Molten Dross",
-            "Rain of Molten Slag",
-            "Rain of Jerikor",
-            "Sun Storm",
-            "Sirocco",
-            "Rain of Lava",
-            "Rain of Fire",
-        },
-        ['MagicRainNuke'] = {
-            -- Magic Rain
-            "rain of Kukris",
-            "Rain of Falchions",
-            "Rain of Blades",
-            "Rain of Spikes",
-            "Rain Of Swords",
-            "ManaStorm",
-            "Maelstrom of Electricity",
-            "Maelstrom of Thunder",
-        },
-        ['VolleyNuke'] = {
-            -- Volley Nuke - Pet buff*
-            "Fusillade of Many",
-            "Barrage of Many",
-            "Shockwave of Many",
-            "Volley of Many",
-            "Storm of Many",
-            "Salvo of Many",
-            "Strike of Many",
-            "Clash of Many",
-            "Jolt of Many",
-            "Shock of Many",
-        },
-        ['SummonedNuke'] = {
-            -- Unnatural Nukes >70
-            "Dismantle the Unnatural",
-            "Unmend the Unnatural",
-            "Obliterate the Unnatural",
-            "Repudiate the Unnatural",
-            "Eradicate the Unnatural",
-            "Exterminate the Unnatural",
-            "Abolish the Divergent",
-            "Annihilate the Divergent",
-            "Annihilate the Anomalous",
-            "Annihilate the Aberrant",
-            "Annihilate the Unnatural",
         },
         ['MaloNuke'] = {
             -- Shock/Malo Combo Line
@@ -829,10 +645,9 @@ _ClassConfig      = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -883,7 +698,7 @@ _ClassConfig      = {
             name = 'DPS(70)',
             state = 1,
             steps = 1,
-            load_cond = function(self) return not Core.IsModeActive("PetTank") and self:GetResolvedActionMapItem('SpearNuke') end,
+            load_cond = function(self) return self:GetResolvedActionMapItem('SpearNuke') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" and Targeting.AggroCheckOkay()
@@ -893,20 +708,10 @@ _ClassConfig      = {
             name = 'DPS(1-69)',
             state = 1,
             steps = 1,
-            load_cond = function(self) return not Core.IsModeActive("PetTank") and not self:GetResolvedActionMapItem('SpearNuke') end,
+            load_cond = function(self) return not self:GetResolvedActionMapItem('SpearNuke') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" and Targeting.AggroCheckOkay()
-            end,
-        },
-        {
-            name = 'DPS PET',
-            state = 1,
-            steps = 1,
-            load_cond = function() return Core.IsModeActive("PetTank") end,
-            targetId = function(self) return Targeting.CheckForAutoTargetID() end,
-            cond = function(self, combat_state)
-                return combat_state == "Combat"
             end,
         },
         {
@@ -1059,7 +864,7 @@ _ClassConfig      = {
             if not itemSource and itemSource() then return false end
             if not scope then return false end
 
-            mq.delay("2s", function() return mq.TLO.Cursor() and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() end)
+            mq.delay("2s", function() return mq.TLO.Cursor() ~= nil and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() end)
 
             if not mq.TLO.Cursor() then
                 Logger.log_debug("No valid item found on cursor, item handling aborted.")
@@ -1072,7 +877,7 @@ _ClassConfig      = {
                 local delay = Config:GetSetting('AIGroupDelay')
                 Comms.PrintGroupMessage("%s summoned, issuing autoinventory command momentarily.", mq.TLO.Cursor())
                 mq.delay(delay)
-                Core.DoGroupCmd("/autoinventory")
+                Core.DoGroupOrRaidCmd("/autoinventory")
             elseif scope == "personal" then
                 local delay = Config:GetSetting('AISelfDelay')
                 mq.delay(delay)
@@ -1274,7 +1079,7 @@ _ClassConfig      = {
             {
                 name = "Focus of Arcanum",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Improved Twincast",
@@ -1366,7 +1171,7 @@ _ClassConfig      = {
                     local baseItem = self.ResolvedActionMap['FireOrbSummon'].RankName.Base(1)() or "None"
                     if mq.TLO.FindItemCount(baseItem)() == 1 then
                         local invItem = mq.TLO.FindItem(baseItem)
-                        return Casting.UseItem(invItem.Name(), Config.Globals.AutoTargetID)
+                        return Casting.UseItem(invItem.Name(), Globals.AutoTargetID)
                     end
                     return false
                 end,
@@ -1396,11 +1201,15 @@ _ClassConfig      = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoSwarmPet') > 1 end,
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Targeting.IsNamed(target))
+                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Globals.AutoTargetIsNamed)
                 end,
             },
             {
                 name = "Bladegusts",
+                type = "Spell",
+            },
+            {
+                name = "QuickMagicDD",
                 type = "Spell",
             },
             {
@@ -1428,6 +1237,10 @@ _ClassConfig      = {
             },
         },
         ['DPS(1-69)'] = {
+            {
+                name = "QuickMagicDD",
+                type = "Spell",
+            },
             {
                 name = "BigFireDD",
                 type = "Spell",
@@ -1506,15 +1319,15 @@ _ClassConfig      = {
                 name = "FireShroud",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                         -- workarounds for laz
-                        and not Casting.PeerBuffCheck(19847, target, true) -- necrotic pustules
-                        and not Casting.PeerBuffCheck(8484, target, true)  -- decrepit skin
+                        and Casting.AddedBuffCheck(19847, target) -- necrotic pustules
+                        and Casting.AddedBuffCheck(8484, target)  -- decrepit skin
                 end,
                 post_activate = function(self, spell, success)
                     local petName = mq.TLO.Me.Pet.CleanName() or "None"
-                    mq.delay("3s", function() return not mq.TLO.Me.Casting() end)
+                    mq.delay("3s", function() return mq.TLO.Me.Casting() == nil end)
                     if success and mq.TLO.Me.XTarget(petName)() then
                         Comms.PrintGroupMessage("It seems %s has triggered combat due to a server bug, calling the pet back.", spell)
                         Core.DoCmd('/pet back off')
@@ -1632,6 +1445,7 @@ _ClassConfig      = {
                 { name = "FireDD", },
                 { name = "BigFireDD", },
                 { name = "MagicDD", },
+                { name = "QuickMagicDD", },
                 { name = "Bladegusts", },
                 { name = "PBAE1",            cond = function(self) return Core.IsModeActive("PBAE") end, },
                 { name = "PBAE2",            cond = function(self) return Core.IsModeActive("PBAE") end, },
@@ -1653,6 +1467,7 @@ _ClassConfig      = {
                 { name = "ChaoticNuke", },
                 { name = "SwarmPet", },
                 { name = "Bladegusts", },
+                { name = "QuickMagicDD", },
                 { name = "Myriad", },
                 { name = "PBAE1",            cond = function(self) return Core.IsModeActive("PBAE") end, },
                 { name = "PBAE2",            cond = function(self) return Core.IsModeActive("PBAE") end, },
@@ -1677,10 +1492,9 @@ _ClassConfig      = {
             RequiresLoadoutChange = true,
             Default = 1,
             Min = 1,
-            Max = 3,
+            Max = 2,
             FAQ = "What is the difference between the modes?",
             Answer = "DPS Mode performs exactly as described.\n" ..
-                "PetTank mode will Focus on keeping the Pet alive as the main tank.\n" ..
                 "PBAE Mode will use PBAE spells when configured, alongside the DPS rotation.",
         },
         ['DoPocketPet']    = {
@@ -1956,7 +1770,7 @@ _ClassConfig      = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

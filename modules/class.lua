@@ -2,6 +2,7 @@
 local mq          = require('mq')
 local Combat      = require('utils.combat')
 local Config      = require('utils.config')
+local Globals     = require('utils.globals')
 local Core        = require("utils.core")
 local Modules     = require("utils.modules")
 local Movement    = require("utils.movement")
@@ -12,17 +13,18 @@ local Ui          = require("utils.ui")
 local Comms       = require("utils.comms")
 local Strings     = require("utils.strings")
 local Tables      = require("utils.tables")
-local Files       = require("utils.files")
 local Logger      = require("utils.logger")
 local Set         = require("mq.Set")
 local ClassLoader = require('utils.classloader')
 local DanNet      = require('lib.dannet.helpers')
 local Icons       = require('mq.ICONS')
+local Base        = require('modules.base')
 
 require('utils.datatypes')
 
-local Module                                 = { _version = '0.1a', _name = "Class", _author = 'Derple', }
-Module.__index                               = Module
+local Module   = { _version = '0.1a', _name = "Class", _author = 'Derple', }
+Module.__index = Module
+setmetatable(Module, { __index = Base, })
 
 Module.ModuleLoaded                          = false
 Module.SpellLoadOut                          = {}
@@ -32,7 +34,6 @@ Module.TempSettings                          = {}
 Module.CombatState                           = "None"
 Module.CurrentRotation                       = { name = "None", state = 0, }
 Module.ClassConfig                           = nil
-Module.SaveRequested                         = nil
 
 Module.Constants                             = {}
 Module.Constants.RezSearchGroup              = "pccorpse group radius 100 zradius 50"
@@ -47,11 +48,12 @@ Module.TempSettings.RotationTable            = {}
 Module.TempSettings.HealRotationTable        = {}
 Module.TempSettings.RotationTimers           = {}
 Module.TempSettings.RezTimers                = {}
-Module.TempSettings.CureCheckTimer           = os.clock() -- set this out a bit so we have time to get actor data.
+Module.TempSettings.CureCheckTimer           = Globals.GetTimeSeconds() -- set this out a bit so we have time to get actor data.
 Module.TempSettings.ShowFailedSpells         = false
 Module.TempSettings.ResolvingActions         = true
 Module.TempSettings.CombatModeSet            = false
 Module.TempSettings.NewCombatMode            = false
+Module.TempSettings.CombatModeChangeTime     = 0
 Module.TempSettings.MissingSpells            = {}
 Module.TempSettings.MissingSpellsHighestOnly = true
 Module.TempSettings.CorpsesAlreadyRezzed     = {}
@@ -61,25 +63,37 @@ Module.TempSettings.NeedCuresList            = {}
 Module.TempSettings.NeedCuresListMutex       = false
 Module.TempSettings.CureChecksStale          = false
 Module.TempSettings.ImmuneTargets            = {}
+Module.TempSettings.RotationClickies         = Set.new({})
+Module.TempSettings.RotationAAs              = Set.new({})
 
 Module.FAQ                                   = {
-    [1] = {
-        Question = "How do I add, remove, or change what spells, AA, items or disciplines I am using or memorizing?",
+    {
+        Question = "How do I add, remove, or change what spells, AA, items or disciplines are being used?",
         Answer = "  RGMercs is designed to choose actions automatically based on the currently loaded 'Class Config'.\n\n" ..
             "  In addition to being able to adjust common settings, the default class configs generally offer some options to enable, disable, or fine-tune action use. These are generally found in (Options > Abililties).\n\n" ..
             "  If you open the options menu from the Class tab, all options added by the class config will have highlighting added.\n\n" ..
             "  Some default configs may also offer different role-based modes, such as a Shaman having a Healing Mode or Hybrid mode, or a Paladin having a Tank Mode and a DPS Mode. These modes can be selected on the Class tab.\n\n" ..
-            "  If you find that the options or loadouts do not meet your needs, we support a system to allow the use of 'Custom Configs' that can be freely edited by the user.",
+            "  If you find that the options or loadouts do not meet your needs, we support a system to allow the use of 'Custom Configs' that can be freely edited by the user (see FAQs on custom configs).",
         Settings_Used = "",
     },
-    [2] = {
+    {
+        Question = "There isn't a setting to change the use of spell, AA, item or discipline, how do I stop it from being used in a rotation?",
+        Answer =
+            "  A rotation or rotation entry may be disabled using the GUI or CLI:\n\n" ..
+            "    GUI: Use the toggle found in the rotation list on the class tab. \n\n" ..
+            "    CLI: Use the rotation or rotation entry disable commands (search for 'rotation' and check the command list). \n\n" ..
+            "  Please note that there is no performance benefit to disabling unused or unmapped entries, it is suggested that you simply ignore them... your experience or (class) performance may be (negatively) impacted when you do receive the ability.",
+
+        Settings_Used = "",
+    },
+    {
         Question = "How do I create a Custom Class Config?",
         Answer = "  The GUI can be found on the Class Tab. Near the config load area, you will find a button to create the custom config.\n\n" ..
             "  The final destination will vary by server, but all files will be created in the (MQconfigdir)/rgmercs/class_configs directory. If you are currently on Live or Test, look for the 'Live folder there, otherwise, on emu, look for a server-specifc folder.\n\n" ..
             "  The process will copy the currently loaded config, so ensure you have selected the config you wish to use as a base before hitting the button. If the currently loaded config is *already* a custom config, it will be backed up with a date/time append on the old config.",
         Settings_Used = "",
     },
-    [3] = {
+    {
         Question = "How do I change which Class Config is loaded, or, how do I use my new Custom Class Config?",
         Answer = "  The GUI to change your currently loaded config can be found on the Class Tab.\n\n" ..
             "  The drop-down selection box can be used to choose which config you have loaded. Any configs found for your class (both default and custom) will be displayed.",
@@ -192,13 +206,7 @@ Module.CommandHandlers                       = {
             targetId = targetId or (mq.TLO.Target.ID() > 0 and mq.TLO.Target.ID() or mq.TLO.Me.ID())
             Logger.log_debug("\atQueueing Cast: \aw\"\am%s\aw\" on targetId(\am%d\aw)", spell, tonumber(targetId) or mq.TLO.Target.ID())
 
-            table.insert(self.TempSettings.QueuedAbilities, {
-                name = spell,
-                targetId = targetId,
-                target = mq.TLO.Spawn(targetId),
-                type = "spell",
-                queuedTime = os.clock(),
-            })
+            self:QueueAbility("spell", spell, targetId)
 
             return true
         end,
@@ -211,13 +219,7 @@ Module.CommandHandlers                       = {
             targetId = targetId or (mq.TLO.Target.ID() > 0 and mq.TLO.Target.ID() or mq.TLO.Me.ID())
             Logger.log_debug("\atUsing AA: \aw\"\am%s\aw\" on targetId(\am%d\aw)", aaname, tonumber(targetId) or mq.TLO.Target.ID())
 
-            table.insert(self.TempSettings.QueuedAbilities, {
-                name = aaname,
-                targetId = targetId,
-                target = mq.TLO.Spawn(targetId),
-                type = "aa",
-                queuedTime = os.clock(),
-            })
+            self:QueueAbility("aa", aaname, targetId)
 
             return true
         end,
@@ -230,13 +232,7 @@ Module.CommandHandlers                       = {
             targetId = targetId or (mq.TLO.Target.ID() > 0 and mq.TLO.Target.ID() or mq.TLO.Me.ID())
             Logger.log_debug("\atUsing Item: \aw\"\am%s\aw\" on targetId(\am%d\aw)", itemName, tonumber(targetId) or mq.TLO.Target.ID())
 
-            table.insert(self.TempSettings.QueuedAbilities, {
-                name = itemName,
-                targetId = targetId,
-                target = mq.TLO.Spawn(targetId),
-                type = "item",
-                queuedTime = os.clock(),
-            })
+            self:QueueAbility("item", itemName, targetId)
 
             return true
         end,
@@ -256,49 +252,19 @@ Module.CommandHandlers                       = {
 
             local actionHandlers = {
                 spell = function(self)
-                    table.insert(self.TempSettings.QueuedAbilities, {
-                        name = action.RankName(),
-                        targetId = targetId,
-                        target = mq.TLO.Spawn(targetId),
-                        type = "spell",
-                        queuedTime = os.clock(),
-                    })
+                    self:QueueAbility("spell", action.RankName(), targetId)
                 end,
                 song = function(self)
-                    table.insert(self.TempSettings.QueuedAbilities, {
-                        name = action.RankName(),
-                        targetId = targetId,
-                        target = mq.TLO.Spawn(targetId),
-                        type = "song",
-                        queuedTime = os.clock(),
-                    })
+                    self:QueueAbility("song", action.RankName(), targetId)
                 end,
                 aa = function(self)
-                    table.insert(self.TempSettings.QueuedAbilities, {
-                        name = action,
-                        targetId = targetId,
-                        target = mq.TLO.Spawn(targetId),
-                        type = "aa",
-                        queuedTime = os.clock(),
-                    })
+                    self:QueueAbility("aa", action, targetId)
                 end, --AFAIK we don't have any AA mapped, but, future proof.
                 item = function(self)
-                    table.insert(self.TempSettings.QueuedAbilities, {
-                        name = action,
-                        targetId = targetId,
-                        target = mq.TLO.Spawn(targetId),
-                        type = "item",
-                        queuedTime = os.clock(),
-                    })
+                    self:QueueAbility("item", action, targetId)
                 end,
                 disc = function(self)
-                    table.insert(self.TempSettings.QueuedAbilities, {
-                        name = action,
-                        targetId = targetId,
-                        target = mq.TLO.Spawn(targetId),
-                        type = "disc",
-                        queuedTime = os.clock(),
-                    })
+                    self:QueueAbility("disc", action, targetId)
                 end,
             }
 
@@ -314,115 +280,63 @@ Module.CommandHandlers                       = {
     },
 }
 
-local function getConfigFileName()
-    local oldFile = mq.configDir ..
-        '/rgmercs/PCConfigs/' ..
-        Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-    local newFile = mq.configDir ..
-        '/rgmercs/PCConfigs/' ..
-        Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. "_" .. Config.Globals.CurLoadedClass:lower() .. '.lua'
-
-    if Files.file_exists(newFile) then
-        return newFile
-    end
-
-    Files.copy_file(oldFile, newFile)
-
-    return newFile
-end
-
-function Module:SaveSettings(doBroadcast)
-    self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
+function Module:New()
+    return Base.New(self)
 end
 
 function Module:WriteSettings()
     if not self.SaveRequested then return end
-
-    mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
+    Base.WriteSettings(self)
 
     -- set dynamic names.
     self:SetDynamicNames()
-
-    if self.SaveRequested.doBroadcast == true then
-        Comms.BroadcastMessage(self._name, "LoadSettings")
-    end
-
-    Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-    self.SaveRequested = nil
 end
 
 function Module:LoadSettings()
-    -- load base configurations
-    self.ClassConfig = ClassLoader.load(Config.Globals.CurLoadedClass)
-    local settings = {}
-    local firstSaveRequired = false
+    Base.LoadSettings(self, function()
+        -- load base configurations
+        self.ClassConfig = ClassLoader.load(Globals.CurLoadedClass)
 
-    Logger.log_debug("\ar%s\ao Core Module Loading Settings for: %s.", Config.Globals.CurLoadedClass,
-        Config.Globals.CurLoadedChar)
-    Logger.log_info("\ayUsing Class Config by: \at%s\ay (\am%s\ay)", self.ClassConfig._author,
-        self.ClassConfig._version)
-    local settings_pickle_path = getConfigFileName()
+        if not self.ClassConfig.DefaultConfig then
+            Logger.log_error("\arFailed to Load Core Class Config for Classs: %s", Globals
+                .CurLoadedClass)
+            return
+        end
 
-    local config, err = loadfile(settings_pickle_path)
-    if err or not config then
-        Logger.log_error("\ay[%s]: Unable to load module settings file(%s), creating a new one!",
-            Config.Globals.CurLoadedClass, settings_pickle_path)
-        firstSaveRequired = true
-    else
-        settings = config()
-    end
+        -- Add this to all class configs
+        self.ClassConfig.DefaultConfig['EnabledRotationEntries'] = {
+            DisplayName = "EnabledRotationEntries",
+            Type = "Custom",
+            Default = {},
+        }
 
-    if not self.ClassConfig.DefaultConfig then
-        Logger.log_error("\arFailed to Load Core Class Config for Classs: %s", Config.Globals
-            .CurLoadedClass)
-        return
-    end
+        self.ClassConfig.DefaultConfig['EnabledRotations'] = {
+            DisplayName = "EnabledRotations",
+            Type = "Custom",
+            Default = {},
+        }
 
-    -- Add this to all class configs
-    self.ClassConfig.DefaultConfig['EnabledRotationEntries'] = {
-        DisplayName = "EnabledRotationEntries",
-        Type = "Custom",
-        Default = {},
-    }
-
-    self.ClassConfig.DefaultConfig['EnabledRotations'] = {
-        DisplayName = "EnabledRotations",
-        Type = "Custom",
-        Default = {},
-    }
-
-    Config:RegisterModuleSettings(self._name, settings, self.ClassConfig.DefaultConfig, self.FAQ, firstSaveRequired)
+        self.ClassConfig.DefaultConfig[string.format("%s_Popped", self._name)] = {
+            DisplayName = self._name .. " Popped",
+            Type = "Custom",
+            Default = false,
+        }
+    end)
 
     -- for config file change
     Module.TempSettings.CombatModeSet = false
 end
 
 function Module:WriteCustomConfig()
-    ClassLoader.writeCustomConfig(Config.Globals.CurLoadedClass)
-end
-
-function Module.New()
-    local newModule = setmetatable({}, Module)
-    return newModule
+    ClassLoader.writeCustomConfig(Globals.CurLoadedClass)
 end
 
 function Module:Init()
-    self.ModuleLoaded = false --reinitialize to stop class module UI render during persona switch (avoid crash conditions)
-    Logger.log_debug("\agInitializing Core Class Module...")
-    self:LoadSettings()
+    Base.Init(self)
 
     -- set dynamic names.
     self:SetDynamicNames()
-
-    self.ModuleLoaded = true
-
     self:SetPetHold()
-
-    return {
-        self = self,
-        defaults = self.ClassConfig.DefaultConfig,
-    }
 end
 
 function Module:SetDynamicNames()
@@ -487,10 +401,6 @@ function Module:OnCombatModeChanged()
     self:SetDynamicNames()
 end
 
-function Module:ShouldRender()
-    return true
-end
-
 function Module:RenderQueuedAbilities()
     if ImGui.CollapsingHeader("Queued Abilities") then
         ImGui.Indent()
@@ -499,17 +409,15 @@ function Module:RenderQueuedAbilities()
         end
         if #self.TempSettings.QueuedAbilities > 0 then
             if ImGui.BeginTable("QueuedAbilities", 4, bit32.bor(ImGuiTableFlags.Resizable, ImGuiTableFlags.Borders)) then
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
                 ImGui.TableSetupColumn('Time in Queue', (ImGuiTableColumnFlags.WidthFixed), 40.0)
                 ImGui.TableSetupColumn('Type', (ImGuiTableColumnFlags.WidthFixed), 20.0)
                 ImGui.TableSetupColumn('Target', (ImGuiTableColumnFlags.WidthFixed), 100.0)
                 ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthStretch), 150.0)
-                ImGui.PopStyleColor()
                 ImGui.TableHeadersRow()
 
                 for _, queueData in pairs(self.TempSettings.QueuedAbilities) do
                     ImGui.TableNextColumn()
-                    ImGui.Text(Strings.FormatTime((os.clock() - queueData.queuedTime)))
+                    ImGui.Text(Strings.FormatTime((Globals.GetTimeSeconds() - queueData.queuedTime)))
                     ImGui.TableNextColumn()
                     ImGui.Text(queueData.type)
                     ImGui.TableNextColumn()
@@ -580,7 +488,7 @@ function Module:RenderRotationWithToggle(r, rotationTable)
 end
 
 function Module:Render()
-    Ui.RenderPopAndSettings(self._name)
+    Base.Render(self)
 
     ImGui.Text("Combat State: %s", self.CombatState)
     ImGui.Text("Current Rotation: %s [%d]", self.CurrentRotation.name, self.CurrentRotation.state)
@@ -922,12 +830,12 @@ function Module:SelfCheckAndRez(combat_state)
             if rezSpawn() then
                 Logger.log_debug("\atSelfCheckAndRez(): Found corpse of %s :: %s", rezSpawn.CleanName() or "Unknown", rezSpawn.Name() or "Unknown")
                 if self.ClassConfig.HelperFunctions and self.ClassConfig.HelperFunctions.DoRez then
-                    if Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Config.Globals.RezzedCorpses, rezSpawn.ID()) then
+                    if Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Globals.RezzedCorpses, rezSpawn.ID()) then
                         Logger.log_debug("\atSelfCheckAndRez(): Found corpse of %s(ID:%d), but it appears to have been rezzed already.", rezSpawn.CleanName() or "Unknown",
                             rezSpawn.ID() or 0)
-                    elseif (os.clock() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
+                    elseif (Globals.GetTimeSeconds() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
                         Core.SafeCallFunc("SelfCheckAndRez", self.ClassConfig.HelperFunctions.DoRez, self, rezSpawn.ID())
-                        self.TempSettings.RezTimers[rezSpawn.ID()] = os.clock()
+                        self.TempSettings.RezTimers[rezSpawn.ID()] = Globals.GetTimeSeconds()
                         self:ResetRotationTimer("GroupBuff")
                     end
                 end
@@ -953,12 +861,12 @@ function Module:IGCheckAndRez(combat_state)
                 if not Config:GetSetting('RezInZonePC') and mq.TLO.Spawn(string.format("PC =%s", ownerName))() then
                     Logger.log_debug("\atIGCheckAndRez(): Found corpse of %s(ID:%d), but the player appears to be in-zone.", ownerName or "Unknown",
                         rezSpawn.ID() or 0)
-                elseif Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Config.Globals.RezzedCorpses, rezSpawn.ID()) then
+                elseif Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Globals.RezzedCorpses, rezSpawn.ID()) then
                     Logger.log_debug("\atIGCheckAndRez(): Found corpse of %s(ID:%d), but it appears to have been rezzed already.", rezSpawn.CleanName() or "Unknown",
                         rezSpawn.ID() or 0)
-                elseif (os.clock() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
+                elseif (Globals.GetTimeSeconds() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
                     Logger.log_debug("\atIGCheckAndRez(): Attempting to Res: %s", rezSpawn.CleanName())
-                    self.TempSettings.RezTimers[rezSpawn.ID()] = os.clock()
+                    self.TempSettings.RezTimers[rezSpawn.ID()] = Globals.GetTimeSeconds()
                     if Core.SafeCallFunc("IGCheckAndRez", self.ClassConfig.HelperFunctions.DoRez, self, rezSpawn.ID(), ownerName) then
                         self:ResetRotationTimer("GroupBuff")
                         -- make sure we process other healing/etc instead of chain rezzing
@@ -988,11 +896,11 @@ function Module:OOGCheckAndRez(combat_state)
                 if not Config:GetSetting('RezInZonePC') and mq.TLO.Spawn(string.format("PC =%s", ownerName))() then
                     Logger.log_debug("\atIGCheckAndRez(): Found corpse of %s(ID:%d), but the player appears to be in-zone.", ownerName or "Unknown",
                         rezSpawn.ID() or 0)
-                elseif Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Config.Globals.RezzedCorpses, rezSpawn.ID()) then
+                elseif Config:GetSetting('ConCorpseForRez') and Tables.TableContains(Globals.RezzedCorpses, rezSpawn.ID()) then
                     Logger.log_debug("\atOOGCheckAndRez(): Found corpse of %s(ID:%d), but it appears to have been rezzed already.", rezSpawn.CleanName() or "Unknown",
                         rezSpawn.ID() or 0)
-                elseif (os.clock() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
-                    self.TempSettings.RezTimers[rezSpawn.ID()] = os.clock()
+                elseif (Globals.GetTimeSeconds() - (self.TempSettings.RezTimers[rezSpawn.ID()] or 0)) >= Config:GetSetting('RetryRezDelay') then
+                    self.TempSettings.RezTimers[rezSpawn.ID()] = Globals.GetTimeSeconds()
                     if Core.SafeCallFunc("OOGCheckAndRez", self.ClassConfig.HelperFunctions.DoRez, self, rezSpawn.ID(), ownerName) then
                         self:ResetRotationTimer("GroupBuff")
                         -- make sure we process other healing/etc instead of chain rezzing
@@ -1018,7 +926,7 @@ function Module:HealById(id)
 
     local healTarget = mq.TLO.Spawn(id)
 
-    if not healTarget or not healTarget() or healTarget.PctHPs() <= 0 or healTarget.PctHPs() == 100 then
+    if not healTarget or not healTarget() or Targeting.GetTargetPctHPs(healTarget) <= 0 or Targeting.GetTargetPctHPs(healTarget) == 100 then
         Logger.log_verbose("\ayHealById(%d):: Target is dead fully healed or in another zone bailing!", id)
         return
     end
@@ -1062,9 +970,9 @@ function Module:HealById(id)
                     Logger.log_verbose(
                         "\awHealById(%d):: Heal Rotation: \at%s\aw \agis\aw was \agSuccessful\aw!", id,
                         rotation.name)
-                    Comms.HandleAnnounce(string.format('Healed %s :: %s', healTarget.CleanName() or "Target", Casting.GetLastUsedSpell()),
+                    Comms.HandleAnnounce(Comms.FormatChatEvent("Heal", healTarget.CleanName(), Casting.GetLastUsedSpell()),
                         Config:GetSetting('HealAnnounceGroup'),
-                        Config:GetSetting('HealAnnounce'))
+                        Config:GetSetting('HealAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
                     break
                 else
                     Logger.log_verbose(
@@ -1151,8 +1059,8 @@ function Module:AddCureToList(id, type)
     end
 
     if not contained then
-        Comms.HandleAnnounce(string.format('Queueing a %s cure for %s.', type:lower(), mq.TLO.Spawn(id).CleanName() or "Target"), Config:GetSetting('CureAnnounceGroup'),
-            Config:GetSetting('CureAnnounce'))
+        Comms.HandleAnnounce(Comms.FormatChatEvent("Cure", mq.TLO.Spawn(id).CleanName(), "Queued"), Config:GetSetting('CureAnnounceGroup'),
+            Config:GetSetting('CureAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
     end
 end
 
@@ -1194,7 +1102,7 @@ function Module:CheckActorForCures(peer, targetId)
         table.insert(checks, { type = "Corruption", })
     end
 
-    local heartbeat = Config:GetPeerHeartbeat(peer)
+    local heartbeat = Comms.GetPeerHeartbeat(peer)
     if heartbeat and heartbeat.Data then
         for _, data in ipairs(checks) do
             local effectId = heartbeat.Data[data.type] or "null"
@@ -1263,9 +1171,9 @@ function Module:CheckSelfForCures()
     for _, data in ipairs(selfChecks) do
         Logger.log_verbose("\ay[Cures] %s :: [%s] => %s", me.CleanName():lower(), data.type, data.check > 0 and data.check or "none")
         if data.check > 0 then
-            Comms.HandleAnnounce(string.format('%s effect found on myself, processing cure.', data.type),
+            Comms.HandleAnnounce(Comms.FormatChatEvent("Cure", me.CleanName(), string.format('%s effect found on myself, processing cure.', data.type)),
                 Config:GetSetting('CureAnnounceGroup'),
-                Config:GetSetting('CureAnnounce'))
+                Config:GetSetting('CureAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
             if self.ClassConfig.Cures and self.ClassConfig.Cures.CureNow then
                 local successful, haveValidOptions = Core.SafeCallFunc("CureNow", self.ClassConfig.Cures.CureNow, self, data.type, mq.TLO.Me.ID())
 
@@ -1283,7 +1191,8 @@ function Module:CureIsQueued()
     return (Tables.GetTableSize(self.TempSettings.NeedCuresList) or 0) > 0
 end
 
-function Module:ManageCureCoroutines()
+function Module:DoEvents()
+    -- Process Cure Coroutines
     local deadCoroutines = {}
     for idx, c in ipairs(self.TempSettings.CureCoroutines) do
         if coroutine.status(c) ~= 'dead' then
@@ -1303,8 +1212,34 @@ end
 
 function Module:RunCureRotation(combat_state)
     if combat_state == "Downtime" then -- check freely in combat and the first frame of downtime; then avoid spamming
-        if (os.clock() - self.TempSettings.CureCheckTimer) < Config:GetSetting('CureInterval') then return end
-        self.TempSettings.CureCheckTimer = os.clock()
+        if (Globals.GetTimeSeconds() - self.TempSettings.CureCheckTimer) < Config:GetSetting('CureInterval') then return end
+        self.TempSettings.CureCheckTimer = Globals.GetTimeSeconds()
+    end
+
+    local actorPeers = Comms.GetAllPeerHeartbeats(false)
+
+    -- if a peer is using Radiant Cure or Group Purify Soul on a group mate and we have set the option, don't bother checking for cures, let the cure process
+    -- -- this may cause us to ocasionally skip curing a second group with radiant (if that group's healer is curing us for whatever reason)... this is preferred over double-tapping RC's
+    if Config:GetSetting('StaggerGroupAACures') then
+        for _, heartbeat in pairs(actorPeers) do
+            local data = heartbeat.Data
+            local casting = data and data.Casting or ""
+
+            --nested conditions here to avoid preemptive data/spawn checks
+            if casting == "Radiant Cure" or casting == "Group Purify Soul" then
+                local target = data and data.Target
+                local groupMate = mq.TLO.Group.Member(target)
+
+                if groupMate and groupMate() then
+                    local recentHeartbeat = (Globals.GetTimeSeconds() - (heartbeat.LastHeartbeat or 0)) <= 3
+
+                    if recentHeartbeat then
+                        Logger.log_debug("[Cures] %s is currently casting a group AA cure on my groupmate %s, bypassing cure checks.", heartbeat.Data.Name, target)
+                        return
+                    end
+                end
+            end
+        end
     end
 
     Logger.log_verbose("\ao[Cures] Checking for curables...")
@@ -1322,12 +1257,11 @@ function Module:RunCureRotation(combat_state)
     self.TempSettings.CureChecksStale = false
 
     local dannetPeers = mq.TLO.DanNet.PeerCount()
-    local actorPeers = Config:GetAllPeerHeartbeats()
     local handledPeers = Set.new({})
+    local handledPeerCount = 0
 
-    for peer, _ in pairs(actorPeers) do
-        local char, _ = Comms.GetCharAndServerFromPeer(peer)
-        local cureTarget = mq.TLO.Spawn(string.format("pc =%s", char))
+    for peer, heartbeat in pairs(actorPeers) do
+        local cureTarget = mq.TLO.Spawn(string.format("pc =%s", heartbeat.Data.Name))
         local cureTargetID = cureTarget.ID() --will return 0 if the spawn doesn't exist
         local handled = false
         --current max range on live with raid gear is 137, radiant cure still limited to 100 (300 on laz now but not changing this), but CureNow includes range checks
@@ -1346,42 +1280,45 @@ function Module:RunCureRotation(combat_state)
         Logger.log_verbose("\ay[Cures - Actors] %s :: Handled = %s", peer, tostring(handled))
 
         if handled then
-            handledPeers:add(char:lower())
+            handledPeers:add(heartbeat.Data.Name:lower())
+            handledPeerCount = handledPeerCount + 1
         end
     end
 
-    for i = 1, dannetPeers do
-        ---@diagnostic disable-next-line: redundant-parameter
-        local peer = mq.TLO.DanNet.Peers(i)()
-        if peer and peer:len() > 0 then
-            local startindex = string.find(peer, "_")
-            if startindex then
-                peer = string.sub(peer, startindex + 1)
-            end
-            peer = peer:lower()
-            if peer ~= mq.TLO.Me.Name():lower() and not handledPeers:contains(peer) then
-                local cureTarget = mq.TLO.Spawn(string.format("pc =%s", peer))
-                local cureTargetID = cureTarget.ID() --will return 0 if the spawn doesn't exist
+    if handledPeerCount ~= dannetPeers then
+        for i = 1, dannetPeers do
+            ---@diagnostic disable-next-line: redundant-parameter
+            local peer = DanNet.getPeer(i)
+            if peer and peer:len() > 0 then
+                local startindex = string.find(peer, "_")
+                if startindex then
+                    peer = string.sub(peer, startindex + 1)
+                end
+                peer = peer:lower()
+                if peer ~= mq.TLO.Me.Name():lower() and not handledPeers:contains(peer) then
+                    local cureTarget = mq.TLO.Spawn(string.format("pc =%s", peer))
+                    local cureTargetID = cureTarget.ID() --will return 0 if the spawn doesn't exist
 
-                --current max range on live with raid gear is 137, radiant cure still limited to 100 (300 on laz now but not changing this), but CureNow includes range checks
-                if cureTargetID > 0 then
-                    if (cureTarget.Distance() or 999) < 150 then
-                        Logger.log_verbose("\ag[Cures - DanNet] %s is in range - checking for curables", peer)
+                    --current max range on live with raid gear is 137, radiant cure still limited to 100 (300 on laz now but not changing this), but CureNow includes range checks
+                    if cureTargetID > 0 then
+                        if (cureTarget.Distance() or 999) < 150 then
+                            Logger.log_verbose("\ag[Cures - DanNet] %s is in range - checking for curables", peer)
 
-                        local newCoroutine = coroutine.create(function()
-                            self:CheckPeerForCures(peer, cureTargetID)
-                        end)
+                            local newCoroutine = coroutine.create(function()
+                                self:CheckPeerForCures(peer, cureTargetID)
+                            end)
 
-                        if newCoroutine then
-                            table.insert(self.TempSettings.CureCoroutines, newCoroutine)
+                            if newCoroutine then
+                                table.insert(self.TempSettings.CureCoroutines, newCoroutine)
+                            else
+                                Logger.log_error("\ar[Cures - DanNet] Failed to create coroutine for %s", peer)
+                            end
                         else
-                            Logger.log_error("\ar[Cures - DanNet] Failed to create coroutine for %s", peer)
+                            Logger.log_verbose("\ao[Cures - DanNet] %d::%s is \arNOT\ao in range", i, peer or "Unknown")
                         end
                     else
-                        Logger.log_verbose("\ao[Cures - DanNet] %d::%s is \arNOT\ao in range", i, peer or "Unknown")
+                        Logger.log_verbose("\ao[Cures - DanNet] %d::No valid ID for %s, \arNOT\ao in zone", i, peer or "Unknown")
                     end
-                else
-                    Logger.log_verbose("\ao[Cures - DanNet] %d::No valid ID for %s, \arNOT\ao in zone", i, peer or "Unknown")
                 end
             end
         end
@@ -1442,16 +1379,27 @@ function Module:ProcessQueuedEvents()
     return #self.TempSettings.QueuedAbilities > 0
 end
 
-function Module:GiveTime(combat_state)
+function Module:QueueAbility(type, name, targetId)
+    Logger.log_debug("\ayQueuing %s: %s on %s", type, name, targetId)
+    table.insert(self.TempSettings.QueuedAbilities, {
+        name = name,
+        targetId = targetId,
+        target = mq.TLO.Spawn(targetId),
+        type = type,
+        queuedTime = Globals.GetTimeSeconds(),
+    })
+end
+
+function Module:GiveTime()
+    local combat_state = Combat.GetCachedCombatState()
+
     if not self.ClassConfig or not self.ModuleLoaded then return end
     local enabledRotations = Config:GetSetting('EnabledRotations') or {}
 
     local me               = mq.TLO.Me
-    ---@diagnostic disable-next-line: undefined-field
     if me.Hovering() or me.Stunned() or me.Charmed() or me.Mezzed() or me.Feared() then
         Logger.log_super_verbose("Class GiveTime aborted, we aren't in control of ourselves. Hovering(%s) Stunned(%s) Charmed(%s) Feared(%s) Mezzed(%s)",
             Strings.BoolToColorString(me.Hovering()), Strings.BoolToColorString(me.Stunned()), Strings.BoolToColorString(me.Charmed() ~= nil),
-            ---@diagnostic disable-next-line: undefined-field
             Strings.BoolToColorString(me.Mezzed() ~= nil), Strings.BoolToColorString(me.Feared() ~= nil))
         return
     end
@@ -1467,8 +1415,11 @@ function Module:GiveTime(combat_state)
                 Core.SafeCallFunc("GetCureSpells", self.ClassConfig.Cures.GetCureSpells, self)
             end
         end
+        self:SetRotationClickies()
+        self:SetRotationAAs()
         self.TempSettings.NewCombatMode = false
         self.TempSettings.CombatModeSet = true
+        self.TempSettings.CombatModeChangeTime = Globals.GetTimeSeconds()
 
         -- update our peers about our new state.
         Config:BroadcastConfigs()
@@ -1512,8 +1463,8 @@ function Module:GiveTime(combat_state)
             if Core.OnEMU() then
                 local rezCount = mq.TLO.SpawnCount("pccorpse radius 150 zradius 50")()
                 if rezCount == 0 then
-                    Config.Globals.RezzedCorpses = {}
-                    Config.Globals.CorpseConned  = false
+                    Globals.RezzedCorpses = {}
+                    Globals.CorpseConned  = false
                 end
             end
         end
@@ -1530,7 +1481,7 @@ function Module:GiveTime(combat_state)
             end
         end
 
-        self:ManageCureCoroutines()
+        self:DoEvents()
     end
 
     --Counter TOB Debuff with AA Buff, this can be refactored/expanded if they add other similar systems
@@ -1546,21 +1497,21 @@ function Module:GiveTime(combat_state)
 
         for i = 1, xtCount do
             local xtSpawn = mq.TLO.Me.XTarget(i)
-            if xtSpawn and xtSpawn.ID() > 0 and not xtSpawn.Dead() and not xtSpawn.Fleeing() and (math.ceil(xtSpawn.PctHPs() or 0)) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Config.Globals.ForceCombatID) and Config.Constants.RGNotMezzedAnims:contains(xtSpawn.Animation()) and math.abs((mq.TLO.Me.Heading.Degrees() - (xtSpawn.Heading.Degrees() or 0))) < 100 then
+            if xtSpawn and xtSpawn.ID() > 0 and not xtSpawn.Dead() and not xtSpawn.Fleeing() and (math.ceil(xtSpawn.PctHPs() or 0)) > 0 and (xtSpawn.Aggressive() or xtSpawn.TargetType():lower() == "auto hater" or xtSpawn.ID() == Globals.ForceTargetID) and Globals.Constants.RGNotMezzedAnims:contains(xtSpawn.Animation()) and math.abs((mq.TLO.Me.Heading.Degrees() - (xtSpawn.Heading.Degrees() or 0))) < 100 then
                 Logger.log_debug("\arXT(%s) is behind us! \atTaking evasive maneuvers! \awMyHeader(\am%d\aw) ThierHeading(\am%d\aw)", xtSpawn.DisplayName() or "",
                     mq.TLO.Me.Heading.Degrees(), (xtSpawn.Heading.Degrees() or 0))
-                if os.clock() - Movement:GetLastStickTimer() < 0.5 then
+                if Globals.GetTimeSeconds() - Movement:GetLastStickTimer() < 0.5 then
                     Logger.log_debug("\ayIgnoring moveback because we just stuck a second ago - let's give it some time.")
                 else
                     Movement:DoStickCmd("moveback %d", Config:GetSetting('MovebackDistance'))
-                    Movement:SetLastStickTimer(os.clock())
+                    Movement:SetLastStickTimer(Globals.GetTimeSeconds())
                 end
             end
         end
     end
 
     -- stop singing after pause so we can take over again (if we are active, we will stop our own songs). If paused, allow user to manage their own songs.
-    if Core.MyClassIs("BRD") and not Config.Globals.PauseMain and mq.TLO.Me.Casting() ~= nil and not mq.TLO.Window("CastingWindow").Open() then
+    if Core.MyClassIs("BRD") and not Globals.PauseMain and mq.TLO.Me.Casting() ~= nil and not mq.TLO.Window("CastingWindow").Open() then
         Core.DoCmd("/stopsong")
     end
 
@@ -1576,13 +1527,13 @@ function Module:GiveTime(combat_state)
         else
             self.TempSettings.RotationTimers[r.name] = self.TempSettings.RotationTimers[r.name] or 0
             if r.timer then -- see if we've waited the rotation timer out.
-                timeCheckPassed = ((os.clock() - self.TempSettings.RotationTimers[r.name]) >= r.timer)
+                timeCheckPassed = ((Globals.GetTimeSeconds() - self.TempSettings.RotationTimers[r.name]) >= r.timer)
             else            -- default to only processing Downtime rotations once per second if no timer is specified.
-                timeCheckPassed = self.CombatState ~= "Downtime" and true or ((os.clock() - self.TempSettings.RotationTimers[r.name]) >= 1)
+                timeCheckPassed = self.CombatState ~= "Downtime" and true or ((Globals.GetTimeSeconds() - self.TempSettings.RotationTimers[r.name]) >= 1)
             end
 
             if timeCheckPassed then
-                local start = string.format("%.03f", mq.gettime() / 1000)
+                local start = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
                 local targetTable = Core.SafeCallFunc("Rotation Target Table", r.targetId)
                 if targetTable ~= false then
                     for _, targetId in ipairs(targetTable) do
@@ -1597,21 +1548,21 @@ function Module:GiveTime(combat_state)
                                     Config:GetSetting('EnabledRotationEntries') or {})
 
                                 if r.state then r.state = newState end
-                                self.TempSettings.RotationTimers[r.name] = os.clock()
+                                self.TempSettings.RotationTimers[r.name] = Globals.GetTimeSeconds()
                             else
                                 r.lastCondCheck = false
                             end
                         end
                     end
                 end
-                local stop = string.format("%.03f", mq.gettime() / 1000)
+                local stop = string.format("%.03f", Globals.GetTimeSeconds() / 1000)
 
                 r.lastTimeSpent = stop - start
             else
                 Logger.log_verbose(
                     "\ay:::TEST ROTATION::: => \at%s :: Skipped due to timer! Last Run: %s Next Run %s", r.name,
-                    Strings.FormatTime(os.clock() - self.TempSettings.RotationTimers[r.name]),
-                    Strings.FormatTime((r.timer or 1) - (os.clock() - self.TempSettings.RotationTimers[r.name])))
+                    Strings.FormatTime(Globals.GetTimeSeconds() - self.TempSettings.RotationTimers[r.name]),
+                    Strings.FormatTime((r.timer or 1) - (Globals.GetTimeSeconds() - self.TempSettings.RotationTimers[r.name])))
                 if r.timer then r.lastCondCheck = false end --update rotation UI when rotation doesn't fire due to timer check
             end
         end
@@ -1635,15 +1586,16 @@ function Module:SetCurrentRotationState(state)
 end
 
 function Module:OnDeath()
-    Core.DoCmd("/nav stop")
+    Targeting.ClearTarget()
+    Movement:DoNav(false, "stop")
     Movement:DoStickCmd("off")
 end
 
 function Module:OnZone()
     -- Zone Handler
-    mq.delay("30s", function() return not mq.TLO.Me.Zoning() end) --don't try to do anything while we are still zoning
+    mq.delay("30s", function() return mq.TLO.Me.Zoning() == false end) --don't try to do anything while we are still zoning
     if not mq.TLO.Me.Zoning() then
-        local addDelay = 8 * (mq.TLO.EverQuest.Ping() or 150)     -- add'l delay to ensure we are fully loaded
+        local addDelay = 8 * (mq.TLO.EverQuest.Ping() or 150)          -- add'l delay to ensure we are fully loaded
         mq.delay(addDelay)
         self:SetPetHold()
     end
@@ -1696,13 +1648,13 @@ function Module:DoGetState()
 
     local state = string.format("Combat State: %s", self.CombatState)
 
-    return string.format("Class(%s)\n%s\n%s\n%s\n%s", Config.Globals.CurLoadedClass, actionMap, spellLoadout,
+    return string.format("Class(%s)\n%s\n%s\n%s\n%s", Globals.CurLoadedClass, actionMap, spellLoadout,
         rotationStates, state)
 end
 
 function Module:GetVersionString()
     if not self.ClassConfig then return "Unknown" end
-    return string.format("%s %s", Config.Globals.CurLoadedClass, self.ClassConfig._version)
+    return string.format("%s %s", Globals.CurLoadedClass, self.ClassConfig._version)
 end
 
 function Module:GetAuthorString()
@@ -1720,10 +1672,6 @@ function Module:GetCommandHandlers()
     return { module = self._name, CommandHandlers = cmdHandlers, }
 end
 
-function Module:GetFAQ()
-    return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
 function Module:GetClassFAQ()
     return { module = "Class Config", FAQ = self.ClassConfig.ClassFAQ or {}, }
 end
@@ -1732,7 +1680,6 @@ end
 ---@param ... string
 ---@return boolean
 function Module:HandleBind(cmd, ...)
-    local handled = false
     -- /rglua cmd handler
     if self.ClassConfig.CommandHandlers and self.ClassConfig.CommandHandlers[cmd] then
         return Core.SafeCallFunc(string.format("Command Handler: %s", cmd), self.ClassConfig.CommandHandlers[cmd].handler, self, ...)
@@ -1741,7 +1688,21 @@ function Module:HandleBind(cmd, ...)
     if self.CommandHandlers and self.CommandHandlers[cmd] then
         return Core.SafeCallFunc(string.format("Command Handler: %s", cmd), self.CommandHandlers[cmd].handler, self, ...)
     end
-    return handled
+
+    -- try to process as a substring
+    for bindCmd, bindData in pairs(self.ClassConfig.CommandHandlers or {}) do
+        if Strings.StartsWith(bindCmd, cmd) then
+            return Core.SafeCallFunc(string.format("Command Handler: %s", cmd), bindData.handler, self, ...)
+        end
+    end
+
+    for bindCmd, bindData in pairs(self.CommandHandlers or {}) do
+        if Strings.StartsWith(bindCmd, cmd) then
+            return Core.SafeCallFunc(string.format("Command Handler: %s", cmd), bindData.handler, self, ...)
+        end
+    end
+
+    return false
 end
 
 function Module:ResetRotationTimer(rotation)
@@ -1754,7 +1715,6 @@ end
 function Module:SetPetHold()
     if Config:GetSetting('DoPetCommands') and mq.TLO.Me.Pet.ID() > 0 then
         if Casting.CanUseAA("Companion's Discipline") or Casting.CanUseAA("Pet Discipline") then
-            ---@diagnostic disable-next-line: undefined-field --GHold not listed in defs
             if not mq.TLO.Me.Pet.GHold() then
                 Core.DoCmd("/pet ghold on")
             end
@@ -1783,8 +1743,81 @@ function Module:TargetIsImmune(effect, targetId)
     return false
 end
 
-function Module:Shutdown()
-    Logger.log_debug("Core Class Module Unloaded.")
+function Module:SetRotationClickies()
+    -- clear list for loadout rescan
+    self.TempSettings.RotationClickies = Set.new({})
+
+    -- Check rotations for clickies, either by checking items that were resolved from the maps, or checking strings for item entries without a map
+    for _, rotation in pairs(self.TempSettings.RotationTable) do
+        for _, entry in ipairs(rotation) do
+            if entry.type:lower() == "item" then
+                local resolvedMap = self.ResolvedActionMap[entry.name]
+                if resolvedMap and mq.TLO.FindItem(string.format("=%s", resolvedMap))() then
+                    self.TempSettings.RotationClickies:add(resolvedMap)
+                elseif type(entry.name) == "string" and mq.TLO.FindItem(string.format("=%s", entry.name))() then
+                    self.TempSettings.RotationClickies:add(entry.name)
+                end
+            end
+        end
+    end
+
+    -- do it again for heal rotation
+    for _, rotation in pairs(self.TempSettings.HealRotationTable or {}) do
+        for _, entry in ipairs(rotation) do
+            if entry.type:lower() == "item" then
+                local resolvedMap = self.ResolvedActionMap[entry.name]
+                if resolvedMap and mq.TLO.FindItem(string.format("=%s", resolvedMap))() then
+                    self.TempSettings.RotationClickies:add(resolvedMap)
+                elseif type(entry.name) == "string" and mq.TLO.FindItem(string.format("=%s", entry.Name))() then
+                    self.TempSettings.RotationClickies:add(entry.name)
+                end
+            end
+        end
+    end
+end
+
+function Module:SetRotationAAs()
+    self.TempSettings.RotationAAs = Set.new({})
+
+    -- Check rotations for clickies, either by checking items that were resolved from the maps, or checking strings for item entries without a map
+    for rname, rotation in pairs(self.ClassConfig.Rotations) do
+        for _, entry in ipairs(rotation) do
+            if entry.type:lower() == "aa" then
+                self.TempSettings.RotationAAs:add(entry.name)
+            end
+        end
+    end
+
+    -- do it again for heal rotation
+    for _, rotation in pairs(self.ClassConfig.HealRotations or {}) do
+        for _, entry in ipairs(rotation) do
+            if entry.type:lower() == "aa" then
+                self.TempSettings.RotationAAs:add(entry.name)
+            end
+        end
+    end
+
+    -- add static spells this is hacky and it sucks but one day I will make it better. promise.
+    self.TempSettings.RotationAAs:add("Radiant Cure")
+    self.TempSettings.RotationAAs:add("Dire Charm")
+    self.TempSettings.RotationAAs:add("Group Purify Soul")
+    self.TempSettings.RotationAAs:add("Aureate's Bane")
+    self.TempSettings.RotationAAs:add("Companion's Discipline")
+    self.TempSettings.RotationAAs:add("Pet Discipline")
+    self.TempSettings.RotationAAs:add("Beam of Slumber")
+    self.TempSettings.RotationAAs:add("Dirge of the Sleepwalker")
+end
+
+function Module:GetRotationClickies()
+    return self.TempSettings.RotationClickies or Set.new({})
+end
+
+function Module:GetRotationAAs()
+    return self.TempSettings.RotationAAs or Set.new({})
+end
+
+function Module:GetLastCombatModeChangeTime()
+    return self.TempSettings.CombatModeChangeTime
 end
 
 return Module

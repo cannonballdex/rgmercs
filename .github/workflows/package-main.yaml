@@ -1,31 +1,39 @@
+name: Publish to Github and Create Release
+
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
-    types: [closed]
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
+    if: github.repository == 'DerpleMQ2/rgmercs'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      # Additional steps like build or test
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(sed -n 's/.*version *= *\([0-9]\+\).*/\1/p' extras/version.lua)
+          [ -z "$VERSION" ] && exit 1
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged)
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Create a file to upload
+      - name: Create artifact
+        run: |
+          mkdir dist
+          echo "Build from commit $GITHUB_SHA" > dist/info.txt
+          zip -r dist/package.zip dist
+
+      # Create release + upload asset
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          draft: false
-          prerelease: false
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          files: |
+            dist/package.zip

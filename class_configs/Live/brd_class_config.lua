@@ -1,6 +1,7 @@
 --- @type Mq
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
@@ -13,8 +14,8 @@ local Tooltips     = {
     RunBuffSong     = "Song Line: Movement Speed Modifier",
     AriaSong        = "Song Line: Spell Damage Focus / Haste v3 Modifier",
     WarMarchSong    = "Song Line: Melee Haste / DS / STR/ATK Increase",
-    SufferingSong   = "Song Line: Melee Proc With Damage and Agro Reduction",
-    SpitefulSong    = "Song Line: Increase AC / Agro Increase Proc",
+    SufferingSong   = "Song Line: Melee Proc With Damage and Aggro Reduction",
+    SpitefulSong    = "Song Line: Increase AC / Aggro Increase Proc",
     SprySonataSong  = "Song Line: Magic Asorb / AC Increase / Mitigate Damage Shield / Resist Spells",
     DotBuffSong     = "Song Line: Fire and Magic DoT Modifier",
     CrescendoSong   = "Song Line: Group v2 Increase Hit Points and Mana",
@@ -28,7 +29,7 @@ local Tooltips     = {
     FireBuffSong    = "Song Line: Fire DD Spell Damage Increase and Effiency",
     SlowSong        = "Song Line: ST Melee Attack Slow",
     AESlowSong      = "Song Line: PBAE Melee Attack Slow",
-    AccelerandoSong = "Song Line: Reduce Beneficial Spell Casttime / Agro Reduction Modifier",
+    AccelerandoSong = "Song Line: Reduce Beneficial Spell Casttime / Aggro Reduction Modifier",
     RecklessSong    = "Song Line: Increase Crit Heal and Crit HoT Chance",
     ColdBuffSong    = "Song Line: Cold DD Damage Increase and Effiency",
     FireDotSong     = "Song Line: Fire DoT and minor resist debuff",
@@ -105,7 +106,7 @@ local _ClassConfig = {
             "Tarew's Aquatic Ayre", --Level 16
         },
         ['AriaSong'] = {
-            "Severyn's Aria",
+            "Aria of Kenburk",
             "Aria of Tenisbre", -- 125
             "Aria of Pli Xin Liako",
             "Aria of Margidor",
@@ -329,7 +330,8 @@ local _ClassConfig = {
             "Anthem de Arms",
         },
         ['FireBuffSong'] = {
-            -- CasterAriaSong - Level Range 72 - 113
+            -- CasterAriaSong - Level Range 72+
+            "Severyn's Aria",
             "Flariton's Aria", -- 125
             "Constance's Aria",
             "Sontalak's Aria",
@@ -728,6 +730,7 @@ local _ClassConfig = {
                 { name = "CureSong",      cond = function(self) return Config:GetSetting('UseCure') end, },
                 { name = "RunBuffSong",   cond = function(self) return Config:GetSetting('UseRunBuff') and not Casting.CanUseAA("Selo's Sonata") end, },
                 { name = "EndBreathSong", cond = function(self) return Config:GetSetting('UseEndBreath') end, },
+
                 -- main group dps
                 { name = "WarMarchSong",  cond = function(self) return Config:GetSetting('UseMarch') > 1 end, },
                 { name = "AriaSong",      cond = function(self) return Config:GetSetting('UseAria') > 1 end, },
@@ -770,21 +773,22 @@ local _ClassConfig = {
                         return Config:GetSetting('UseInsult') == 3 and (not Config:GetSetting('UseLLInsult') or not Core.GetResolvedActionMapItem('LLInsultSong'))
                     end,
                 },
-                { name = "LLInsultSong2", cond = function(self) return Config:GetSetting('UseInsult') == 3 and Config:GetSetting('UseLLInsult') end, },
+                { name = "LLInsultSong2",   cond = function(self) return Config:GetSetting('UseInsult') == 3 and Config:GetSetting('UseLLInsult') end, },
                 -- melee dps songs
-                { name = "SufferingSong", cond = function(self) return Config:GetSetting('UseSuffering') > 1 end, },
+                { name = "SufferingSong",   cond = function(self) return Config:GetSetting('UseSuffering') > 1 end, },
                 -- caster dps songs
-                { name = "FireBuffSong",  cond = function(self) return Config:GetSetting('UseFireBuff') > 1 end, },
-                { name = "ColdBuffSong",  cond = function(self) return Config:GetSetting('UseColdBuff') > 1 end, },
-                { name = "DotBuffSong",   cond = function(self) return Config:GetSetting('UseDotBuff') > 1 end, },
+                { name = "FireBuffSong",    cond = function(self) return Config:GetSetting('UseFireBuff') > 1 end, },
+                { name = "ColdBuffSong",    cond = function(self) return Config:GetSetting('UseColdBuff') > 1 end, },
+                { name = "DotBuffSong",     cond = function(self) return Config:GetSetting('UseDotBuff') > 1 end, },
                 -- healer songs
-                { name = "RecklessSong",  cond = function(self) return Config:GetSetting('UseReckless') > 1 end, },
+                { name = "AccelerandoSong", cond = function(self) return Config:GetSetting('UseAccelerando') > 1 end, },
+                { name = "RecklessSong",    cond = function(self) return Config:GetSetting('UseReckless') > 1 end, },
                 -- tank songs
-                { name = "SpitefulSong",  cond = function(self) return Config:GetSetting('UseSpiteful') > 1 end, },
-                { name = "SprySong",      cond = function(self) return Config:GetSetting('UseSpry') > 1 end, },
-                { name = "ResistSong",    cond = function(self) return Config:GetSetting('UseResist') > 1 end, },
+                { name = "SpitefulSong",    cond = function(self) return Config:GetSetting('UseSpiteful') > 1 end, },
+                { name = "SprySonataSong",  cond = function(self) return Config:GetSetting('UseSpry') > 1 end, },
+                { name = "ResistSong",      cond = function(self) return Config:GetSetting('UseResist') > 1 end, },
                 -- filler
-                { name = "CalmSong",      cond = function(self) return true end, }, -- condition not needed, for uniformity
+                { name = "CalmSong",        cond = function(self) return true end, }, -- condition not needed, for uniformity
             },
         },
     },
@@ -803,10 +807,11 @@ local _ClassConfig = {
             name = 'Melody',
             state = 1,
             steps = 1,
+            timer = 0,
             doFullRotation = true,
             targetId = function(self) return { mq.TLO.Me.ID(), } end,
             cond = function(self, combat_state)
-                return not (combat_state == "Downtime" and mq.TLO.Me.Invis()) and not Config.Globals.InMedState
+                return not (combat_state == "Downtime" and mq.TLO.Me.Invis()) and not Globals.InMedState
             end,
         },
         {
@@ -1004,6 +1009,14 @@ local _ClassConfig = {
                     if not Config:GetSetting('DoAEDamage') then return false end
                     return ((Config:GetSetting('UseShout') == 3 and mq.TLO.Me.PctEndurance() > Config:GetSetting('SelfEndPct')) or (Config:GetSetting('UseShout') == 2 and Casting.BurnCheck())) and
                         self.ClassConfig.HelperFunctions.AETargetCheck(true) and Casting.DetAACheck(aaName)
+                end,
+            },
+            {
+                name = "Rallying Solo", --Rallying Call theoretically possible but problematic, needs own rotation akin to Focused Paragon, etc
+                type = "AA",
+                load_cond = function(self) return Casting.CanUseAA('Rallying Solo') end,
+                cond = function(self, aaName)
+                    return (mq.TLO.Me.PctEndurance() < 30 or mq.TLO.Me.PctMana() < 30)
                 end,
             },
             {
@@ -1310,16 +1323,8 @@ local _ClassConfig = {
                 targetId = function(self) return { mq.TLO.Me.ID(), } end,
                 load_cond = function(self) return Config:GetSetting('UseRunBuff') and not Casting.CanUseAA("Selo's Sonata") end,
                 cond = function(self, songSpell)
-                    if Config.Globals.InMedState then return false end
+                    if Globals.InMedState then return false end
                     return self.ClassConfig.HelperFunctions.RefreshBuffSong(songSpell)
-                end,
-            },
-            {
-                name = "Rallying Solo", --Rallying Call theoretically possible but problematic, needs own rotation akin to Focused Paragon, etc
-                type = "AA",
-                load_cond = function(self) return Casting.CanUseAA('Rallying Solo') end,
-                cond = function(self, aaName)
-                    return (mq.TLO.Me.PctEndurance() < 30 or mq.TLO.Me.PctMana() < 30)
                 end,
             },
             {
@@ -2190,7 +2195,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..
@@ -2198,7 +2203,7 @@ local _ClassConfig = {
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },
-        [2] = {
+        {
             Question = "How does Bard meditation function?",
             Answer = "Bards can elect to med using the same settings as other classes. If a bard begins to med, they will stop singing any songs in the Melody rotation.\n\n" ..
                 "  Using the default class configs, the combat rotations will still be used. Thus, there is generally little or no support for in-combat meditation for Bard.\n\n" ..

@@ -1,21 +1,20 @@
 -- Drag Module
-local mq             = require('mq')
-local Config         = require('utils.config')
-local Core           = require("utils.core")
-local Targeting      = require("utils.targeting")
-local Ui             = require("utils.ui")
-local Comms          = require("utils.comms")
-local Logger         = require("utils.logger")
-local Strings        = require("utils.strings")
-local DanNet         = require('lib.dannet.helpers')
-local Set            = require("mq.Set")
+local mq        = require('mq')
+local Config    = require('utils.config')
+local Core      = require("utils.core")
+local Targeting = require("utils.targeting")
+local Logger    = require("utils.logger")
+local Comms     = require("utils.comms")
+local DanNet    = require('lib.dannet.helpers')
+local Base      = require("modules.base")
 
-local Module         = { _version = '0.1a', _name = "Drag", _author = 'Derple', }
-Module.__index       = Module
-Module.FAQ           = {}
-Module.SaveRequested = nil
+local Module    = { _version = '0.1a', _name = "Drag", _author = 'Derple', }
+Module.__index  = Module
+setmetatable(Module, { __index = Base, })
 
-Module.DefaultConfig = {
+Module.FAQ             = {}
+Module.CommandHandlers = {}
+Module.DefaultConfig   = {
     ['DoDrag']                                 = {
         DisplayName = "Drag Corpses",
         Group = "Movement",
@@ -31,6 +30,15 @@ Module.DefaultConfig = {
         Header = "Drag",
         Category = "Drag",
         Tooltip = "Use DanNet peer checks to identify corpses that should be dragged within a 95 unit radius.",
+        Index = 2,
+        Default = true,
+    },
+    ['DoActorsDrag']                           = {
+        DisplayName = "Use Actor Peers Dragging",
+        Group = "Movement",
+        Header = "Drag",
+        Category = "Drag",
+        Tooltip = "Use Actor peers checks to identify corpses that should be dragged within a 95 unit radius.",
         Index = 2,
         Default = true,
     },
@@ -59,78 +67,18 @@ Module.DefaultConfig = {
     },
 }
 
-local function getConfigFileName()
-    return mq.configDir ..
-        '/rgmercs/PCConfigs/' .. Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-    self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-    if not self.SaveRequested then return end
-
-    mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-    if self.SaveRequested.doBroadcast == true then
-        Comms.BroadcastMessage(self._name, "LoadSettings")
-    end
-
-    Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-    self.SaveRequested = nil
-end
-
-function Module:LoadSettings()
-    Logger.log_debug("Drag Module Loading Settings for: %s.", Config.Globals.CurLoadedChar)
-    local settings_pickle_path = getConfigFileName()
-    local settings = {}
-    local firstSaveRequired = false
-
-
-    local config, err = loadfile(settings_pickle_path)
-    if err or not config then
-        Logger.log_error("\ay[Drag]: Unable to load global settings file(%s), creating a new one!",
-            settings_pickle_path)
-        firstSaveRequired = true
-    else
-        settings = config()
-    end
-
-    Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-end
-
-function Module.New()
-    local newModule = setmetatable({}, Module)
-    return newModule
-end
-
-function Module:Init()
-    Logger.log_debug("Drag Module Loaded.")
-    self:LoadSettings()
-
-    self.ModuleLoaded = true
-
-    return { self = self, defaults = self.DefaultConfig, }
-end
-
-function Module:ShouldRender()
-    return true
+function Module:New()
+    return Base.New(self)
 end
 
 function Module:Render()
-    Ui.RenderPopAndSettings(self._name)
+    Base.Render(self)
 
     if self.ModuleLoaded then
         if ImGui.Button(Config:GetSetting('DoDrag') and "Stop Dragging" or "Start Dragging", ImGui.GetWindowWidth() * .3, 25) then
             Config:SetSetting('DoDrag', not Config:GetSetting('DoDrag'))
         end
     end
-end
-
-function Module:Pop()
-    Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
 end
 
 function Module:Drag(corpse)
@@ -141,7 +89,7 @@ function Module:Drag(corpse)
     end
 end
 
-function Module:GiveTime(combat_state)
+function Module:GiveTime()
     -- Main Module logic goes here.
 
     local corpseSearch = "pccorpse %s's radius 90"
@@ -162,8 +110,7 @@ function Module:GiveTime(combat_state)
         if Config:GetSetting('DoDanNetDrag') then
             local dannetPeers = mq.TLO.DanNet.PeerCount()
             for i = 1, dannetPeers do
-                ---@diagnostic disable-next-line: redundant-parameter
-                local peer = mq.TLO.DanNet.Peers(i)()
+                local peer = DanNet.getPeer(i)
 
                 if peer and peer:len() > 0 then
                     Logger.log_debug("Searching corpses for: %s", peer)
@@ -177,45 +124,23 @@ function Module:GiveTime(combat_state)
                 end
             end
         end
+
+        if Config:GetSetting('DoActorsDrag') then
+            local actors = Comms.GetPeers(true)
+            for _, peerFullName in ipairs(actors) do
+                local peerName = Comms.GetNameFromPeer(peerFullName)
+
+                Logger.log_debug("Searching corpses for: %s", peerName)
+                local currentSearch = string.format(corpseSearch, peerName)
+                local numCorpses = mq.TLO.SpawnCount(currentSearch)()
+
+                for i = numCorpses, 1, -1 do
+                    local corpse = mq.TLO.NearestSpawn(i, currentSearch)
+                    self:Drag(corpse)
+                end
+            end
+        end
     end
-end
-
-function Module:OnDeath()
-    -- Death Handler
-end
-
-function Module:OnZone()
-    -- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
-end
-
-function Module:DoGetState()
-    -- Reture a reasonable state if queried
-    return "Running..."
-end
-
-function Module:GetCommandHandlers()
-    return { module = self._name, CommandHandlers = {}, }
-end
-
-function Module:GetFAQ()
-    return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-    local params = ...
-    local handled = false
-    -- /rglua cmd handler
-    return handled
-end
-
-function Module:Shutdown()
-    Logger.log_debug("Drag Module Unloaded.")
 end
 
 return Module

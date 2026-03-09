@@ -1,43 +1,23 @@
-local mq          = require('mq')
-local Config      = require('utils.config')
-local Core        = require("utils.core")
-local Targeting   = require("utils.targeting")
-local Casting     = require("utils.casting")
-local Comms       = require("utils.comms")
-local ItemManager = require("utils.item_manager")
-local DanNet      = require('lib.dannet.helpers')
-local Logger      = require("utils.logger")
+local mq        = require('mq')
+local Config    = require('utils.config')
+local Globals   = require('utils.globals')
+local Core      = require("utils.core")
+local Targeting = require("utils.targeting")
+local Casting   = require("utils.casting")
+local Comms     = require("utils.comms")
+local DanNet    = require('lib.dannet.helpers')
+local Logger    = require("utils.logger")
 
-_ClassConfig      = {
+_ClassConfig    = {
     _version            = "1.3 - EQ Might",
     _author             = "Derple, Morisato, Algar",
     ['ModeChecks']      = {
-        IsTanking = function() return Core.IsModeActive("PetTank") end,
         IsRezing = function() return Core.GetResolvedActionMapItem('RezStaff') ~= nil and (Config:GetSetting('DoBattleRez') or Targeting.GetXTHaterCount() == 0) end,
     },
     ['Modes']           = {
         'DPS',
-        'PetTank',
         'PBAE',
     },
-    ['OnModeChange']    = function(self, mode)
-        if mode == "PetTank" then
-            Core.DoCmd("/pet taunt on")
-            Core.DoCmd("/pet resume on")
-            Config:SetSetting('DoPetCommands', true)
-            Config:SetSetting('AutoAssistAt', 100)
-            Config:SetSetting('StayOnTarget', false)
-            Config:SetSetting('DoAutoEngage', true)
-            Config:SetSetting('DoAutoTarget', true)
-            Config:SetSetting('AllowMezBreak', true)
-        else
-            Core.DoCmd("/pet taunt off")
-            if Config:GetSetting('AutoAssistAt') == 100 then
-                Config:SetSetting('AutoAssistAt', 98)
-            end
-            Config:SetSetting('StayOnTarget', true)
-        end
-    end,
     ['ItemSets']        = {
         ['RezStaff'] = {
             "Legendary Fabled Staff of Forbidden Rites",
@@ -58,13 +38,13 @@ _ClassConfig      = {
         ['SwarmPet'] = {
             "Raging Servant",
             "Restrained Raging Servant",
-            "Rage of Zomm",
         },
         -- ['ChaoticNuke'] = {
         --     -- Chaotic Nuke with Beneficial Effect >= LVL69
         --     "Fickle Fire",
         -- },
         ['FireDD'] = { -- Mix of Fire Nukes and Bolts appropriate for use at lower levels.
+            "Scalding Sands",
             "Burning Earth",
             "Burning Sand",
             "Scars of Sigil",
@@ -82,9 +62,11 @@ _ClassConfig      = {
             "Bolt of Jerikor",
             "Ancient: Chaos Vortex",
             "Firebolt of Tallon",
+            "Ancient: Shock of Sun",
             "Seeking Flame of Seukor",
         },
         ['MagicDD'] = { -- Magic does not have any faster casts like Fire, we have only these.
+            "Shock of Silvered Steel",
             "Blade Strike",
             "Rock of Taelosia",
             "Black Steel",
@@ -129,6 +111,7 @@ _ClassConfig      = {
             "Shield of Fire",
         },
         ['ManaRegenBuff'] = {
+            "Phantasmal Warden",
             "Phantom Shield",
             "Xegony's Phantasmal Guard",
             "Transon's Phantasmal Protection",
@@ -144,7 +127,7 @@ _ClassConfig      = {
         },
         -- Pet Spells Pets & Spells Affecting them
         ['PetHealSpell'] = {
-            -- Pet Heal*
+            "Renewal of Aenda",
             "Renewal of Jerikor",
             "Renewal of Lucifer", -- EQM Custom
             "Planar Renewal",
@@ -163,6 +146,7 @@ _ClassConfig      = {
             "Burnout VI",
             "Elemental Fury",
             "Burnout V",
+            "Ancient: Burnout Blaze",
             "Burnout IV",
             "Elemental Empathy",
             "Burnout III",
@@ -190,7 +174,7 @@ _ClassConfig      = {
             "Elementalkin: Earth",
         },
         ['WaterPetSpell'] = {
-            ----- Water Pet*
+            "Essence of Water",
             "Child of Water",
             "Servant of Marr",
             "Greater Vocaration: Water",
@@ -260,6 +244,7 @@ _ClassConfig      = {
         },
         ['ManaRodSummon'] = {
             --- ManaRodSummon - Focuses on group mana rod summon for ease. _
+            -- "Wand of Elemental Transvergence",
             "Mass Mystical Transvergence",
             "Modulating Rod",
         },
@@ -329,10 +314,9 @@ _ClassConfig      = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -341,7 +325,7 @@ _ClassConfig      = {
             name = 'Malo',
             state = 1,
             steps = 1,
-            load_cond = function() return Config:GetSetting('DoMalo') end, -- or Config:GetSetting('DoAEMalo') end,
+            load_cond = function() return Config:GetSetting('DoMalo') or Config:GetSetting('DoMaloAA') end,
             doFullRotation = true,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
@@ -387,16 +371,6 @@ _ClassConfig      = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" and Targeting.AggroCheckOkay()
-            end,
-        },
-        {
-            name = 'DPS PET',
-            state = 1,
-            steps = 1,
-            load_cond = function() return Core.IsModeActive("PetTank") end,
-            targetId = function(self) return Targeting.CheckForAutoTargetID() end,
-            cond = function(self, combat_state)
-                return combat_state == "Combat"
             end,
         },
         {
@@ -455,15 +429,15 @@ _ClassConfig      = {
         DeleteEpicOrb = function(self)
             if mq.TLO.Cursor() and mq.TLO.Cursor.ID() > 0 then
                 Core.DoCmd("/autoinventory")
-                mq.delay(50, function() return not mq.TLO.Cursor() end)
+                mq.delay(50, function() return mq.TLO.Cursor() == nil end)
             end
             if not mq.TLO.Cursor() then
                 Core.DoCmd("/nomodkey /itemnotify \"Orb of Mastery\" leftmouseup")
-                mq.delay(50, function() return mq.TLO.Cursor() end)
+                mq.delay(50, function() return mq.TLO.Cursor() ~= nil end)
                 if mq.TLO.Cursor() then
                     if mq.TLO.Cursor.ID() == 28034 then
                         Core.DoCmd("/destroy")
-                        mq.delay(50, function() return not mq.TLO.Cursor() end)
+                        mq.delay(50, function() return mq.TLO.Cursor() == nil end)
                         if not mq.TLO.FindItem("28034")() then
                             return
                         end
@@ -566,7 +540,7 @@ _ClassConfig      = {
             if not itemSource and itemSource() then return false end
             if not scope then return false end
 
-            mq.delay("2s", function() return mq.TLO.Cursor() and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() end)
+            mq.delay("2s", function() return mq.TLO.Cursor() ~= nil and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() end)
 
             if not mq.TLO.Cursor() then
                 Logger.log_debug("No valid item found on cursor, item handling aborted.")
@@ -579,7 +553,7 @@ _ClassConfig      = {
                 local delay = Config:GetSetting('AIGroupDelay')
                 Comms.PrintGroupMessage("%s summoned, issuing autoinventory command momentarily.", mq.TLO.Cursor())
                 mq.delay(delay)
-                Core.DoGroupCmd("/autoinventory")
+                Core.DoGroupOrRaidCmd("/autoinventory")
             elseif scope == "personal" then
                 local delay = Config:GetSetting('AISelfDelay')
                 mq.delay(delay)
@@ -803,7 +777,7 @@ _ClassConfig      = {
             {
                 name = "Focus of Arcanum",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Servant of Ro",
@@ -848,7 +822,7 @@ _ClassConfig      = {
                     local baseItem = self.ResolvedActionMap['FireOrbSummon'].RankName.Base(1)() or "None"
                     if mq.TLO.FindItemCount(baseItem)() == 1 then
                         local invItem = mq.TLO.FindItem(baseItem)
-                        return Casting.UseItem(invItem.Name(), Config.Globals.AutoTargetID)
+                        return Casting.UseItem(invItem.Name(), Globals.AutoTargetID)
                     end
                     return false
                 end,
@@ -857,7 +831,7 @@ _ClassConfig      = {
                 name = "Arcane Whisper",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 90
                 end,
             },
         },
@@ -881,42 +855,6 @@ _ClassConfig      = {
         },
         ['DPS'] = {
             {
-                name = "SwarmPet",
-                type = "Spell",
-                load_cond = function() return Config:GetSetting('DoSwarmPet') > 1 end,
-                cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Targeting.IsNamed(target))
-                end,
-            },
-            {
-                name = "BigFireDD",
-                type = "Spell",
-                load_cond = function() return Config:GetSetting('ElementChoice') == 1 end,
-                cond = function(self, spell, target)
-                    return Targeting.MobNotLowHP(target)
-                end,
-            },
-            {
-                name = "FireDD",
-                type = "Spell",
-                load_cond = function() return Config:GetSetting('ElementChoice') == 1 end,
-                cond = function(self, spell, target)
-                    return Targeting.MobHasLowHP(target)
-                end,
-            },
-            {
-                name = "MagicDD",
-                type = "Spell",
-                load_cond = function() return Config:GetSetting('ElementChoice') == 2 end,
-            },
-            {
-                name = "Turn Summoned",
-                type = "AA",
-                cond = function(self, aaName, target)
-                    return Targeting.TargetBodyIs(target, "Undead Pet")
-                end,
-            },
-            {
                 name = "Artifact of Asterion",
                 type = "Item",
                 load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Asterion")() end,
@@ -928,12 +866,50 @@ _ClassConfig      = {
                     end
                 end,
             },
+            {
+                name = "SwarmPet",
+                type = "Spell",
+                load_cond = function() return Config:GetSetting('DoSwarmPet') > 1 end,
+                cond = function(self, spell, target)
+                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Globals.AutoTargetIsNamed)
+                end,
+            },
+            {
+                name = "BigFireDD",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    if Config:GetSetting('ElementChoice') ~= 1 then return false end
+                    return Targeting.MobNotLowHP(target)
+                end,
+            },
+            {
+                name = "FireDD",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    if Config:GetSetting('ElementChoice') ~= 1 then return false end
+                    return Targeting.MobHasLowHP(target)
+                end,
+            },
+            {
+                name = "MagicDD",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    return Config:GetSetting('ElementChoice') == 2
+                end,
+            },
+            {
+                name = "Turn Summoned",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    return Targeting.TargetBodyIs(target, "Undead Pet")
+                end,
+            },
         },
         ['Malo'] = {
             {
                 name = "Malosinete",
                 type = "AA",
-                load_cond = function() return Casting.CanUseAA("Malosinete") end,
+                load_cond = function() return Config:GetSetting('DoMaloAA') and Casting.CanUseAA("Malosinete") end,
                 cond = function(self, aaName)
                     return Casting.DetAACheck(aaName)
                 end,
@@ -941,7 +917,7 @@ _ClassConfig      = {
             {
                 name = "MaloDebuff",
                 type = "Spell",
-                load_cond = function() return not Casting.CanUseAA("Malosinete") end,
+                load_cond = function() return Config:GetSetting('DoMalo') and (not Casting.CanUseAA("Malosinete") or not Config:GetSetting('DoMaloAA')) end,
                 cond = function(self, spell)
                     return Casting.DetSpellCheck(spell)
                 end,
@@ -963,15 +939,15 @@ _ClassConfig      = {
                 name = "FireShroud",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                         -- workarounds for laz
-                        and not Casting.PeerBuffCheck(19847, target, true) -- necrotic pustules
-                        and not Casting.PeerBuffCheck(8484, target, true)  -- decrepit skin
+                        and Casting.AddedBuffCheck(19847, target) -- necrotic pustules
+                        and Casting.AddedBuffCheck(5521, target)  -- decrepit skin
                 end,
                 post_activate = function(self, spell, success)
                     local petName = mq.TLO.Me.Pet.CleanName() or "None"
-                    mq.delay("3s", function() return not mq.TLO.Me.Casting() end)
+                    mq.delay("3s", function() return mq.TLO.Me.Casting() == nil end)
                     if success and mq.TLO.Me.XTarget(petName)() then
                         Comms.PrintGroupMessage("It seems %s has triggered combat due to a server bug, calling the pet back.", spell)
                         Core.DoCmd('/pet back off')
@@ -1084,7 +1060,7 @@ _ClassConfig      = {
                 { name = "EpicPetOrb",       cond = function(self) return Config:GetSetting('UseEpicPet') and not mq.TLO.FindItem("=Ornate Orb of Mastery")() end, },
                 { name = "PBAE1",            cond = function(self) return Core.IsModeActive("PBAE") end, },
                 { name = "PBAE2",            cond = function(self) return Core.IsModeActive("PBAE") end, },
-                { name = "MaloDebuff",       cond = function(self) return Config:GetSetting('DoMalo') and not Casting.CanUseAA("Malosinete") end, },
+                { name = "MaloDebuff",       cond = function(self) return Config:GetSetting('DoMalo') and (not Config:GetSetting('DoMaloAA') or not Casting.CanUseAA("Malosinete")) end, },
                 { name = "PetHealSpell",     cond = function(self) return Config:GetSetting('DoPetHealSpell') end, },
                 { name = "FireOrbSummon", },
                 -- { name = "GroupCotH", },
@@ -1104,10 +1080,9 @@ _ClassConfig      = {
             RequiresLoadoutChange = true,
             Default = 1,
             Min = 1,
-            Max = 3,
+            Max = 2,
             FAQ = "What is the difference between the modes?",
             Answer = "DPS Mode performs exactly as described.\n" ..
-                "PetTank mode will Focus on keeping the Pet alive as the main tank.\n" ..
                 "PBAE Mode will use PBAE spells when configured, alongside the DPS rotation.",
         },
         ['DoPocketPet']    = {
@@ -1224,7 +1199,6 @@ _ClassConfig      = {
             Default = 1,
             Min = 1,
             Max = 2,
-            RequiresLoadoutChange = true,
         },
         ['DoSwarmPet']     = {
             DisplayName = "Swarm Pet Spell:",
@@ -1268,7 +1242,17 @@ _ClassConfig      = {
             Header = "Debuffs",
             Category = "Resist",
             Index = 101,
-            Tooltip = "Do Malo Spells/AAs",
+            Tooltip = "Use your Malo line spell.",
+            RequiresLoadoutChange = true, --this setting is used as a load condition
+            Default = true,
+        },
+        ['DoMaloAA']       = {
+            DisplayName = "Cast Malo AA",
+            Group = "Abilities",
+            Header = "Debuffs",
+            Category = "Resist",
+            Index = 102,
+            Tooltip = "If available, prefer the AA version of Malo (slight trade in debuff strength for less chance to be resisted).",
             RequiresLoadoutChange = true, --this setting is used as a load condition
             Default = true,
         },
@@ -1383,11 +1367,11 @@ _ClassConfig      = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

@@ -32,4 +32,21 @@ function Math.Rotate(angle, x, y)
         x * sin_a + y * cos_a
 end
 
+function Math.Clamp(value, low, high)
+    if value < low then return low end
+    if value > high then return high end
+    return value
+end
+
+function Math.Lerp(a, b, t)
+    return a + ((b - a) * t)
+end
+
+function Math.ColorLerp(c1, c2, t)
+    return ImVec4(Math.Lerp(c1.x, c2.x, t),
+        Math.Lerp(c1.y, c2.y, t),
+        Math.Lerp(c1.z, c2.z, t),
+        Math.Lerp(c1.w, c2.w, t))
+end
+
 return Math

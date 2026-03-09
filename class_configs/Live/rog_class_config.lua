@@ -1,6 +1,8 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
+local Movement  = require("utils.movement")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
 local Strings   = require("utils.strings")
@@ -31,10 +33,9 @@ return {
             "Practiced Reflexes",
         },
         ["ThiefBuff"] = {
-            "Blinding Flash XIV",  -- Level 127
-            "Thief's Sight",       -- Level 117
-            "Thief's Vision",      -- Level 96
-            "Thief's Eyes",        -- Level 68
+            "Thief's Sight",  -- Level 117
+            "Thief's Vision", -- Level 96
+            "Thief's Eyes",   -- Level 68
         },
         ["DaggerThrow"] = {
             "Queseris' Dagger",       -- Level 122
@@ -64,10 +65,9 @@ return {
             "Deadeye Discipline",        -- Level 54
         },
         ["ProcBuff"] = {
-            "Indiscernible Discipline",    -- Level 127
-            "Weapon Covenant",             -- Level 97
-            "Weapon Bond",                 -- Level 92
-            "Weapon Affiliation",          -- Level 87
+            "Weapon Covenant",    -- Level 97
+            "Weapon Bond",        -- Level 92
+            "Weapon Affiliation", -- Level 87
         },
         ["Frenzied"] = {
             "Frenzied Stabbing Discipline", -- Level 70
@@ -155,10 +155,10 @@ return {
         ['CombatEndRegen'] = {
             --Timer 13, can be used in combat.
             "Hiatus V", --Level 126
-            "Hiatus", --Level 106
-            "Relax",
-            "Night's Calming",
             "Convalesce",
+            "Night's Calming",
+            "Relax",
+            "Hiatus", --Level 106
         },
         ["CADisc"] = {
             "Counterattack Discipline",
@@ -169,7 +169,7 @@ return {
             "Razor's Edge Discipline",  -- Level 92
         },
         ["AspDisc"] = {
-            "Visaphen Discipline",   -- Level 129
+            "Visapehn Discipline",   -- Level 129
             "Crinotoxin Discipline", -- Level 124
             "Exotoxin Discipline",   -- Level 119
             "Chelicerae Discipline", -- Level 114
@@ -178,47 +178,47 @@ return {
             "Aspbleeder Discipline", -- Level 99
         },
         ["AimDisc"] = {
-            "Fatal Aim Discipline IV",--  Level 130
-            "Baleful Aim Discipline", --  Level 116
-            "Lethal Aim Discipline",  --  Level 108
-            "Fatal Aim Discipline",   --  Level 98
-            "Deadly Aim Discipline",  --  Level 68
+            "Fatal Aim Discipline IV", --  Level 130
+            "Baleful Aim Discipline",  --  Level 116
+            "Lethal Aim Discipline",   --  Level 108
+            "Fatal Aim Discipline",    --  Level 98
+            "Deadly Aim Discipline",   --  Level 68
         },
         ["MarkDisc"] = {
-            "Easy Mark X",       -- Level 127
+            "Easy Mark X",       -- Level 126
             "Unsuspecting Mark", -- Level 121
             "Foolish Mark",      -- Level 116
             "Naive Mark",        -- Level 111
             "Dim-Witted Mark",   -- Level 106
             "Wide-Eyed Mark",    -- Level 101
             "Gullible Mark",     -- Level 96
+            "Gullible Mark",     -- Level 91
             "Easy Mark",         -- Level 86
         },
         ["Jugular"] = {
-            "Jugular Slash",    -- Level 77
-            "Jugular Slice",    -- Level 82
-            "Jugular Sever",    -- Level 87
-            "Jugular Gash",     -- Level 92
-            "Jugular Lacerate", -- Level 97
-            "Jugular Hack",     -- Level 102
-            "Jugular Strike",   -- Level 107
-            "Jugular Cut",      -- Level 112
-            "Jugular Rend",     -- Level 117
-            "Jugular Hew",      -- Level 122
             "Jugular Slash XI", -- Level 127
-
+            "Jugular Hew",      -- Level 122
+            "Jugular Rend",     -- Level 117
+            "Jugular Cut",      -- Level 112
+            "Jugular Strike",   -- Level 107
+            "Jugular Hack",     -- Level 102
+            "Jugular Lacerate", -- Level 97
+            "Jugular Gash",     -- Level 92
+            "Jugular Sever",    -- Level 87
+            "Jugular Slice",    -- Level 82
+            "Jugular Slash",    -- Level 77
         },
         ["Phantom"] = {
             "Phantom Assassin", -- Level 100
         },
         ["SecretBlade"] = {
-            "Holdout Blade VII",-- Level 129
-            "Veiled Blade",     -- Level 124
-            "Obfuscated Blade", -- Level 119
-            "Cloaked Blade",    -- Level 114
-            "Secret Blade",     -- Level 109
-            "Hidden Blade",     -- Level 104
-            "Holdout Blade",    -- Level 99
+            "Holdout Blade VII", -- Level 129
+            "Veiled Blade",      -- Level 124
+            "Obfuscated Blade",  -- Level 119
+            "Cloaked Blade",     -- Level 114
+            "Secret Blade",      -- Level 109
+            "Hidden Blade",      -- Level 104
+            "Holdout Blade",     -- Level 99
         },
         ["DichoSpell"] = {
             "Reciprocal Weapons", -- Level 121
@@ -259,6 +259,13 @@ return {
             end,
         },
         {
+            name = 'Hide & Sneak',
+            targetId = function(self) return { mq.TLO.Me.ID(), } end,
+            cond = function(self, combat_state)
+                return combat_state == "Downtime" and Casting.AmIBuffable()
+            end,
+        },
+        {
             name = 'Aggro Management',
             state = 1,
             steps = 1,
@@ -276,7 +283,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -366,7 +373,7 @@ return {
                 type = "Disc",
             },
             {
-                name = "DichoSpell",
+                name = "Dicho",
                 type = "Disc",
             },
             {
@@ -475,7 +482,6 @@ return {
                 type = "ClickyItem",
                 cond = function(self)
                     return Casting.SelfBuffItemCheck(Config:GetSetting('PoisonName'))
-                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonName'))() or false)
                 end,
             },
             {
@@ -495,7 +501,7 @@ return {
                 end,
             },
             {
-                name = "Slice",
+                name = "Carve",
                 type = "Disc",
             },
             {
@@ -593,20 +599,13 @@ return {
                 name = "PoisonClicky",
                 type = "ClickyItem",
                 active_cond = function(self, _)
-                    if mq.TLO.Cursor() ~= nil then mq.cmd("/autoinventory") end
-                    local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
-                    local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
-                    return count < threshold
+                    return (mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))() or 0) >= Config:GetSetting('PoisonItemCount')
                 end,
                 cond = function(self, _)
-                    if mq.TLO.Cursor() ~= nil then mq.cmd("/autoinventory") end
-                    local count = tonumber(mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))()) or 0
-                    local threshold = tonumber(Config:GetSetting('PoisonItemCount')) or 0
-                    return count < threshold
-                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonClicky'))() or false)
+                    return (mq.TLO.FindItemCount(Config:GetSetting('PoisonName'))() or 0) < Config:GetSetting('PoisonItemCount') and
+                        mq.TLO.Me.ItemReady(Config:GetSetting('PoisonClicky'))()
                 end,
             },
-            -- 2) Apply/refresh poison buff using the consumable item itself
             {
                 name = "PoisonName",
                 type = "ClickyItem",
@@ -614,18 +613,19 @@ return {
                     local poisonItem = mq.TLO.FindItem(Config:GetSetting('PoisonName'))
                     return poisonItem and poisonItem() and Casting.IHaveBuff(poisonItem.Spell.ID() or 0)
                 end,
-                cond = function(self, _)
+                cond = function(self)
                     return Casting.SelfBuffItemCheck(Config:GetSetting('PoisonName'))
-                        and (mq.TLO.Me.ItemReady(Config:GetSetting('PoisonName'))() or false)
                 end,
             },
             {
-                name = "Envenomed Blades: Disabled",
+                name = "Envenomed Blades",
                 type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
                 end,
             },
+        },
+        ['Hide & Sneak'] = {
             {
                 name = "Hide & Sneak",
                 type = "CustomFunc",
@@ -653,13 +653,13 @@ return {
                             ---@diagnostic disable-next-line: undefined-field
                         elseif mq.TLO.Me.Moving() and mq.TLO.Nav.Active() and not mq.TLO.Nav.Paused() then
                             -- let's get crazy: if we are naving, quickly pause and "sneak" a hide in
-                            Core.DoCmd("/nav pause")
+                            Movement:DoNav(false, "pause")
                             mq.delay(200, function() return not mq.TLO.Me.Moving() end)
                             mq.delay((2 * mq.TLO.EverQuest.Ping()) or 200) --addl delay to avoid "must be perfectly still..." server desync
                             Core.DoCmd("/doability hide")
                             mq.delay(100, function() return (mq.TLO.Me.AbilityTimer("Hide")() or 0) > 0 end)
                             ---@diagnostic disable-next-line: undefined-field
-                            if mq.TLO.Nav.Paused() then Core.DoCmd("/nav pause") end
+                            if mq.TLO.Nav.Paused() then Movement:DoNav(false, "pause") end
                         end
                     end
                 end,
@@ -668,6 +668,7 @@ return {
     },
     ['HelperFunctions'] = {
         PreEngage = function(target)
+            if not target or not target() then return end
             local openerAbility = Core.GetResolvedActionMapItem('SneakAttack')
 
             if not Config:GetSetting("DoOpener") or not openerAbility then return end
@@ -675,7 +676,7 @@ return {
             Logger.log_debug("\ayPreEngage(): Testing Opener ability = %s", openerAbility or "None")
 
             if mq.TLO.Me.CombatAbilityReady(openerAbility)() and not mq.TLO.Me.AbilityReady("Hide")() and mq.TLO.Me.AbilityTimer("Hide")() <= math.max(0, mq.TLO.Me.AbilityTimerTotal("Hide")() - 4000) and mq.TLO.Me.Invis() then
-                Casting.UseDisc(openerAbility, target)
+                Casting.UseDisc(openerAbility, target.ID())
                 Logger.log_debug("\agPreEngage(): Using Opener ability = %s", openerAbility or "None")
             else
                 Logger.log_debug("\arPreEngage(): NOT using Opener ability = %s, DoOpener = %s, Hide Ready = %s, Hide Timer = %d, Invis = %s", openerAbility or "None",
@@ -770,7 +771,7 @@ return {
             Category = "Self",
             Index = 101,
             Tooltip = "Use Hide/Sneak during Downtime",
-            Default = true,
+            Default = false,
         },
         ['DoOpener']        = {
             DisplayName = "Use Openers",
@@ -904,7 +905,7 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

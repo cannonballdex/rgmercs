@@ -1,11 +1,14 @@
 local mq                        = require('mq')
 local ImGui                     = require('ImGui')
 local Config                    = require('utils.config')
+local Globals                   = require("utils.globals")
 local Logger                    = require('utils.logger')
 local Ui                        = require('utils.ui')
 local Icons                     = require('mq.ICONS')
 local Modules                   = require('utils.modules')
 local Comms                     = require('utils.comms')
+local Tables                    = require('utils.tables')
+local ImAnim                    = require('ImAnim')
 local Set                       = require("mq.Set")
 
 local OptionsUI                 = { _version = '1.0', _name = "OptionsUI", _author = 'Derple', 'Algar', }
@@ -19,6 +22,7 @@ OptionsUI.lastHighlightTime     = 0
 OptionsUI.selectedCharacter     = ""
 OptionsUI.lastPeerUpdate        = 0
 OptionsUI.bgImg                 = mq.CreateTexture(mq.TLO.Lua.Dir() .. "/rgmercs/extras/options_bg.png")
+OptionsUI.ToastStates           = {}
 
 function OptionsUI.LoadIcon(icon)
     return mq.CreateTexture(mq.TLO.Lua.Dir() .. "/rgmercs/extras/" .. icon .. ".png")
@@ -31,11 +35,11 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
         Icon = Icons.FA_COGS,
         IconImage = OptionsUI.LoadIcon("settingsicon"),
         Headers = {
-            { Name = 'Announcements', Categories = { "Announcements", }, },                                       -- group announce stuff
-            { Name = 'Interface',     Categories = { "Interface", }, },                                           -- ui stuff
-            { Name = 'Loot(Emu)',     Categories = { "Looting Script", "LNS", "SmartLoot", }, },
-            { Name = 'Misc',          Categories = { "Misc", }, },                                                -- ??? profit
-            { Name = 'Uncategorized', Categories = { "Uncategorized", },                      CatchAll = true, }, -- settings from custom configs that don't have proper group/header
+            { Name = 'Announcements',   Categories = { "Announcements", }, }, -- group announce stuff-- ui stuff
+            { Name = 'Loot(Emu)',       Categories = { "Looting Script", "LNS", "SmartLoot", }, },
+            { Name = 'Mercs Internals', Categories = { "Internals", }, },
+            { Name = 'Misc',            Categories = { "Misc", }, },                                                -- ??? profit
+            { Name = 'Uncategorized',   Categories = { "Uncategorized", },                      CatchAll = true, }, -- settings from custom configs that don't have proper group/header
         },
     },
     {
@@ -56,9 +60,9 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
         Icon = Icons.FA_HEART,
         IconImage = OptionsUI.LoadIcon("swordicon"),
         Headers = {
-            { Name = 'Targeting',   Categories = { "Targeting Behavior", "MA Target Selection", }, },          -- Auto engage, med break, stay on target, etc
-            { Name = 'Assisting',   Categories = { "Assisting", }, },                                          -- this will include pet and merc percentages/commands
-            { Name = 'Positioning', Categories = { "General Positioning", "Tank Positioning", "Archery", }, }, -- stick, face, etc
+            { Name = 'Targeting',   Categories = { "Targeting Behavior", "MA Target Selection", "Tank Target Selection", }, }, -- Auto engage, med break, stay on target, etc
+            { Name = 'Assisting',   Categories = { "Assisting", }, },                                                          -- this will include pet and merc percentages/commands
+            { Name = 'Positioning', Categories = { "General Positioning", "Tank Positioning", "Archery", }, },                 -- stick, face, etc
             { Name = 'Burning',     Categories = { "Burning", }, },
             { Name = 'Tanking',     Categories = { "Tanking", }, },
         },
@@ -69,7 +73,7 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
         Icon = Icons.FA_HEART,
         IconImage = OptionsUI.LoadIcon("stafficon"),
         Headers = {
-            { Name = 'Common',   Categories = { "Common Rules", "Under the Hood", }, },
+            { Name = 'Common',   Categories = { "Common Rules", "Spell Management", "Under the Hood", }, },
             { Name = 'Pet',      Categories = { "Pet Summoning", "Pet Buffs", "Swarm Pets", }, },
             { Name = 'Buffs',    Categories = { "Buff Rules", "Self", "Group", }, },
             { Name = 'Debuffs',  Categories = { "Debuff Rules", "Slow", "Stun", "Resist", "Snare", "Dispel", "Misc Debuffs", }, }, -- Resist i.e, Malo, Tash, druid
@@ -102,6 +106,30 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
                         end,
                         Search = function(searchFilter)
                             return Modules:ExecModule("Clickies", "HaveSearchMatches", searchFilter)
+                        end,
+                    },
+                },
+            },
+        },
+    },
+    {
+        Name = "Interface",
+        Description = "Clickies, Bandolier Swaps",
+        Icon = Icons.MD_RESTAURANT_MENU,
+        IconImage = OptionsUI.LoadIcon("themeicon"),
+        Headers = {
+            { Name = 'Interface', Categories = { "Interface", "Main Panel", "ForceTarget Window", "Mercs Status Window", "Default Colors", }, },
+            {
+                Name = 'User Theme',
+                RenderCategories = {
+                    {
+                        Header = "User Theme",
+
+                        Render = function(searchFilter)
+                            return Ui.RenderThemeConfig(searchFilter)
+                        end,
+                        Search = function(searchFilter)
+                            return Ui.ThemeConfigMatchesFilter(searchFilter)
                         end,
                     },
                 },
@@ -313,8 +341,8 @@ function OptionsUI:ApplySearchFilter()
         OptionsUI.GroupsNameToIDs[group.Name] = id
     end
 
-    self.lastSortTime = os.time()
-    self.lastHighlightTime = os.time()
+    self.lastSortTime = Globals.GetTimeSeconds()
+    self.lastHighlightTime = Globals.GetTimeSeconds()
 end
 
 function OptionsUI:RenderGroupPanel(groupLabel, groupName)
@@ -374,7 +402,7 @@ function OptionsUI:RenderCategorySeperator(category)
     ImGui.PushStyleVar(ImGuiStyleVar.SeparatorTextAlign, ImVec2(0.05, 0.5))
 
     if self.HighlightedCategories:contains(category) then
-        ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.5, 0.0, 1.0)
+        ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.SearchHighlightColor)
     end
 
     ImGui.SeparatorText(category)
@@ -390,7 +418,7 @@ function OptionsUI:RenderOptionsPanel(groupName)
     if self.FilteredGroups[self.GroupsNameToIDs[groupName]] then
         for _, header in ipairs(self.FilteredGroups[self.GroupsNameToIDs[groupName]].Headers or {}) do
             if header.highlighted then
-                ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.5, 0.0, 1.0)
+                ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.SearchHighlightColor)
             end
 
             if ImGui.CollapsingHeader(header.Name) then
@@ -457,25 +485,47 @@ function OptionsUI:RenderCategorySettings(category)
                 -- defaults can go away when a different class config is loaded in.
                 if settingDefaults then
                     local setting        = Config:PeerGetSetting(self.selectedCharacter, settingName)
-                    local id             = "##" .. settingName
+                    local id             = settingName -- important! the color configs use this to look up defaults.
                     local settingTooltip = (type(settingDefaults.Tooltip) == 'function' and settingDefaults.Tooltip() or settingDefaults.Tooltip) or ""
 
                     if settingDefaults.Type ~= "Custom" then
                         --
+                        local hasWarning, warningText = false, ""
+
+                        if settingDefaults.Warning then
+                            hasWarning, warningText = settingDefaults.Warning()
+                        end
+
                         if idx % numCols == 1 then
                             ImGui.TableNextRow(ImGuiTableRowFlags.None, ImGui.GetFrameHeightWithSpacing())
                         end
 
                         ImGui.TableNextColumn()
                         if self.HighlightedSettings:contains(settingName) then
-                            ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.5, 0.0, 1.0)
+                            ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.SearchHighlightColor)
                         end
+
                         local text_height = ImGui.GetTextLineHeightWithSpacing()
                         local row_height  = ImGui.GetFrameHeightWithSpacing()
 
                         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + ((row_height - text_height) / 2))
 
-                        ImGui.Text(string.format("%s", settingDefaults.DisplayName or (string.format("None %d", idx))))
+                        local columnWidth = ImGui.GetColumnWidth()
+                        local iconWidth = hasWarning and ImGui.CalcTextSize(Icons.MD_WARNING) or 0
+                        local selectableWidth = columnWidth - iconWidth - (hasWarning and ImGui.GetStyle().ItemSpacing.x or 0)
+                        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, IM_COL32(0, 0, 0, 0))
+                        ImGui.PushStyleColor(ImGuiCol.HeaderActive, Ui.ChangeColorAlpoha(Globals.Constants.Colors.Green, 0.1))
+                        if ImGui.Selectable(string.format("%s", settingDefaults.DisplayName or (string.format("None %d", idx))), false, ImGuiSelectableFlags.None, ImVec2(selectableWidth, 0)) then
+                            ImGui.SetClipboardText(settingName)
+                            table.insert(self.ToastStates, {
+                                active = true,
+                                timer = 0,
+                                message = string.format("Setting name '%s' copied to clipboard", settingName),
+                                color = Ui.ImVec4ToColor(Globals.Constants.Colors.Green),
+                            })
+                        end
+                        ImGui.PopStyleColor(2)
+
                         if self.HighlightedSettings:contains(settingName) then
                             ImGui.PopStyleColor(1)
                         end
@@ -483,10 +533,44 @@ function OptionsUI:RenderCategorySettings(category)
                         if settingDefaults.Type == "Combo" then
                             defaultValue = string.format("%s - %s", settingDefaults.Default, settingDefaults.ComboOptions[settingDefaults.Default])
                         end
-                        Ui.Tooltip(string.format("%s\n\n[Variable: %s]\n[Default: %s]",
-                            settingTooltip,
-                            settingName,
-                            tostring(defaultValue)))
+                        if settingDefaults.Type == "Color" then
+                            defaultValue = string.format("R:%g, G:%g, B:%g, A:%g",
+                                math.floor(settingDefaults.Default.x * 255),
+                                math.floor(settingDefaults.Default.y * 255),
+                                math.floor(settingDefaults.Default.z * 255),
+                                math.floor((settingDefaults.Default.w or 1.0) * 255))
+                        end
+                        local tooltipColor = Globals.Constants.Colors.TooltipTextColor
+                        Ui.MultilineTooltipWithColors(
+                            {
+                                { text = settingTooltip, color = tooltipColor, },
+                                { text = "",             color = tooltipColor, },
+                                { text = "Variable: ",   color = Globals.Constants.Colors.LightBlue, padAfter = 4, },
+                                { text = settingName,    color = Globals.Constants.Colors.Orange,    sameLine = true, },
+                                { text = "Default: ",    color = Globals.Constants.Colors.LightBlue, padAfter = 4, },
+                                {
+                                    text = tostring(defaultValue),
+                                    render = settingDefaults.Type == "Color" and
+                                        function(draw_list, pos)
+                                            local size = ImGui.GetTextLineHeight()
+                                            -- if no draw_list then just return our size
+                                            if draw_list then
+                                                draw_list:AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), Ui.ImVec4ToColor(settingDefaults.Default), 4)
+                                            end
+
+                                            return size + 4, size
+                                        end or nil,
+                                    color = Globals.Constants.Colors.Orange,
+                                    sameLine = true,
+                                },
+                            })
+
+                        if hasWarning then
+                            ImGui.SameLine()
+                            ImGui.TextColored(Globals.Constants.Colors.ConditionFailColor, Icons.MD_WARNING)
+                            Ui.Tooltip(warningText)
+                        end
+
                         ImGui.TableNextColumn()
                         local typeOfSetting = type(settingDefaults.Type) == 'string' and settingDefaults.Type or type(setting)
                         if (settingDefaults.Type or ""):find("Array") then
@@ -518,9 +602,9 @@ function OptionsUI:RenderCategorySettings(category)
                     end
                 else
                     ImGui.TableNextColumn()
-                    ImGui.Text(string.format("\arError: Setting not found - %s\ax", settingName))
+                    ImGui.Text("\arError: Setting not found - %s\ax", settingName)
                     ImGui.TableNextColumn()
-                    ImGui.Text(string.format("\arError: Setting not found - %s\ax", settingName))
+                    ImGui.Text("\arError: Setting not found - %s\ax", settingName)
                 end
             end
             ImGui.EndTable()
@@ -533,7 +617,7 @@ function OptionsUI:RenderCurrentTab()
     self:RenderOptionsPanel(self.selectedGroup)
 end
 
-function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
+function OptionsUI:RenderMainWindow(_, openGUI, flags)
     local shouldDrawGUI = true
 
     if self.FirstRender or self.lastSortTime < Config:GetLastModuleRegisteredTime() or self.lastHighlightTime < Config:GetLastHighlightChangeTime() then
@@ -541,12 +625,6 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
         self:ApplySearchFilter()
         Logger.log_debug("\ayOptionsUI: \awSettings re-sorted due to new module settings being registered.")
         self.FirstRender = false
-    end
-
-    local flags = ImGuiWindowFlags.None
-
-    if Config:GetSetting('MainWindowLocked') then
-        flags = bit32.bor(flags, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoResize)
     end
 
     if Config.TempSettings.ResetOptionsUIPosition then
@@ -557,13 +635,13 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
     ImGui.SetNextWindowSize(ImVec2(700, 500), ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(2000, 2000))
 
-    openGUI, shouldDrawGUI = ImGui.Begin(('RGMercs Options%s###rgmercsOptionsUI'):format(Config.Globals.PauseMain and " [Paused]" or ""), openGUI, flags)
+    openGUI, shouldDrawGUI = ImGui.Begin(Ui.GetWindowTitle(("RGMercs Options%s"):format(Globals.PauseMain and " [Paused]" or ""), 'rgmercsOptionsUI'), openGUI, flags)
 
     if shouldDrawGUI then
-        ImGui.PushID("##RGMercsUI_" .. Config.Globals.CurLoadedChar)
+        ImGui.PushID("##RGMercsUI_" .. Globals.CurLoadedChar)
         local _, y = ImGui.GetContentRegionAvail()
 
-        if ImGui.BeginChild("left##RGmercsOptions", math.min(ImGui.GetWindowContentRegionWidth() * .3, 205), y - 1, ImGuiChildFlags.Border) then
+        if ImGui.BeginChild("left##RGmercsOptions", math.min(ImGui.GetWindowContentRegionWidth() * .3, 205), y - 1, ImGuiChildFlags.Borders) then
             local flags = bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter, ImGuiTableFlags.ScrollY)
             local textChanged = false
             local inputBoxPosX = ImGui.GetCursorPosX()
@@ -572,7 +650,7 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
 
             ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionWidth())
             -- character selecter
-            local peerList = Config:GetPeers()
+            local peerList = Comms.GetPeers(false)
             table.insert(peerList, 1, Comms.GetPeerName())
             local peerListIdx = 1
             for idx, name in ipairs(peerList) do
@@ -653,7 +731,7 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
         local x, _ = ImGui.GetContentRegionAvail()
 
         local right_start = ImGui.GetCursorPosVec()
-        if ImGui.BeginChild("right##RGmercsOptionsBG", x, y - 1, ImGuiChildFlags.Border) then
+        if ImGui.BeginChild("right##RGmercsOptionsBG", x, y - 1, ImGuiChildFlags.Borders) then
             local cr_min       = ImGui.GetWindowContentRegionMinVec()
             local cr_max       = ImGui.GetWindowContentRegionMaxVec()
             local wp           = ImGui.GetCursorScreenPosVec()
@@ -666,25 +744,29 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
             bottom_right.y     = bottom_right.y + ImGui.GetScrollY()
 
             local draw_list    = ImGui.GetWindowDrawList()
-            draw_list:PushClipRect(top_left, bottom_right, true)
-            draw_list:AddImage(self.bgImg:GetTextureID(),
-                top_left,
-                bottom_right,
-                ImVec2(0, 0), ImVec2(1, 1),
-                IM_COL32(255, 255, 255, 30))
-            draw_list:PopClipRect()
+            if self.bgImg then
+                draw_list:PushClipRect(top_left, bottom_right, true)
+
+                draw_list:AddImage(self.bgImg:GetTextureID(),
+                    top_left,
+                    bottom_right,
+                    ImVec2(0, 0), ImVec2(1, 1),
+                    IM_COL32(255, 255, 255, 30))
+                draw_list:PopClipRect()
+            end
         end
         ImGui.EndChild()
 
         ImGui.SetCursorPos(right_start)
-        if ImGui.BeginChild("right##RGmercsOptions", x, y - 1, ImGuiChildFlags.Border) then
+        if ImGui.BeginChild("right##RGmercsOptions", x, y - 1, ImGuiChildFlags.Borders) then
             flags = bit32.bor(ImGuiTableFlags.None, ImGuiTableFlags.None)
             if self.selectedCharacter ~= Comms.GetPeerName() and Config:GetPeerLastConfigReceivedTime(self.selectedCharacter) == 0 then
-                ImGui.TextColored(0.2, 0.2, 0.8, 1.0, "Waiting for configuration from " .. self.selectedCharacter .. "...")
+                ImGui.TextColored(0.2, 0.2, 0.8, 1.0, "Waiting for configuration from %s...", self.selectedCharacter)
             else
                 if ImGui.BeginTable('rightpanelTable##RGmercsOptions', 1, flags, 0, 0, 0.0) then
                     ImGui.TableNextColumn()
                     self:RenderCurrentTab()
+                    ImGui.Dummy(ImVec2(0, 0))
                     ImGui.EndTable()
                 end
             end
@@ -692,10 +774,78 @@ function OptionsUI:RenderMainWindow(imgui_style, curState, openGUI)
         ImGui.EndChild()
         ImGui.PopID()
     end
-
+    self:RenderToastNotifications()
     ImGui.End()
 
     return openGUI
+end
+
+function OptionsUI:RenderToastNotifications()
+    local states = self.ToastStates
+    local dt = Ui.GetDeltaTime()
+
+    local canvas_pos = ImGui.GetCursorScreenPosVec()
+    local content_avail = ImGui.GetContentRegionAvailVec()
+    local canvas_size = ImVec2(content_avail.x, 180)
+    local draw_list = ImGui.GetForegroundDrawList()
+
+    -- cleanup defunct states
+    for i = #states, 1, -1 do
+        if not states[i].active then
+            table.remove(states, i)
+        end
+    end
+
+    local toast_height = 50.0
+    local toast_spacing = 8.0
+    local toast_padding = 32.0
+
+    local numToasts = #states
+    canvas_pos.y = (canvas_pos.y - ((toast_height * numToasts) + (toast_spacing * (numToasts))) - 16.0)
+
+    for i, state in ipairs(states) do
+        if state.active then
+            state.timer = state.timer + dt
+            local t = state.timer
+
+            local slide_progress = 0.0
+            local alpha = 1.0
+
+            if t < 0.3 then
+                slide_progress = ImAnim.EvalPreset(IamEaseType.OutBack, t / 0.3)
+            elseif t < 2.3 then
+                slide_progress = 1.0
+            elseif t < 2.6 then
+                local fade_t = (t - 2.3) / 0.3
+                slide_progress = 1.0
+                alpha = 1.0 - ImAnim.EvalPreset(IamEaseType.InQuad, fade_t)
+            else
+                state.active = false
+            end
+
+            if state.active then
+                local text_size = ImGui.CalcTextSizeVec(state.message)
+                local toast_width = text_size.x + toast_padding
+
+                local base_x = canvas_pos.x + canvas_size.x - toast_width - 16.0
+                local base_y = canvas_pos.y + 16.0 + (i - 1) * (toast_height + toast_spacing)
+
+                local x = base_x + (1.0 - slide_progress) * (toast_width + 32.0)
+                local y = base_y
+
+                -- Draw toast
+                local bg_color = IM_COL32(40, 40, 50, math.floor(alpha * 230))
+
+                draw_list:AddRectFilled(ImVec2(x, y), ImVec2(x + toast_width, y + toast_height), bg_color, 6.0)
+                draw_list:AddRectFilled(ImVec2(x, y), ImVec2(x + 4.0, y + toast_height), state.color or Ui.ImVec4ToColor(Globals.Constants.Colors.White), 6.0,
+                    ImDrawFlags.RoundCornersLeft)
+
+                -- Text
+                local text_color = IM_COL32(255, 255, 255, math.floor(alpha * 255))
+                draw_list:AddText(ImVec2(x + 16.0, y + (toast_height - ImGui.GetFontSize()) * 0.5), text_color, state.message)
+            end
+        end
+    end
 end
 
 return OptionsUI

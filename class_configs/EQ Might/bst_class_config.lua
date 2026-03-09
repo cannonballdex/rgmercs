@@ -1,6 +1,7 @@
 local mq        = require('mq')
 local Combat    = require('utils.combat')
 local Config    = require('utils.config')
+local Globals   = require('utils.globals')
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -53,11 +54,12 @@ return {
             "Glacier Spear",   -- Level 69 - Timer 11
         },
         ['EndemicDot'] = {
-            -- Disease DoT Instant Cast
+            -- Disease DoT
             "Sicken",           -- Level 14
             "Malaria",          -- Level 40
             "Plague",           -- Level 65
             "Festering Malady", -- Level 70
+            "Fever Spike",      -- Level 71
         },
         ['BloodDot'] = {
             -- Poison DoT Instant Cast
@@ -87,6 +89,7 @@ return {
             "Chloroblast",       -- Level 59
             "Trushar's Mending", -- Level 65
             "Muada's Mending",   -- Level 67
+            "Minohten Mending",  -- Level 71
         },
         ['PetHealSpell'] = {
             "Sharik's Replenishing",   -- Level 9
@@ -117,6 +120,7 @@ return {
             "Spirit of Rashara",   -- Level 70
         },
         ['PetHaste'] = {
+            "Unparalleled Voracity",
             "Yekan's Quickening",
             "Bond of The Wild",
             "Omakin's Alacrity",
@@ -177,6 +181,7 @@ return {
             "Focus of Amilan", -- EQM Group
         },
         ['AtkHPBuff'] = {
+            "Spiritual Vim",
             "Spiritual Vitality",
             "Spiritual Vigor",
             "Spiritual Brawn",
@@ -207,6 +212,9 @@ return {
         },
         ['Rake'] = {
             "Rake",
+        },
+        ['BiteNuke'] = {
+            "Bite of the Empress",
         },
     },
     ['HealRotationOrder'] = {
@@ -243,17 +251,16 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 30,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -267,7 +274,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -310,6 +317,13 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" and Casting.BurnCheck()
+            end,
+        },
+        {
+            name = 'Growl',
+            targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
+            cond = function(self, combat_state)
+                return combat_state == "Combat" and not mq.TLO.Me.Song("Growl")()
             end,
         },
         {
@@ -415,11 +429,29 @@ return {
                     return not self.ClassConfig.HelperFunctions.DmgModActive(self)
                 end,
             },
+            {
+                name = "SwarmPet",
+                type = "Spell",
+            },
         },
         ['Slow']           = {
             {
+                name = "Legendary Armband of Muada",
+                type = "Item",
+                load_cond = function(self)
+                    return mq.TLO.Me.Level() >= 68 and (Core.GetResolvedActionMapItem('SlowSpell').Level() or 99) < 70 and mq.TLO.FindItem("=Legendary Armband of Muada")()
+                end,
+                cond = function(self, itemName, target)
+                    return Casting.DetSpellCheck(itemName) and not Casting.SlowImmuneTarget(target)
+                end,
+
+            },
+            {
                 name = "SlowSpell",
                 type = "Spell",
+                load_cond = function(self)
+                    return mq.TLO.Me.Level() < 68 or (Core.GetResolvedActionMapItem('SlowSpell').Level() or 99) >= 70 or not mq.TLO.FindItem("=Legendary Armband of Muada")()
+                end,
                 cond = function(self, spell, target)
                     return Casting.DetSpellCheck(spell) and (spell.RankName.SlowPct() or 0) > (Targeting.GetTargetSlowedPct()) and not Casting.SlowImmuneTarget(target)
                 end,
@@ -469,7 +501,16 @@ return {
                 type = "AA",
             },
         },
-        ['DPS']            = {
+        {
+            {
+                name = "PetGrowl",
+                type = "Spell",
+                cond = function(self, spell)
+                    return Casting.SelfBuffCheck(spell)
+                end,
+            },
+        },
+        ['DPS']       = {
             {
                 name = "PetSpell",
                 type = "Spell",
@@ -484,20 +525,17 @@ return {
                     if not Config:GetSetting('DoParagon') then return false end
                     return Casting.GroupLowManaCount(Config:GetSetting('ParaPct')) > 0
                 end,
-            },
-            {
-                name = "Tome of Nife's Mercy",
-                type = "Item",
-                load_cond = function(self) return mq.TLO.FindItem("=Tome of Nife's Mercy")() end,
-                cond = function(self, itemName, target)
-                    return Casting.GroupLowManaCount(Config:GetSetting('ParaPct')) > 1
+                pre_activate = function(self)
+                    if Casting.AAReady("Mass Group Buff") and Globals.AutoTargetIsNamed then
+                        Casting.UseAA("Mass Group Buff", Globals.AutoTargetID)
+                    end
                 end,
             },
             {
                 name = "BloodDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -505,13 +543,16 @@ return {
                 name = "EndemicDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
             {
-                name = "SwarmPet",
+                name = "PoiBite",
                 type = "Spell",
+                cond = function(self, spell, target)
+                    return Casting.OkayToNuke()
+                end,
             },
             {
                 name = "Icelance1",
@@ -531,14 +572,13 @@ return {
                 name = "Nature's Salve",
                 type = "AA",
                 cond = function(self, aaName)
-                    ---@diagnostic disable-next-line: undefined-field
                     return mq.TLO.Me.TotalCounters() > 0
                 end,
             },
             {
                 name = "Artifact of Razorclaw",
                 type = "Item",
-                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Razorclaw") end,
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Razorclaw")() end,
                 cond = function(self, _) return mq.TLO.Me.Pet.ID() == 0 end,
                 post_activate = function(self, spell, success)
                     if success and mq.TLO.Me.Pet.ID() > 0 then
@@ -548,7 +588,16 @@ return {
                 end,
             },
         },
-        ['Weaves']         = {
+        ['Weaves']    = {
+            {
+                name = "Summon Companion",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    if mq.TLO.Me.Pet.ID() == 0 then return false end
+                    local pet = mq.TLO.Me.Pet
+                    return not pet.Combat() and (pet.Distance3D() or 0) > 200
+                end,
+            },
             {
                 name = "Roar of Thunder",
                 type = "AA",
@@ -586,7 +635,7 @@ return {
                 type = "AA",
             },
         },
-        ['GroupBuff']      = {
+        ['GroupBuff'] = {
             {
                 name = "RunSpeedBuff",
                 type = "Spell",
@@ -628,7 +677,7 @@ return {
                     if (spell.TargetType() or ""):lower() ~= "group v2" and not Targeting.TargetIsAMelee(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                         --laz specific deconflict with brell's vibrant barricade
-                        and Casting.PeerBuffCheck(40583, target, true)
+                        and Casting.AddedBuffCheck(40583, target)
                 end,
             },
             {
@@ -649,11 +698,11 @@ return {
                 end,
             },
         },
-        ['PetSummon']      = {
+        ['PetSummon'] = {
             {
                 name = "Artifact of Razorclaw",
                 type = "Item",
-                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Razorclaw") end,
+                load_cond = function(self) return Config:GetSetting("UseDonorPet") and mq.TLO.FindItem("=Artifact of Razorclaw")() end,
                 active_cond = function(self, _) return mq.TLO.Me.Pet.ID() > 0 end,
                 post_activate = function(self, spell, success)
                     if success and mq.TLO.Me.Pet.ID() > 0 then
@@ -665,7 +714,7 @@ return {
             {
                 name = "PetSpell",
                 type = "Spell",
-                load_cond = function(self) return not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of Razorclaw") end,
+                load_cond = function(self) return not Config:GetSetting("UseDonorPet") or not mq.TLO.FindItem("=Artifact of Razorclaw")() end,
                 cond = function(self, spell)
                     return mq.TLO.Me.Pet.ID() == 0
                 end,
@@ -677,7 +726,7 @@ return {
                 end,
             },
         },
-        ['Downtime']       = {
+        ['Downtime']  = {
             {
                 name = "Gelid Rending",
                 type = "AA",
@@ -690,7 +739,7 @@ return {
                 end,
             },
         },
-        ['PetBuff']        = {
+        ['PetBuff']   = {
             {
                 name = "Epic",
                 type = "Item",
@@ -781,11 +830,18 @@ return {
             spells = {
                 { name = "HealSpell",    cond = function(self) return Config:GetSetting('DoHeals') end, },
                 { name = "PetHealSpell", cond = function(self) return Config:GetSetting('DoPetHealSpell') end, },
-                { name = "SlowSpell",    cond = function(self) return Config:GetSetting('DoSlow') end, },
+                {
+                    name = "SlowSpell",
+                    cond = function(self)
+                        return Config:GetSetting('DoSlow') and
+                            -- use this unless we don't have the armband, can't use the armband, or have a spell that casts faster than the armband
+                            (mq.TLO.Me.Level() < 68 or (Core.GetResolvedActionMapItem('SlowSpell').Level() or 99) >= 70 or not mq.TLO.FindItem("=Legendary Armband of Muada")())
+                    end,
+                },
                 { name = "Icelance1", },
                 { name = "Icelance2", },
-                { name = "BloodDot",     cond = function(self) return Config:GetSetting('DoDot') end, },
-                { name = "EndemicDot",   cond = function(self) return Config:GetSetting('DoDot') end, },
+                { name = "BloodDot",   cond = function(self) return Config:GetSetting('DoDot') end, },
+                { name = "EndemicDot", cond = function(self) return Config:GetSetting('DoDot') end, },
                 { name = "SwarmPet", },
                 { name = "AtkBuff", cond = function(self) return mq.TLO.Me.Level() < 67 or not mq.TLO.FindItem("=Artifact of Irionu")() end,
                 },
@@ -1065,11 +1121,11 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Comms        = require("utils.comms")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
@@ -20,7 +21,7 @@ local _ClassConfig = {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.5, g = 0.05, b = 1.0, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.4, g = 0.05, b = 0.8, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.2, g = 0.05, b = 0.6, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.1, g = 0.05, b = 0.5, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.2, g = 0.05, b = 0.6, a = .8, }, },
@@ -319,7 +320,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 30,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -344,7 +345,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -375,7 +376,7 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') then return false end
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         {
@@ -442,7 +443,7 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('AggroFeign') then return false end
-                    return (Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 99) or (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') and Targeting.IHaveAggro(100))
+                    return (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99) or (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') and Targeting.IHaveAggro(100))
                 end,
             },
             {
@@ -504,6 +505,15 @@ local _ClassConfig = {
         },
         ['CombatBuff']      = {
             {
+                name = "Summon Companion",
+                type = "AA",
+                cond = function(self, aaName, target)
+                    if mq.TLO.Me.Pet.ID() == 0 then return false end
+                    local pet = mq.TLO.Me.Pet
+                    return not pet.Combat() and (pet.Distance3D() or 0) > 200
+                end,
+            },
+            {
                 name = "Death Bloom",
                 type = "AA",
                 cond = function(self, aaName)
@@ -551,7 +561,7 @@ local _ClassConfig = {
                 name = "PoisonDotDD",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if Targeting.IsNamed(target) then return false end
+                    if Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell, target)
                 end,
             },
@@ -587,7 +597,7 @@ local _ClassConfig = {
                 name = "PoisonDotDD",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Targeting.IsNamed(target) then return false end
+                    if not Globals.AutoTargetIsNamed then return false end
                     return Casting.DotSpellCheck(spell, target)
                 end,
             },
@@ -674,7 +684,7 @@ local _ClassConfig = {
                 name = "Focus of Arcanum",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Casting.SelfBuffAACheck(aaName) and Targeting.IsNamed(target)
+                    return Casting.SelfBuffAACheck(aaName) and Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -683,7 +693,7 @@ local _ClassConfig = {
                 end,
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return mq.TLO.SpawnCount("corpse radius 100")() >= Config:GetSetting('WakeDeadCorpseCnt') and Targeting.IsNamed(target)
+                    return mq.TLO.SpawnCount("corpse radius 100")() >= Config:GetSetting('WakeDeadCorpseCnt') and Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -711,7 +721,7 @@ local _ClassConfig = {
             },
             { -- Spire, the SpireChoice setting will determine which ability is displayed/used.
                 name_func = function(self)
-                    local spireAbil = string.format("Fundament: %s Spire of Necromancy", Config.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
+                    local spireAbil = string.format("Fundament: %s Spire of Necromancy", Globals.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
                     return Casting.CanUseAA(spireAbil) and spireAbil or "Spire Not Purchased/Selected"
                 end,
                 type = "AA",
@@ -723,14 +733,14 @@ local _ClassConfig = {
             {
                 name = "Gathering Dusk",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) and Targeting.GetAutoTargetPctHPs() < 85 and mq.TLO.Me.PctAggro() <= 25 end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed and Targeting.GetAutoTargetPctHPs() < 85 and mq.TLO.Me.PctAggro() <= 25 end,
             },
             {
                 name = "Life Burn",
                 type = "AA",
                 load_cond = function(self) return Config:GetSetting('DoLifeBurn') end,
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() <= 25
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() <= 25
                 end,
             },
             {
@@ -903,13 +913,7 @@ local _ClassConfig = {
 
             if lichSpell and lichSpell() then
                 local targetId = mq.TLO.Me.ID()
-                table.insert(self.TempSettings.QueuedAbilities, {
-                    name = lichSpell,
-                    targetId = targetId,
-                    target = mq.TLO.Spawn(targetId),
-                    type = "spell",
-                    queuedTime = os.clock(),
-                })
+                self:QueueAbility("spell", lichSpell, targetId)
             end
         end,
     },
@@ -1102,10 +1106,10 @@ local _ClassConfig = {
                 "Second Spire: Pet Damage Proc Buff.\n" ..
                 "Third Spire: DoT Crit Damage Buff.",
             Type = "Combo",
-            ComboOptions = Config.Constants.SpireChoices,
+            ComboOptions = Globals.Constants.SpireChoices,
             Default = 3,
             Min = 1,
-            Max = #Config.Constants.SpireChoices,
+            Max = #Globals.Constants.SpireChoices,
         },
         ['EmergencyStart']    = {
             DisplayName = "Emergency HP%",
@@ -1125,7 +1129,7 @@ local _ClassConfig = {
             Header = "Utility",
             Category = "Emergency",
             Index = 102,
-            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a RGMercsNamed/SpawnMaster mob.",
+            Tooltip = "Use your Feign AA when you have aggro at low health or aggro on a mob detected as a 'named' by RGMercs (see Named tab)..",
             Default = true,
         },
 
@@ -1222,7 +1226,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

@@ -112,7 +112,7 @@ local _ClassConfig = {
         },
         ['SingleTgtCure'] = {
             -- Single Target Multi-Cure >= 84
-            "Mastery Sanctified Blood",
+            "Mastery: Sanctified Blood",
             "Expurgated Blood",
             "Unblemished Blood",
             "Cleansed Blood",
@@ -122,7 +122,7 @@ local _ClassConfig = {
             "Sanctified Blood",
         },
         ['CureCorrupt'] = {
-            "Mastery Chant of the Zelniak",
+            "Mastery: Chant of the Zelniak",
             "Chant of the Zelniak",
             "Chant of the Wulthan",
             "Chant of the Kromtus",
@@ -136,7 +136,7 @@ local _ClassConfig = {
         },
         ['GroupCure'] = {
             -- Group Multi-Cure >=91
-            "Mastery Nightwhisper's Breeze",
+            "Mastery: Nightwhisper's Breeze",
             "Nightwhisper's Breeze",
             "Wildtender's Breeze",
             "Copsetender's Breeze",
@@ -914,10 +914,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -1117,7 +1116,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Swarm of Fireflies",
+                name = "Swarm of the Fireflies",
                 type = "AA",
             },
             {
@@ -1129,7 +1128,7 @@ local _ClassConfig = {
                 type = "AA",
             },
             {
-                name = "Spirit of Nature",
+                name = "Spirits of Nature",
                 type = "AA",
             },
             {
@@ -1149,17 +1148,13 @@ local _ClassConfig = {
             {
                 name = "TwinHealNuke",
                 type = "CustomFunc",
-                cond = function(self, mapItemName, target)
-                    -- Avoid trying to twincast if we already have the buff
+                cond = function(self, spell, target)
                     if Casting.IHaveBuff("Healing Twincast") then return false end
-
-                    -- Resolve the action map name ("TwinHealNuke") to a Spell TLO/object
-                    local twinHeal = Core.GetResolvedActionMapItem(mapItemName)
+                    local twinHeal = Core.GetResolvedActionMapItem("TwinHealNuke")
                     return Casting.CastReady(twinHeal)
                 end,
                 custom_func = function(self)
                     local twinHeal = Core.GetResolvedActionMapItem("TwinHealNuke")
-                    if not twinHeal or not twinHeal() then return end
                     Casting.UseSpell(twinHeal.RankName(), Core.GetMainAssistId(), false, false, 0)
                 end,
             },
@@ -1743,7 +1738,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config is largely a port from older code, and has seen only minor adjustments. It has been flagged for revamp when we have the chance!\n\n" ..

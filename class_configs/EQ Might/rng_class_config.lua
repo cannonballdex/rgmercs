@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require('utils.globals')
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -22,7 +23,7 @@ return {
             { element = ImGuiCol.TitleBgActive,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TableHeaderBg,    color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.Tab,              color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
-            { element = ImGuiCol.TabActive,        color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
+            { element = ImGuiCol.TabSelected,      color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
             { element = ImGuiCol.TabHovered,       color = { r = 0.05, g = 0.5, b = 0.05, a = 1.0, }, },
             { element = ImGuiCol.Header,           color = { r = 0.05, g = 0.2, b = 0.05, a = .8, }, },
             { element = ImGuiCol.HeaderActive,     color = { r = 0.05, g = 0.5, b = 0.05, a = .8, }, },
@@ -55,12 +56,14 @@ return {
     },
     ['AbilitySets']       = {
         ['PredatorBuff'] = { -- Groupv2 Atk Buff
+            "Snarl of the Predator",
             "Howl of the Predator",
             "Spirit of the Predator",
             "Call of the Predator",
             "Mark of the Predator",
         },
         ['StrengthHPBuff'] = { -- Groupv2 HP Type 2, Atk
+            "Strength of the Forest Stalker",
             "Strength of the Hunter",
             "Strength of Tunare",
             "Strength of Nature", -- Single Target
@@ -83,12 +86,14 @@ return {
             "Hawk Eye",
         },
         ['FireNukeT1'] = { -- ST Fire DD, Timer 1, 30s Recast
+            "Volcanic Ash",
             "Hearth Embers",
             "Sylvan Burn",
             "Call of Flame",
             "Flaming Arrow",
         },
         ['ColdNukeT2'] = { -- ST Cold DD, Timer 2, 30s Recast
+            "Icefall Chill",
             "Frost Wind",
             "Icewind",
         },
@@ -222,12 +227,16 @@ return {
         ['WrathDisc'] = {
             "Warder's Wrath",
         },
+        ['KickDisc'] = { -- 2-hit kick attack
+            "Jolting Kicks",
+        },
         -- ['JoltProcBuff'] = {
         --     "Jolting Blades",
         -- },
         -- ['ResistDisc'] = {
         --     "Resistant Discipline",
         -- },
+        -- TODO: Potameid Salve (small heal, cure)
     },
     ['HealRotationOrder'] = {
         { -- configured as a backup healer, will not cast in the mainpoint
@@ -256,10 +265,9 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -282,7 +290,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         { --Keep things from running
@@ -292,7 +300,7 @@ return {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.OkayToNotHeal() and not Targeting.IsNamed(Targeting.GetAutoTarget()) and
+                return combat_state == "Combat" and Core.OkayToNotHeal() and not Globals.AutoTargetIsNamed and
                     Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
@@ -366,8 +374,8 @@ return {
                     Core.DoCmd('/squelch face fast')
                     Movement:DoStickCmd("10 moveback")
                 elseif tooFar or forceMove then
-                    Core.DoCmd("/squelch /nav id %d distance=%d lineofsight=on", Config.Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
-                    Core.DoCmd('/squelch face fast')
+                    Movement:DoNav(true, "id %d distance=%d lineofsight=on", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
+                    Core.DoCmd('/squelch /face fast')
                 end
             end
         end,
@@ -406,6 +414,11 @@ return {
             {
                 name = "Auspice of the Hunter",
                 type = "AA",
+                pre_activate = function(self)
+                    if Casting.AAReady("Mass Group Buff") and Globals.AutoTargetIsNamed then
+                        Casting.UseAA("Mass Group Buff", Globals.AutoTargetID)
+                    end
+                end,
             },
             {
                 name = "Group Guardian of the Forest",
@@ -477,7 +490,7 @@ return {
                 type = "Spell",
                 load_cond = function(self) return Config:GetSetting('DoJoltSpell') end,
                 cond = function(self, spell, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 80
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 80
                 end,
             },
             {
@@ -536,7 +549,7 @@ return {
                 name = "SwarmDot",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoSwarmDot') or (Config:GetSetting('DotNamedOnly') and not Targeting.IsNamed(target)) then return false end
+                    if not Config:GetSetting('DoSwarmDot') or (Config:GetSetting('DotNamedOnly') and not Globals.AutoTargetIsNamed) then return false end
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
             },
@@ -566,6 +579,13 @@ return {
             },
         },
         ['Weaves']     = {
+            {
+                name = "KickDisc",
+                type = "Disc",
+                cond = function(self, discName, target)
+                    return mq.TLO.Me.PctEndurance() >= Config:GetSetting("ManaToNuke")
+                end,
+            },
             {
                 name = "Kick",
                 type = "Ability",
@@ -618,6 +638,7 @@ return {
                     return Casting.IHaveBuff(Casting.GetAASpell(aaName))
                 end,
                 cond = function(self, aaName, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -627,6 +648,7 @@ return {
                 load_cond = function() return Config:GetSetting('DoMoveBuffs') and not Casting.CanUseAA("Spirit of Eagle") end,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -979,10 +1001,10 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
                 "  After level 65, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",

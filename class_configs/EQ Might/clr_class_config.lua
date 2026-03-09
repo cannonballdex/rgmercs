@@ -1,10 +1,10 @@
 local mq           = require('mq')
 local Combat       = require('utils.combat')
 local Config       = require('utils.config')
+local Globals      = require('utils.globals')
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
-local DanNet       = require('lib.dannet.helpers')
 local Logger       = require("utils.logger")
 
 local _ClassConfig = {
@@ -131,6 +131,7 @@ local _ClassConfig = {
             "Holy Light",
             "Pious Light",
             "Ancient: Hallowed Light",
+            "Sacred Light",
         },
         ['RemedyHeal'] = { -- Not great until 96/RoF (Graceful)
             "Remedy",
@@ -162,6 +163,7 @@ local _ClassConfig = {
             ----Use HP Type one until Temperance at 40... Group Buff at 45 (Blessing of Temperance)
             "Hand of Conviction",
             "Hand of Virtue",
+            "Ancient: Gift of Aegolism",
             "Blessing of Aegolism",
             "Blessing of Temperance",
             "Temperance",
@@ -182,6 +184,7 @@ local _ClassConfig = {
             "Holy Armor",
         },
         ['SingleVieBuff'] = {
+            "Aegis of Vie",
             "Panoply of Vie",
             "Bulwark of Vie",
             "Protection of Vie",
@@ -211,8 +214,10 @@ local _ClassConfig = {
         },
         ['DivineBuff'] = {
             --Divine Buffs REQUIRES extra spell slot because of the 90s recast
-            "Death Pact",
+            "Divine Incursion",
+            "Divine Interaction",
             "Divine Intervention",
+            "Death Pact",
         },
         ['RezSpell'] = {
             "Spiritual Awakening",
@@ -227,6 +232,7 @@ local _ClassConfig = {
             "Reanimation",
         },
         ['SingleElixir'] = {
+            "Sacred Elixir",
             "Pious Elixir",
             "Holy Elixir",
             "Supernal Elixir",
@@ -240,6 +246,8 @@ local _ClassConfig = {
             "Ethereal Elixir",
         },
         ['SpellBlessing'] = {
+            "Aura of Purpose",
+            "Blessing of Purpose",
             "Aura of Devotion",
             "Blessing of Devotion",
             "Aura of Reverence",
@@ -279,6 +287,7 @@ local _ClassConfig = {
             "Yaulp V",           -- Level 56, first rank with haste/mana regen. We won't use it before this.
         },
         ['StunTimer6'] = {       -- Timer 6 Stun, Fast Cast, Level 63+ (with ToT Heal 88+)
+            "Sound of Zeal",     -- works up to level 75
             "Sound of Divinity", -- works up to level 70
             "Sound of Might",
             --Filler before this
@@ -303,8 +312,10 @@ local _ClassConfig = {
             "Ward Undead",
         },
         ['MagicNuke'] = {
+            "Reproval",
             "Chromastrike",
             "Reproach",
+            "Ancient: Chaos Censure",
             "Order",
             "Condemnation",
             "Judgment",
@@ -335,6 +346,9 @@ local _ClassConfig = {
             "Silent Dictation",
             "The Silent Command",
         },
+        ['PromisedHeal'] = {
+            "Promised Renewal",
+        },
     }, -- end AbilitySets
     ['HelperFunctions']   = {
         DoRez = function(self, corpseId)
@@ -359,15 +373,19 @@ local _ClassConfig = {
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
                 elseif staffReady then -- the lower 2 staves still cast faster or as fast as water sprinkler
                     rezAction = okayToRez and Casting.UseItem(rezStaff, corpseId)
-                elseif mq.TLO.Me.ItemReady("Water Sprinkler of Nem Ankh")() then
+                elseif mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
                     rezAction = okayToRez and Casting.UseItem("Water Sprinkler of Nem Ankh", corpseId)
+                else
+                    Logger.log_debug("DoRez: No fast rez options available in combat for %s.", mq.TLO.Spawn(corpseId).CleanName() or "Unknown")
                 end
             elseif combatState ~= "combat" then
                 if Casting.AAReady("Blessing of Resurrection") then
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
                 elseif staffReady then
                     rezAction = okayToRez and Casting.UseItem(rezStaff, corpseId)
-                elseif not Casting.CanUseAA("Blessing of Resurrection") and combatState == "active" or combatState == "resting" then
+                elseif mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
+                    rezAction = okayToRez and Casting.UseItem("=Water Sprinkler of Nem Ankh", corpseId)
+                elseif not Casting.CanUseAA("Blessing of Resurrection") and (combatState == "active" or combatState == "resting") then
                     -- ^ if we have BoR, just wait for it, rather than taking the time to memorize a spell
                     if Casting.SpellReady(rezSpell, true) then
                         rezAction = okayToRez and Casting.UseSpell(rezSpell, corpseId, true, true)
@@ -376,18 +394,6 @@ local _ClassConfig = {
             end
 
             return rezAction
-        end,
-        GetMainAssistPctMana = function()
-            local groupMember = mq.TLO.Group.Member(Config.Globals.MainAssist)
-            if groupMember and groupMember() then
-                return groupMember.PctMana() or 0
-            end
-
-            local ret = tonumber(DanNet.query(Config.Globals.MainAssist, "Me.PctMana", 1000))
-
-            if ret and type(ret) == 'number' then return ret end
-
-            return mq.TLO.Spawn(string.format("PC =%s", Config.Globals.MainAssist)).PctMana() or 0
         end,
         --function to make sure we don't have non-hostiles in range before we use AE damage or non-taunt AE hate abilities
         AETargetCheck = function(minCount, printDebug)
@@ -449,6 +455,11 @@ local _ClassConfig = {
                 cond = function(self, aaName, target)
                     return Targeting.BigHealsNeeded(target) -- if multiples are hurt with at least one needing big heals
                 end,
+                pre_activate = function(self)
+                    if Casting.AAReady("Mass Group Buff") and Globals.AutoTargetIsNamed then
+                        Casting.UseAA("Mass Group Buff", Globals.AutoTargetID)
+                    end
+                end,
             },
             {
                 name = "GroupElixir",
@@ -486,7 +497,7 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -505,7 +516,7 @@ local _ClassConfig = {
                 type = "Item",
                 cond = function(self, itemName, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -527,14 +538,14 @@ local _ClassConfig = {
                 name = "Focused Celestial Regeneration",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
                 name = "Blessing of Sanctuary",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return target.ID() == (mq.TLO.Target.AggroHolder.ID() and not Targeting.TargetIsMA(target))
+                    return target.ID() == (mq.TLO.Target.AggroHolder.ID() and not Targeting.TargetIsATank(target))
                 end,
             },
             { --The stuff above is down, lets make mainhealpoint faster.
@@ -574,7 +585,7 @@ local _ClassConfig = {
                 name = "CompleteHeal",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting("DoCompleteHeal") or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting("DoCompleteHeal") or not Targeting.TargetIsATank(target) then return false end
                     return (target.PctHPs() or 999) <= Config:GetSetting('CompleteHealPct')
                 end,
             },
@@ -582,7 +593,7 @@ local _ClassConfig = {
                 name = "HealingLight",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return not (Config:GetSetting("DoCompleteHeal") and Targeting.TargetIsMA(target))
+                    return not (Config:GetSetting("DoCompleteHeal") and Targeting.TargetIsATank(target))
                 end,
             },
         },
@@ -598,8 +609,9 @@ local _ClassConfig = {
         },
         { --Spells that should be checked on group members
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self) return Casting.GetBuffableGroupIDs() end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and Casting.OkayToBuff()
             end,
@@ -618,7 +630,7 @@ local _ClassConfig = {
             timer = 30,
             state = 1,
             steps = 1,
-            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverence") or Casting.CanUseAA("Quiet Miracle")) end,
+            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverance") or Casting.CanUseAA("Quiet Miracle")) end,
             targetId = function(self)
                 return { Combat.FindWorstHurtManaGroupMember(Config:GetSetting('ManaRestorePct')),
                     Combat.FindWorstHurtManaXT(Config:GetSetting('ManaRestorePct')), }
@@ -657,7 +669,7 @@ local _ClassConfig = {
     ['Rotations']         = {
         ['ManaRestore'] = {
             {
-                name = "Veturika's Perseverence",
+                name = "Veturika's Perseverance",
                 type = "AA",
                 cond = function(self, aaName, target)
                     return Targeting.TargetIsMyself(target) and Casting.AmIBuffable()
@@ -773,7 +785,7 @@ local _ClassConfig = {
                 cond = function(self, spell, target)
                     local targetLevel = Targeting.GetAutoTargetLevel()
                     if targetLevel == 0 or targetLevel > 55 then return false end
-                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -886,7 +898,7 @@ local _ClassConfig = {
                 name = "Divine Guardian",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -899,8 +911,18 @@ local _ClassConfig = {
                 end,
             },
             {
+                name = "Legendary Armband of Mithaniel",
+                type = "Item",
+                load_cond = function() return mq.TLO.Me.Level() >= 68 and mq.TLO.FindItem("=Legendary Armband of Mithaniel")() end,
+                cond = function(self, itemName, target)
+                    if Config:GetSetting('AegoSymbol') == (1 or 4) then return false end
+                    return Casting.GroupBuffItemCheck(itemName, target)
+                end,
+            },
+            {
                 name = "GroupSymbolBuff",
                 type = "Spell",
+                load_cond = function() return mq.TLO.Me.Level() < 68 or not mq.TLO.FindItem("=Legendary Armband of Mithaniel")() end,
                 cond = function(self, spell, target)
                     if Config:GetSetting('AegoSymbol') == (1 or 4) or ((spell.TargetType() or ""):lower() == "single" and target.ID() ~= Core.GetMainAssistId()) then return false end
                     return Casting.GroupBuffCheck(spell, target)
@@ -926,7 +948,7 @@ local _ClassConfig = {
                 name = "SingleVieBuff",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoVieBuff') or self:GetResolvedActionMapItem('GroupVieBuff') or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting('DoVieBuff') or self:GetResolvedActionMapItem('GroupVieBuff') or not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -934,7 +956,7 @@ local _ClassConfig = {
                 name = "DivineBuff",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDivineBuff') or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting('DoDivineBuff') or not Targeting.TargetIsATank(target) then return false end
                     return Casting.CastReady(spell) and Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -973,6 +995,7 @@ local _ClassConfig = {
                 { name = "PBAEStun",      cond = function(self) return Config:GetSetting('DoPBAEStun') end, },
                 { name = "PBAENuke",      cond = function(self) return Config:GetSetting('DoPBAENuke') end, },
                 { name = "UndeadNuke",    cond = function(self) return Config:GetSetting('DoUndeadNuke') end, },
+                { name = "PromisedHeal", }, -- filler, for manual use only, the config does not use it automatically
                 { name = "RezSpell",      cond = function(self) return not Casting.CanUseAA('Blessing of Resurrection') end, },
             },
         },
@@ -1348,11 +1371,11 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
-                "  After level 67, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  After level 68, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",
         },

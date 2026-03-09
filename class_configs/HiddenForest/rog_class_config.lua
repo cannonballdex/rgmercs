@@ -1,6 +1,8 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
+local Movement  = require("utils.movement")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
 local Strings   = require("utils.strings")
@@ -102,7 +104,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -347,16 +349,16 @@ return {
                         if not mq.TLO.Me.Moving() or (mq.TLO.Me.AltAbility("Nimble Evasion").Rank() or 0) == 5 then
                             Core.DoCmd("/doability hide")
                             mq.delay(100, function() return (mq.TLO.Me.AbilityTimer("Hide")() or 0) > 0 end)
-                            ---@diagnostic disable-next-line: undefined-field
+                            ---@diagnostic disable-next-line: undefined-field --Nav defs not added
                         elseif mq.TLO.Me.Moving() and mq.TLO.Nav.Active() and not mq.TLO.Nav.Paused() then
                             -- let's get crazy: if we are naving, quickly pause and "sneak" a hide in
-                            Core.DoCmd("/nav pause")
+                            Movement:DoNav(false, "pause")
                             mq.delay(200, function() return not mq.TLO.Me.Moving() end)
                             mq.delay((2 * mq.TLO.EverQuest.Ping()) or 200) --addl delay to avoid "must be perfectly still..." server desync
                             Core.DoCmd("/doability hide")
                             mq.delay(100, function() return (mq.TLO.Me.AbilityTimer("Hide")() or 0) > 0 end)
-                            ---@diagnostic disable-next-line: undefined-field
-                            if mq.TLO.Nav.Paused() then Core.DoCmd("/nav pause") end
+                            ---@diagnostic disable-next-line: undefined-field --nav defs not added
+                            if mq.TLO.Nav.Paused() then Movement:DoNav(false, "pause") end
                         end
                     end
                 end,
@@ -365,6 +367,7 @@ return {
     },
     ['HelperFunctions'] = {
         PreEngage = function(target)
+            if not target or not target() then return end
             local openerAbility = Core.GetResolvedActionMapItem('SneakAttack')
 
             if not Config:GetSetting("DoOpener") or not openerAbility then return end
@@ -372,7 +375,7 @@ return {
             Logger.log_debug("\ayPreEngage(): Testing Opener ability = %s", openerAbility or "None")
 
             if mq.TLO.Me.CombatAbilityReady(openerAbility)() and not mq.TLO.Me.AbilityReady("Hide")() and mq.TLO.Me.AbilityTimer("Hide")() <= math.max(0, mq.TLO.Me.AbilityTimerTotal("Hide")() - 4000) and mq.TLO.Me.Invis() then
-                Casting.UseDisc(openerAbility, target)
+                Casting.UseDisc(openerAbility, target.ID())
                 Logger.log_debug("\agPreEngage(): Using Opener ability = %s", openerAbility or "None")
             else
                 Logger.log_debug("\arPreEngage(): NOT using Opener ability = %s, DoOpener = %s, Hide Ready = %s, Hide Timer = %d, Invis = %s", openerAbility or "None",
@@ -455,7 +458,7 @@ return {
             Category = "Self",
             Index = 101,
             Tooltip = "Use Hide/Sneak during Downtime.",
-            Default = true,
+            Default = false,
         },
         ['DoOpener']        = {
             DisplayName = "Use Openers",
@@ -556,7 +559,7 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
                 "  Up until the end of T2 progression, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..

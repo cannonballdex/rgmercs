@@ -1,18 +1,18 @@
 -- Sample FAQ Class Module
-local mq               = require('mq')
-local Config           = require('utils.config')
-local Core             = require("utils.core")
-local Comms            = require("utils.comms")
-local Logger           = require("utils.logger")
-local Binds            = require("utils.binds")
-local Modules          = require("utils.modules")
-local Strings          = require("utils.strings")
+local mq            = require('mq')
+local Config        = require('utils.config')
+local Globals       = require('utils.globals')
+local Ui            = require('utils.ui')
+local Logger        = require("utils.logger")
+local Binds         = require("utils.binds")
+local Modules       = require("utils.modules")
+local Tables        = require("utils.tables")
+local Base          = require("modules.base")
 
-local Module           = { _version = '0.1a', _name = "FAQ", _author = 'Grimmier', }
-Module.__index         = Module
-Module.DefaultConfig   = {}
-Module.TempSettings    = {}
-Module.SaveRequested   = nil
+local Module        = { _version = '0.1a', _name = "FAQ", _author = 'Grimmier', }
+Module.__index      = Module
+Module.TempSettings = {}
+setmetatable(Module, { __index = Base, })
 
 Module.DefaultConfig   = {
 	[string.format("%s_Popped", Module._name)] = {
@@ -33,7 +33,7 @@ Module.CommandHandlers = {
 }
 
 Module.FAQ             = {
-	[1] = {
+	{
 		Question = "How do I broadcast commands to other PCs on my network?",
 		Answer = "  In short, however you would prefer to.\n\n" ..
 			"  While it is typical to use MQ2DanNet (or \"DanNet\" for short, a networking plugin included with MQ), other broadcasting solutions (such as EQBCS or E3BCA) should function without issue.\n\n" ..
@@ -42,7 +42,7 @@ Module.FAQ             = {
 			"  This feature is used sparingly, to allow users agency over what is broadcasted to their PCs.",
 		Settings_Used = "",
 	},
-	[2] = {
+	{
 		Question = "How do I assign a Main Assist in RGMercs?",
 		Answer = "There are multiple ways to choose an assist in RGMercs:\n\n" ..
 			"  If you are in a group, and have set the Main Assist role in the EQ group window, no further action is required.\n\n" ..
@@ -52,7 +52,7 @@ Module.FAQ             = {
 			"As soon as a valid MA is identified, the PC will seamlessly change to assisting them again.",
 		Settings_Used = "",
 	},
-	[3] = {
+	{
 		Question = "How do I use the Assist List?",
 		Answer = "First, find the Assist List UI on the Main tab, or familiarize yourself with related commands in the command list above.\n\n" ..
 			"  Add characters as you see fit to this list. RGMercs will check the list in order and use the first valid PC it finds as the Main Assist. \n\n" ..
@@ -64,57 +64,8 @@ Module.FAQ             = {
 	},
 }
 
-local function getConfigFileName()
-	return mq.configDir ..
-		'/rgmercs/PCConfigs/' .. Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-	self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-	if not self.SaveRequested then return end
-
-	mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-	if self.SaveRequested.doBroadcast == true then
-		Comms.BroadcastMessage(self._name, "LoadSettings")
-	end
-
-	Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-	self.SaveRequested = nil
-end
-
-function Module:LoadSettings()
-	Logger.log_debug("FAQ Combat Module Loading Settings for: %s.", Config.Globals.CurLoadedChar)
-	local settings_pickle_path = getConfigFileName()
-	local settings = {}
-	local firstSaveRequired = false
-
-	local config, err = loadfile(settings_pickle_path)
-	if err or not config then
-		Logger.log_error("\ay[FAQ]: Unable to load global settings file(%s), creating a new one!",
-			settings_pickle_path)
-		firstSaveRequired = true
-	else
-		settings = config()
-	end
-
-	Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-end
-
-function Module.New()
-	local newModule = setmetatable({}, Module)
-	return newModule
-end
-
-function Module:Init()
-	Logger.log_debug("FAQ Combat Module Loaded.")
-	self:LoadSettings()
-
-	return { self = self, defaults = self.DefaultConfig, }
+function Module:New()
+	return Base.New(self)
 end
 
 function Module:ShouldRender()
@@ -217,7 +168,7 @@ function Module:ExportFAQToWiki()
 				for _, data in pairs(info.FAQ) do
 					if data.Question == 'None' then data.Question = data.Settings_Used or 'TODO' end
 					fileContent = fileContent .. "=== " .. (data.Question or 'TODO') .. " ===\n"
-					fileContent = fileContent .. "* Answer:\n  " .. (data.Answer:gsub("\n", " ") or "TODO") .. "\n\n"
+					fileContent = fileContent .. "* Answer:\n  " .. ((data.Answer or "TODO"):gsub("\n", " ") or "TODO") .. "\n\n"
 					fileContent = fileContent .. "* Settings Used:\n  " .. (data.Settings_Used or "None") .. "\n\n"
 				end
 
@@ -266,7 +217,7 @@ function Module:ExportFAQToWiki()
 		for k, v in pairs(configFaq.Config) do
 			if v.Question == 'None' then v.Question = v.Settings_Used or 'TODO' end
 			fileContent = fileContent .. "=== " .. (v.Question or 'TODO') .. " ===\n"
-			fileContent = fileContent .. "* Answer:\n  " .. (v.Answer:gsub("\n", " ") or "TODO") .. "\n\n"
+			fileContent = fileContent .. "* Answer:\n  " .. ((v.Answer or "TODO"):gsub("\n", " ") or "TODO") .. "\n\n"
 			fileContent = fileContent .. "* Settings Used:\n  " .. (v.Settings_Used or "None") .. "\n\n"
 		end
 		local configFileName = mq.configDir .. "/WIKI/Default_Config_FAQ.txt"
@@ -283,7 +234,7 @@ function Module:ExportFAQToWiki()
 	if classFaq then
 		for module, info in pairs(classFaq) do
 			if module:lower() == 'class' and info.FAQ then
-				local title = "RGMercs Lua Edition: FAQ - " .. (Config.Globals.CurLoadedClass) .. " Class"
+				local title = "RGMercs Lua Edition: FAQ - " .. (Globals.CurLoadedClass) .. " Class"
 				local fileContent = "[[" .. title .. "]]\n\n"
 				fileContent = fileContent .. "__FORCETOC__\n\n"
 				fileContent = fileContent .. "== " .. title .. " ==\n\n"
@@ -291,17 +242,17 @@ function Module:ExportFAQToWiki()
 				for _, data in pairs(info.FAQ) do
 					if data.Question == 'None' then data.Question = data.Settings_Used or 'TODO' end
 					fileContent = fileContent .. "=== " .. (data.Question or 'TODO') .. " ===\n"
-					fileContent = fileContent .. "* Answer:\n  " .. (data.Answer:gsub("\n", " ") or "TODO") .. "\n\n"
+					fileContent = fileContent .. "* Answer:\n  " .. ((data.Answer or "TODO"):gsub("\n", " ") or "TODO") .. "\n\n"
 					fileContent = fileContent .. "* Settings Used:\n  " .. (data.Settings_Used or "None") .. "\n\n"
 				end
 
-				local classFileName = mq.configDir .. "/WIKI/" .. Config.Globals.CurLoadedClass .. "_Class_FAQ.txt"
+				local classFileName = mq.configDir .. "/WIKI/" .. Globals.CurLoadedClass .. "_Class_FAQ.txt"
 				local classFile = io.open(classFileName, "w")
 				if classFile then
 					classFile:write(fileContent)
 					classFile:close()
 				else
-					print("Failed to open file for " .. Config.Globals.CurLoadedClass)
+					print("Failed to open file for " .. Globals.CurLoadedClass)
 				end
 			end
 		end
@@ -351,11 +302,11 @@ end
 
 function Module:RenderCmdRow(cmd, usage, desc)
 	ImGui.TableNextColumn()
-	ImGui.TextColored(IM_COL32(255, 180, 70, 255), cmd)
+	ImGui.TextColored(Globals.Constants.Colors.FAQCmdQuestionColor, cmd)
 	ImGui.TableNextColumn()
-	ImGui.TextColored(IM_COL32(120, 200, 255, 255), usage)
+	ImGui.TextColored(Globals.Constants.Colors.FAQUsageAnswerColor, usage)
 	ImGui.TableNextColumn()
-	ImGui.PushStyleColor(ImGuiCol.Text, IM_COL32(100, 220, 150, 255))
+	ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.FAQDescColor)
 	ImGui.TextWrapped(desc)
 	ImGui.PopStyleColor()
 	ImGui.Spacing()
@@ -364,39 +315,24 @@ end
 function Module:RenderFAQRow(q, a)
 	ImGui.TableNextRow()
 	ImGui.TableNextColumn()
-	ImGui.PushStyleColor(ImGuiCol.Text, IM_COL32(255, 180, 70, 255))
-	ImGui.TextWrapped(q)
+	ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.FAQCmdQuestionColor)
+	ImGui.TextWrapped(q or "")
 	ImGui.PopStyleColor()
 	ImGui.TableNextColumn()
-	ImGui.PushStyleColor(ImGuiCol.Text, IM_COL32(120, 210, 210, 255))
-	ImGui.TextWrapped(a)
+	ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.FAQUsageAnswerColor)
+	ImGui.TextWrapped(a or "")
 	ImGui.PopStyleColor()
 	ImGui.Spacing()
 end
 
 function Module:RenderConfig(search)
-	ImGui.Spacing()
-	ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(1, 1, 0, 1))
-	ImGui.Text("Local FAQ Browser Link")
-	ImGui.PopStyleColor()
-	local url = "file:///" .. mq.luaDir .. "/rgmercs/doc/index.html"
-	url = url:gsub("\\", "/")
-	if ImGui.IsItemHovered() then
-		if ImGui.IsMouseClicked(ImGuiMouseButton.Left) then
-			os.execute(('start "" "%s"'):format(url))
-		end
-		ImGui.BeginTooltip()
-		ImGui.Text('%s', url)
-		ImGui.EndTooltip()
-	end
-
-	if not Config.Globals.SubmodulesLoaded then
+	if not Globals.SubmodulesLoaded then
 		return
 	end
 
 	self.TempSettings.Search = search
 
-	if ImGui.BeginChild("##FAQCommandContainer", ImVec2(0, 0), bit32.bor(ImGuiChildFlags.Border, ImGuiChildFlags.AlwaysAutoResize)) then
+	if ImGui.BeginChild("##FAQCommandContainer", ImVec2(0, 0), bit32.bor(ImGuiChildFlags.Borders, ImGuiChildFlags.AlwaysAutoResize, ImGuiChildFlags.AutoResizeY)) then
 		if ImGui.CollapsingHeader("Command List") then
 			if ImGui.BeginTable("##CommandHelper", 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.Resizable), ImVec2(ImGui.GetWindowWidth() - 30, 0)) then
 				ImGui.TableSetupColumn("Command", ImGuiTableColumnFlags.WidthFixed, 100)
@@ -427,7 +363,9 @@ function Module:RenderConfig(search)
 			end
 		end
 
-		if ImGui.CollapsingHeader("Frequently Asked Questions") then
+		ImGui.NewLine()
+
+		if Ui.NonCollapsingHeader("Frequently Asked Questions") then
 			local questions = Modules:ExecAll("GetFAQ")
 			local configFaq = {}
 
@@ -468,60 +406,6 @@ function Module:RenderConfig(search)
 		end
 	end
 	ImGui.EndChild()
-end
-
-function Module:Render()
-end
-
-function Module:GiveTime(combat_state)
-	-- Main Module logic goes here.
-end
-
-function Module:OnDeath()
-	-- Death Handler
-end
-
-function Module:OnZone()
-	-- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
-end
-
-function Module:DoGetState()
-	-- Reture a reasonable state if queried
-	return "Running..."
-end
-
-function Module:GetCommandHandlers()
-	return { module = self._name, CommandHandlers = self.CommandHandlers, }
-end
-
-function Module:Pop()
-	Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
-function Module:GetFAQ()
-	return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-	local params = ...
-	local handled = false
-
-	if self.CommandHandlers[cmd:lower()] ~= nil then
-		self.CommandHandlers[cmd:lower()].handler(self, params)
-		handled = true
-	end
-
-	return handled
-end
-
-function Module:Shutdown()
-	Logger.log_debug("FAQ Combat Module Unloaded.")
 end
 
 return Module

@@ -1,14 +1,14 @@
-local mq          = require('mq')
-local Config      = require('utils.config')
-local Core        = require("utils.core")
-local Targeting   = require("utils.targeting")
-local Casting     = require("utils.casting")
-local Comms       = require("utils.comms")
-local ItemManager = require("utils.item_manager")
-local DanNet      = require('lib.dannet.helpers')
-local Logger      = require("utils.logger")
+local mq        = require('mq')
+local Config    = require('utils.config')
+local Globals   = require('utils.globals')
+local Core      = require("utils.core")
+local Targeting = require("utils.targeting")
+local Casting   = require("utils.casting")
+local Comms     = require("utils.comms")
+local DanNet    = require('lib.dannet.helpers')
+local Logger    = require("utils.logger")
 
-_ClassConfig      = {
+_ClassConfig    = {
     _version              = "1.3 - The Hidden Forest WIP", -- Updated for base level 70, some tier 1
     _author               = "Derple, Morisato, Algar",
     ['Modes']             = {
@@ -783,10 +783,9 @@ _ClassConfig      = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -987,7 +986,7 @@ _ClassConfig      = {
             if not itemSource and itemSource() then return false end
             if not scope then return false end
 
-            mq.delay("2s", function() return mq.TLO.Cursor() and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() end)
+            mq.delay("2s", function() return mq.TLO.Cursor() ~= nil and mq.TLO.Cursor.ID() == mq.TLO.Spell(itemSource).RankName.Base(1)() or false end)
 
             if not mq.TLO.Cursor() then
                 Logger.log_debug("No valid item found on cursor, item handling aborted.")
@@ -1000,7 +999,7 @@ _ClassConfig      = {
                 local delay = Config:GetSetting('AIGroupDelay')
                 Comms.PrintGroupMessage("%s summoned, issuing autoinventory command momentarily.", mq.TLO.Cursor())
                 mq.delay(delay)
-                Core.DoGroupCmd("/autoinventory")
+                Core.DoGroupOrRaidCmd("/autoinventory")
             elseif scope == "personal" then
                 local delay = Config:GetSetting('AISelfDelay')
                 mq.delay(delay)
@@ -1202,7 +1201,7 @@ _ClassConfig      = {
             {
                 name = "Focus of Arcanum",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Improved Twincast",
@@ -1263,7 +1262,7 @@ _ClassConfig      = {
                     local baseItem = self.ResolvedActionMap['FireOrbSummon'].RankName.Base(1)() or "None"
                     if mq.TLO.FindItemCount(baseItem)() == 1 then
                         local invItem = mq.TLO.FindItem(baseItem)
-                        return Casting.UseItem(invItem.Name(), Config.Globals.AutoTargetID)
+                        return Casting.UseItem(invItem.Name(), Globals.AutoTargetID)
                     end
                     return false
                 end,
@@ -1293,7 +1292,7 @@ _ClassConfig      = {
                 type = "Spell",
                 load_cond = function() return Config:GetSetting('DoSwarmPet') > 1 end,
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Targeting.IsNamed(target))
+                    return Casting.HaveManaToNuke() and not (Config:GetSetting('DoSwarmPet') == 2 and not Globals.AutoTargetIsNamed)
                 end,
             },
             {
@@ -1387,13 +1386,10 @@ _ClassConfig      = {
                 cond = function(self, spell, target)
                     if not Targeting.TargetIsMA(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
-                        -- workarounds for laz
-                        and not Casting.PeerBuffCheck(19847, target, true) -- necrotic pustules
-                        and not Casting.PeerBuffCheck(8484, target, true)  -- decrepit skin
                 end,
                 post_activate = function(self, spell, success)
                     local petName = mq.TLO.Me.Pet.CleanName() or "None"
-                    mq.delay("3s", function() return not mq.TLO.Me.Casting() end)
+                    mq.delay("3s", function() return mq.TLO.Me.Casting() == nil end)
                     if success and mq.TLO.Me.XTarget(petName)() then
                         Comms.PrintGroupMessage("It seems %s has triggered combat due to a server bug, calling the pet back.", spell)
                         Core.DoCmd('/pet back off')
@@ -1812,7 +1808,7 @@ _ClassConfig      = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
                 "  Up until T1 progression, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..

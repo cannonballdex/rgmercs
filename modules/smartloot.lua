@@ -1,19 +1,21 @@
 -- SmartLoot Integration Module
-local mq                 = require('mq')
-local Config             = require('utils.config')
-local Core               = require("utils.core")
-local Casting            = require("utils.casting")
-local Targeting          = require("utils.targeting")
-local Ui                 = require("utils.ui")
-local Comms              = require("utils.comms")
-local Strings            = require("utils.strings")
-local Logger             = require("utils.logger")
-local Set                = require("mq.Set")
+local mq        = require('mq')
+local Config    = require('utils.config')
+local Globals   = require("utils.globals")
+local Core      = require("utils.core")
+local Casting   = require("utils.casting")
+local Targeting = require("utils.targeting")
+local Ui        = require("utils.ui")
+local Logger    = require("utils.logger")
+local Events    = require("utils.events")
+local Set       = require("mq.Set")
+local Base      = require("modules.base")
 
-local Module             = { _version = '1.0', _name = "SmartLoot", _author = 'andude2, Algar', }
-Module.__index           = Module
+local Module    = { _version = '1.0', _name = "SmartLoot", _author = 'andude2, Algar', }
+Module.__index  = Module
+setmetatable(Module, { __index = Base, })
+
 Module.SettingCategories = {}
-Module.SaveRequested     = nil
 Module.TempSettings      = {}
 
 Module.DefaultConfig     = {
@@ -68,7 +70,7 @@ Module.DefaultConfig     = {
 }
 
 Module.FAQ               = {
-	[1] = {
+	{
 		Question = "How can I get help with SmartLoot?",
 		Answer = "  SmartLoot (aka SL, Smart Loot) integration is offered by RGMercs on the basis of convenience'.\n\n" ..
 			"  All SL issues not revolving around that integration should be addressed to the author.\n\n" ..
@@ -98,57 +100,13 @@ for k, v in pairs(Module.DefaultConfig or {}) do
 	Module.FAQ[k] = { Question = v.FAQ or 'None', Answer = v.Answer or 'None', Settings_Used = k, }
 end
 
-local function getConfigFileName()
-	local server = mq.TLO.EverQuest.Server()
-	server = server:gsub(" ", "")
-	return mq.configDir ..
-		'/rgmercs/PCConfigs/' .. Module._name .. "_" .. server .. "_" .. Config.Globals.CurLoadedChar ..
-		"_" .. Config.Globals.CurLoadedClass .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-	self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-	if not self.SaveRequested then return end
-	mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-	if self.SaveRequested.doBroadcast == true then
-		Comms.BroadcastUpdate(self._name, "LoadSettings")
-	end
-
-	Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-	self.SaveRequested = nil
-end
-
-function Module:LoadSettings()
-	Logger.log_debug("\ay[LOOT]: \atSmartLoot Integration Module Loading Settings for: %s.",
-		Config.Globals.CurLoadedChar)
-	local settings_pickle_path = getConfigFileName()
-	local settings = {}
-	local firstSaveRequired = false
-
-	local config, err = loadfile(settings_pickle_path)
-	if err or not config then
-		Logger.log_error("\ay[LOOT]: \aoUnable to load global settings file(%s), creating a new one!",
-			settings_pickle_path)
-		firstSaveRequired = true
-	else
-		settings = config()
-	end
-
-	Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-end
-
-function Module.New()
-	local newModule = setmetatable({ settings = {}, }, Module)
-	return newModule
+function Module:New()
+	return Base.New(self)
 end
 
 function Module:Init()
-	self:LoadSettings()
+	Base.Init(self)
+
 	if not Core.OnEMU() then
 		Logger.log_debug("\ay[LOOT]: \agWe are not on EMU, unloading module. Build: %s",
 			mq.TLO.MacroQuest.BuildName())
@@ -156,8 +114,6 @@ function Module:Init()
 		self:InitializeSmartLoot()
 		Logger.log_debug("\ay[LOOT]: \agSmartLoot integration module loaded.")
 	end
-
-	return { self = self, defaults = self.DefaultConfig, }
 end
 
 function Module:ShouldRender()
@@ -199,7 +155,8 @@ function Module:SLRunning()
 end
 
 function Module:Render()
-	Ui.RenderPopAndSettings(self._name)
+	Base.Render(self)
+
 	local red = { 1.0, 0.3, 0.3, 1.0, }
 	local yellow = { 1.0, 1.0, 0.3, 1.0, }
 	local green = { 0.3, 1.0, 0.3, 1.0, }
@@ -218,7 +175,7 @@ function Module:Render()
 			smartLootStatus = "SmartLoot Not Initialized"
 			statusColor = yellow
 		end
-		if Config.Globals.SLPeerLooting then
+		if Globals.SLPeerLooting then
 			peerStatus = "Looting"
 			peerColor = yellow
 		else
@@ -252,10 +209,6 @@ function Module:Render()
 	ImGui.Text("Please ensure that SmartLoot is properly configured! Use '/sl_help' or '/sl_getstarted' for more details.")
 end
 
-function Module:Pop()
-	Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
 -- Initialize SmartLoot integration
 function Module:InitializeSmartLoot()
 	if not Config:GetSetting('UseSmartLoot') then return end
@@ -286,7 +239,7 @@ function Module:DoLoot()
 	end
 
 	-- Mark that we've initiated looting
-	self.TempSettings.LootStartTime = mq.gettime()
+	self.TempSettings.LootStartTime = Globals.GetTimeSeconds()
 	self.TempSettings.Looting = true
 
 	return true
@@ -299,11 +252,11 @@ function Module:ProcessLooting()
 	end
 
 	local timeoutMs = Config:GetSetting('LootingTimeoutSL') * 1000
-	local startTime = self.TempSettings.LootStartTime or mq.gettime()
+	local startTime = self.TempSettings.LootStartTime or Globals.GetTimeSeconds()
 
 	-- Hold focus in loot module while SmartLoot is working
 	while self.TempSettings.Looting do
-		local elapsed = mq.gettime() - startTime
+		local elapsed = Globals.GetTimeSeconds() - startTime
 
 		-- Check for timeout
 		if elapsed > timeoutMs then
@@ -332,6 +285,7 @@ function Module:ProcessLooting()
 		-- Small delay to not hammer the CPU
 		mq.delay(50)
 		mq.doevents()
+		Events.DoEvents()
 	end
 
 	Logger.log_verbose("\ay[LOOT]: \agFinished Processing Loot.")
@@ -340,7 +294,7 @@ end
 function Module:GiveTime()
 	if not Config:GetSetting('UseSmartLoot') or not self.smartLootInitialized then return end
 	if not self:GetSLTLO() or not self:GetSLTLO().IsEnabled() then return end
-	if Config.Globals.PauseMain then return end
+	if Globals.PauseMain then return end
 
 	if not Core.OkayToNotHeal() or mq.TLO.Me.Invis() or Casting.IAmFeigning() then return end
 
@@ -353,56 +307,7 @@ function Module:GiveTime()
 		end
 	end
 
-	Config.Globals.SLPeerLooting = self:GetSLTLO().AnyPeerLooting()
-end
-
-function Module:OnDeath()
-	-- Death Handler
-end
-
-function Module:OnZone()
-	-- Zone Handler
-end
-
-function Module:OnCombatModeChanged()
-end
-
-function Module:DoGetState()
-	-- Reture a reasonable state if queried
-	return "Running..."
-end
-
-function Module:GetCommandHandlers()
-	return { module = self._name, CommandHandlers = self.CommandHandlers, }
-end
-
-function Module:GetFAQ()
-	return {
-		module = self._name,
-		FAQ = self.FAQ or {},
-	}
-end
-
-function Module:GetClassFAQ()
-	return {
-		module = self._name,
-		FAQ = self.ClassFAQ or {},
-	}
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-	local params = ...
-	local handled = false
-
-	if self.CommandHandlers[cmd:lower()] ~= nil then
-		self.CommandHandlers[cmd:lower()].handler(self, params)
-		handled = true
-	end
-
-	return handled
+	Globals.SLPeerLooting = self:GetSLTLO().AnyPeerLooting()
 end
 
 function Module:Shutdown()

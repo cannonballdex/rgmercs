@@ -1,17 +1,29 @@
-local mq                = require('mq')
-local Config            = require('utils.config')
-local Logger            = require("utils.logger")
-local Core              = require("utils.core")
+local mq                     = require('mq')
+local Config                 = require('utils.config')
+local Events                 = require('utils.events')
+local Logger                 = require("utils.logger")
+local Core                   = require("utils.core")
+local Modules                = require("utils.modules")
+local Globals                = require("utils.globals")
 
-local Movement          = { _version = '1.0', _name = "Movement", _author = 'Derple', }
-Movement.__index        = Movement
-Movement.LastDoStick    = 0
-Movement.LastDoStickCmd = ""
+local Movement               = { _version = '1.0', _name = "Movement", _author = 'Derple', }
+Movement.__index             = Movement
+Movement.LastDoStick         = 0
+Movement.LastDoStickCmd      = ""
+Movement.LastDoNav           = 0
+Movement.LastDoNavCmd        = ""
+Movement.LastMove            = {}
+Movement.LastMove.X          = mq.TLO.Me.X()
+Movement.LastMove.Y          = mq.TLO.Me.Y()
+Movement.LastMove.Z          = mq.TLO.Me.Z()
+Movement.LastMove.Heading    = mq.TLO.Me.Heading.Degrees()
+Movement.LastMove.Sitting    = mq.TLO.Me.Sitting()
+Movement.LastMove.TimeAtMove = Globals.GetTimeSeconds()
 
 --- Sticks the player to the specified target.
 --- @param targetId number The ID of the target to stick to.
 function Movement:DoStick(targetId)
-    if os.clock() - self.LastDoStick < 1 then
+    if Globals.GetTimeSeconds() - self.LastDoStick < 1 then
         Logger.log_debug(
             "\ayIgnoring DoStick because we just stuck a second ago - let's give it some time.")
         return
@@ -30,11 +42,31 @@ function Movement:DoStick(targetId)
 end
 
 function Movement:DoStickCmd(params, ...)
+    if not Config:GetSetting('DoAutoStick') then return end
     local formatted = params
     if ... ~= nil then formatted = string.format(params, ...) end
     Core.DoCmd("/stick %s", formatted)
-    self:SetLastStickTimer(os.clock())
+    self:SetLastStickTimer(Globals.GetTimeSeconds())
     self.LastDoStickCmd = formatted
+end
+
+function Movement:DoNav(squelch, params, ...)
+    local formatted = params
+    if ... ~= nil then formatted = string.format(params, ...) end
+
+    if mq.TLO.Navigation.Active() and formatted == self.LastDoNavCmd then
+        Logger.log_verbose("\ayIgnoring DoNav (%s) because the last nav command is the same - let's not spam it.", formatted)
+        return
+    end
+
+    Core.DoCmd("%s/nav %s", squelch and "/squelch " or "", formatted)
+    self.LastDoNav = Globals.GetTimeSeconds()
+    self.LastDoNavCmd = formatted
+    self:StoreLastMove()
+end
+
+function Movement:GetLastNavCmd()
+    return self.LastDoNavCmd
 end
 
 -- Gets the last stick timer.
@@ -63,29 +95,61 @@ end
 -- Gets the time since last stick a stirng.
 --- @return string Formatted time since last stick.
 function Movement:GetTimeSinceLastStick()
-    return string.format("%ds", os.clock() - self.LastDoStick)
+    if self.LastDoStickCmd == "" then
+        return "N/A"
+    end
+
+    return string.format("%ds", Globals.GetTimeSeconds() - self.LastDoStick)
+end
+
+function Movement:GetTimeSinceLastNav()
+    if self.LastDoNavCmd == "" then
+        return "N/A"
+    end
+
+    return string.format("%ds", Globals.GetTimeSeconds() - self.LastDoNav)
+end
+
+function Movement:GetSecondsSinceLastNav()
+    if self.LastDoNavCmd == "" then
+        return 0
+    end
+
+    return Globals.GetTimeSeconds() - self.LastDoNav
 end
 
 --- Navigates to a target during combat.
 --- @param targetId number The ID of the target to navigate to.
 --- @param distance number The distance to maintain from the target.
 --- @param bDontStick boolean Whether to avoid sticking to the target.
-function Movement:NavInCombat(targetId, distance, bDontStick)
+--- @param bCalledFromInsideEvent? boolean Whether to avoid processing events during navigation.
+function Movement:NavInCombat(targetId, distance, bDontStick, bCalledFromInsideEvent)
+    if bCalledFromInsideEvent == nil then bCalledFromInsideEvent = false end
+
     if not Config:GetSetting('DoAutoEngage') then return end
+    if not Config:GetSetting('DoAutoNav') then return end
 
     if mq.TLO.Stick.Active() then
         self:DoStickCmd("off")
     end
 
     if mq.TLO.Navigation.PathExists("id " .. tostring(targetId) .. " distance " .. tostring(distance))() then
-        Core.DoCmd("/nav id %d distance=%d log=off lineofsight=on", targetId, distance or 15)
+        Movement:DoNav(false, "id %d distance=%d log=off lineofsight=on", targetId, distance or 15)
         while mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() > 0 do
             mq.delay(100)
+            if not bCalledFromInsideEvent then
+                mq.doevents()
+                Events.DoEvents()
+            end
         end
     else
         Core.DoCmd("/moveto id %d uw mdist %d", targetId, distance)
         while mq.TLO.MoveTo.Moving() and not mq.TLO.MoveUtils.Stuck() do
             mq.delay(100)
+            if not bCalledFromInsideEvent then
+                mq.doevents()
+                Events.DoEvents()
+            end
         end
     end
 
@@ -137,7 +201,7 @@ function Movement:NavAroundCircle(target, radius)
                 -- Make sure it's a valid loc...
                 if mq.TLO.EverQuest.ValidLoc(string.format("%0.2f %0.2f %0.2f", tgt_x, tgt_y, spawn_z))() then
                     Logger.log_debug(" \ag--> Found Valid Circling Loc: %0.2f %0.2f %0.2f", tgt_x, tgt_y, spawn_z)
-                    Core.DoCmd("/nav locyxz %0.2f %0.2f %0.2f facing=backward", tgt_y, tgt_x, spawn_z)
+                    Movement:DoNav(false, "locyxz %0.2f %0.2f %0.2f facing=backward", tgt_y, tgt_x, spawn_z)
                     mq.delay("2s", function() return mq.TLO.Navigation.Active() end)
                     mq.delay("10s", function() return not mq.TLO.Navigation.Active() end)
                     Core.DoCmd("/squelch /face fast")
@@ -150,6 +214,57 @@ function Movement:NavAroundCircle(target, radius)
     end
 
     return false
+end
+
+function Movement.UpdateMapRadii()
+    if Config:GetSetting('DoPull') or Config:GetSetting('ReturnToCamp') then
+        if Modules:ExecModule("Pull", "IsPullMode", "Hunt") then
+            Core.DoCmd("/squelch /mapfilter pullradius %d", Config:GetSetting('PullRadiusHunt'))
+        elseif Config:GetSetting('ReturnToCamp') then
+            Core.DoCmd("/squelch /mapfilter pullradius %d", Config:GetSetting('PullRadius'))
+        end
+        Core.DoCmd("/squelch /mapfilter campradius %d", Config:GetSetting('AutoCampRadius'))
+    else
+        Core.DoCmd("/squelch /mapfilter campradius off")
+        Core.DoCmd("/squelch /mapfilter pullradius off")
+    end
+end
+
+-- this function considers being in combat as movement so that buff checks only happen in downtime.
+function Movement:GetTimeSinceLastMove()
+    return Globals.GetTimeSeconds() - self.LastMove.TimeAtMove
+end
+
+-- this function only considers actual movement, not combat state.
+function Movement:GetTimeSinceLastPositionChange()
+    return Globals.GetTimeSeconds() - (self.LastMove.TimeAtPositionChange or 0)
+end
+
+function Movement:StoreLastMove()
+    local me = mq.TLO.Me
+
+    -- only look at actual movement.
+    if math.abs(self.LastMove.X - me.X()) > 1 or
+        math.abs(self.LastMove.Y - me.Y()) > 1 or
+        math.abs(self.LastMove.Z - me.Z()) > 1 then
+        self.LastMove.TimeAtPositionChange = Globals.GetTimeSeconds()
+    end
+
+    if math.abs(self.LastMove.X - me.X()) > 1 or
+        math.abs(self.LastMove.Y - me.Y()) > 1 or
+        math.abs(self.LastMove.Z - me.Z()) > 1 or
+        math.abs(self.LastMove.Heading - me.Heading.Degrees()) > 1 or
+        me.Combat() or
+        me.CombatState():lower() == "combat" or
+        me.Sitting() ~= self.LastMove.Sitting then
+        self.LastMove = self.LastMove or {}
+        self.LastMove.X = me.X()
+        self.LastMove.Y = me.Y()
+        self.LastMove.Z = me.Z()
+        self.LastMove.Heading = me.Heading.Degrees()
+        self.LastMove.Sitting = me.Sitting()
+        self.LastMove.TimeAtMove = Globals.GetTimeSeconds()
+    end
 end
 
 return Movement

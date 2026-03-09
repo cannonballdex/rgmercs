@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.Targeting")
 local Casting      = require("utils.casting")
@@ -33,7 +34,7 @@ local _ClassConfig = {
     },
     ['AbilitySets']     = {
         ['StandDisc'] = {
-            "Final Stand Discipline VI", -- 128
+            "Final Stand Discipline VI",
             "Climactic Stand",
             "Resolute Stand",
             "Ultimate Stand Discipline",
@@ -63,7 +64,7 @@ local _ClassConfig = {
             "Shield Split",
         },
         ['GroupACBuff'] = {
-            "Field Armorer X", -- 129
+            "Field Armorer X",
             "Field Bulwark",
             "Full Moon's Champion",
             "Paragon Champion",
@@ -78,7 +79,7 @@ local _ClassConfig = {
             "Commanding Voice",
         },
         ['DefenseACBuff'] = {
-            "Bracing Defense X", -- 130
+            "Bracing Defense X",
             "Vigorous Defense",
             "Primal Defense",
             "Courageous Defense",
@@ -122,7 +123,7 @@ local _ClassConfig = {
             "Harmonious Precision",
         },
         ['AEBlades'] = {
-            "Cyclone Blades XIV", --127
+            "Cyclone Blades XIV",
             "Tempest Blades",
             "Dragonstrike Blades",
             "Stormstrike Blades",
@@ -138,7 +139,7 @@ local _ClassConfig = {
             "Spiraling Blades",
         },
         ['AddHate1'] = {
-            "Bazu Roar X", -- 126
+            "Bazu Roar X",
             "Mortimus' Roar",
             "Namdrows' Roar",
             "Kragek's Roar",
@@ -157,7 +158,7 @@ local _ClassConfig = {
             "Provoke",
         },
         ['AddHate2'] = {
-            "Harassing Shout VII", --128
+            "Harassing Shout VII",
             "Distressing Shout",
             "Twilight Shout",
             "Oppressing Shout",
@@ -166,7 +167,7 @@ local _ClassConfig = {
             "Harassing Shout",
         },
         ['AbsorbTaunt'] = {
-            "Provoke XIX", -- 127
+            "Provoke XIX",
             "Infuriate",
             "Bristle",
             "Aggravate",
@@ -181,7 +182,7 @@ local _ClassConfig = {
             "Mock",
         },
         ['StrikeDisc'] = {
-            "Opportunistic Strike IX", --129
+            "Opportunistic Strike IX",
             "Decisive Strike",
             "Precision Strike",
             "Cunning Strike",
@@ -192,7 +193,7 @@ local _ClassConfig = {
             "Exploitive Strike",
         },
         ['EndRegen'] = {
-            "Hiatus V", -- 126
+            "Hiatus V",
             "Convalesce",
             "Night's Calming",
             "Hiatus",
@@ -209,7 +210,7 @@ local _ClassConfig = {
             "Myrmidon's Aura",
         },
         ['Attention'] = {
-            "Unquestioned Attention", -- 127
+            "Unquestioned Attention",
             "Unending Attention",
             "Unyielding Attention",
             "Unflinching Attention",
@@ -218,7 +219,7 @@ local _ClassConfig = {
             "Unrelenting Attention",
             "Unconditional Attention",
         },
-        ['AgroPet'] = {
+        ['AggroPet'] = {
             "Phantom Aggressor",
         },
         ['Onslaught'] = {
@@ -227,7 +228,7 @@ local _ClassConfig = {
             "Brightfeld's Onslaught Discipline",
         },
         ['RuneShield'] = {
-            "Warrior's Auspice VII", --129
+            "Warrior's Auspice VII",
             "Warrior's Auspice",
             "Warrior's Bulwark",
             "Warrior's Bastion",
@@ -332,8 +333,20 @@ local _ClassConfig = {
                 return combat_state == "Downtime" and Casting.OkayToBuff() and Casting.AmIBuffable()
             end,
         },
+        { --Actions to lock down xtarg haters
+            name = 'HateTools(AggroTarget)',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            load_cond = function() return Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') end,
+            targetId = function(self) return Targeting.CheckForAggroTargetID() end,
+            cond = function(self, combat_state)
+                if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyLockout') then return false end
+                return combat_state == "Combat"
+            end,
+        },
         { --Actions that establish or maintain hatred
-            name = 'HateTools',
+            name = 'HateTools(AutoTarget)',
             state = 1,
             steps = 1,
             load_cond = function() return Core.IsTanking() end,
@@ -371,7 +384,7 @@ local _ClassConfig = {
             cond = function(self, combat_state)
                 --need to look at rotation and decide if it should fire during emergencies. leaning towards no
                 return combat_state == "Combat" and Core.IsTanking() and (mq.TLO.Me.PctHPs() < Config:GetSetting('EmergencyStart') or
-                    Targeting.IsNamed(Targeting.GetAutoTarget()) or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                    Globals.AutoTargetIsNamed or self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
             end,
         },
         { --Offensive actions to temporarily boost damage dealt
@@ -487,75 +500,26 @@ local _ClassConfig = {
                     return Casting.SelfBuffItemCheck(itemName)
                 end,
             },
-            { --Back Click, name function stops errors in rotation window when slot is empty
-                name_func = function() return mq.TLO.Me.Inventory("Back").Name() or "BackClick(Missing)" end,
-                type = "Item",
-                cond = function(self, itemName, target)
-                    if not Config:GetSetting('DoBackClick') or not Casting.ItemHasClicky(itemName) then return false end
-                    return Casting.SelfBuffItemCheck(itemName)
-                end,
-            },
         },
-        ['HateTools'] = {
-            --used when we've lost hatred after it is initially established
-            {
-                name = "Ageless Enmity",
-                type = "AA",
-                cond = function(self, aaName, target)
-                    return Targeting.GetTargetPctHPs() < 90 and mq.TLO.Me.PctAggro() < 100
-                end,
-            },
-            --used to jumpstart hatred on named from the outset and prevent early rips from burns
+        ['HateTools(AutoTarget)'] = {
             {
                 name = "Attention",
                 type = "Disc",
-                cond = function(self, discSpell, target)
-                    return Targeting.IsNamed(target)
-                end,
             },
-            --used to reinforce hatred after it is initially established
             {
                 name = "Blast of Anger",
                 type = "AA",
-                cond = function(self, aaName, target)
-                    ---@diagnostic disable-next-line: undefined-field
-                    return Targeting.GetTargetPctHPs() < 90 and (mq.TLO.Target.SecondaryPctAggro() or 0) > 70
-                end,
-            },
-            {
-                name = "Area Taunt",
-                type = "AA",
-                cond = function(self, aaName, target)
-                    --if not Config:GetSetting('AETauntAA') then return false end
-                    return self.ClassConfig.HelperFunctions.AETauntCheck(true)
-                end,
-            },
-            {
-                name = "Projection of Fury",
-                type = "AA",
-                cond = function(self, aaName, target)
-                    ---@diagnostic disable-next-line: undefined-field
-                    return Targeting.IsNamed(target) and (mq.TLO.Target.SecondaryPctAggro() or 0) > 80
-                end,
             },
             {
                 name = "Taunt",
                 type = "Ability",
                 cond = function(self, abilityName, target)
-                    return mq.TLO.Me.TargetOfTarget.ID() ~= mq.TLO.Me.ID() and target.ID() > 0 and Targeting.GetTargetDistance(target) < 30
+                    return Targeting.GetTargetDistance(target) < 30
                 end,
             },
             {
                 name = "AbsorbTaunt",
                 type = "Disc",
-            },
-            {
-                name = "AEBlades",
-                type = "Disc",
-                cond = function(self, discSpell)
-                    if not Config:GetSetting('DoAEDamage') then return false end
-                    return self.ClassConfig.HelperFunctions.AETargetCheck(true)
-                end,
             },
             {
                 name = "AddHate1",
@@ -568,21 +532,6 @@ local _ClassConfig = {
                 name = "AddHate2",
                 type = "Disc",
             },
-            {
-                name = "AgroPet",
-                type = "Disc",
-                cond = function(self, discSpell, target)
-                    return Targeting.IsNamed(target)
-                end,
-            },
-            -- { --this appears to have incredibly limited usage and the line was discontinued
-            --     name = "AERoar",
-            --     type = "Disc",
-            --     cond = function(self, discSpell)
-            --         return Core.IsModeActive("Tank") and Targeting.GetXTHaterCount() >= Config:GetSetting('BurnMobCount') and
-            --             Config:GetSetting('DoAEAgro')
-            --     end,
-            -- },
         },
         ['EmergencyDefenses'] = {
             --Note that in Tank Mode, defensive discs are preemptively cycled on named in the (non-emergency) Defenses rotation
@@ -643,7 +592,7 @@ local _ClassConfig = {
                 end,
                 cond = function()
                     if mq.TLO.Me.Bandolier("Shield").Active() then return false end
-                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("Shield") end,
             },
@@ -655,7 +604,7 @@ local _ClassConfig = {
                 end,
                 cond = function()
                     if mq.TLO.Me.Bandolier("DW").Active() then return false end
-                    return mq.TLO.Me.PctHPs() >= Config:GetSetting('EquipDW') and not (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return mq.TLO.Me.PctHPs() >= Config:GetSetting('EquipDW') and not (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("DW") end,
             },
@@ -731,13 +680,6 @@ local _ClassConfig = {
             },
         },
         ['Burn'] = {
-            {
-                name = "Mythic Glyph of Dragon Scales VI",
-                type = "AA",
-                cond = function(self, aaName)
-                    return Core.IsTanking()
-                end,
-            },
             {
                 name = "Spire of the Warlord",
                 type = "AA",
@@ -843,7 +785,6 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('DoBattleLeap') then return false end
-                    ---@diagnostic disable-next-line: undefined-field --Defs are not updated with HeadWet
                     return not mq.TLO.Me.HeadWet() --Stops Leap from launching us above the water's surface
                 end,
             },
@@ -1116,15 +1057,6 @@ local _ClassConfig = {
             Tooltip = "Click your charm for Geomantra.",
             Default = false,
         },
-        ['DoBackClick']     = {
-            DisplayName = "Do Back Click",
-            Group = "Items",
-            Header = "Clickies",
-            Category = "Class Config Clickies",
-            Index = 102,
-            Tooltip = "Click your back for Spikes.",
-            Default = false,
-        },
         ['DoCoating']        = {
             DisplayName = "Use Coating",
             Group = "Items",
@@ -1174,7 +1106,7 @@ local _ClassConfig = {
             Header = "Bandolier",
             Category = "Bandolier",
             Index = 104,
-            Tooltip = "Keep Shield equipped for Named mobs(must be in SpawnMaster or named.lua)",
+            Tooltip = "Keep Shield equipped for mobs detected as 'named' by RGMercs (see Named tab).",
             Default = true,
             FAQ = "Why does my WAR switch to a Shield on puny gray named?",
             Answer = "The Shield on Named option doesn't check levels, so feel free to disable this setting (or Bandolier swapping entirely) if you are farming fodder.",
@@ -1190,7 +1122,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

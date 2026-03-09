@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.Targeting")
 local Casting      = require("utils.casting")
@@ -60,7 +61,7 @@ local _ClassConfig = {
             "Mock",
         },
         ['EndRegen'] = {
-            "Third Wind", -- also does HP
+            "Third Wind Discipline", -- also does HP
             "Second Wind",
         },
         ['AuraBuff'] = {
@@ -176,8 +177,20 @@ local _ClassConfig = {
                 return combat_state == "Downtime" and Casting.OkayToBuff() and Casting.AmIBuffable()
             end,
         },
+        { --Actions to lock down xtarg haters
+            name = 'HateTools(AggroTarget)',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            load_cond = function() return Core.IsTanking() and Config:GetSetting('NewAggroScanBeta') end,
+            targetId = function(self) return Targeting.CheckForAggroTargetID() end,
+            cond = function(self, combat_state)
+                if mq.TLO.Me.PctHPs() <= Config:GetSetting('HPCritical') then return false end
+                return combat_state == "Combat"
+            end,
+        },
         { --Actions that establish or maintain hatred
-            name = 'HateTools',
+            name = 'HateTools(AutoTarget)',
             state = 1,
             steps = 1,
             doFullRotation = true,
@@ -230,8 +243,13 @@ local _ClassConfig = {
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and (mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or Targeting.IsNamed(Targeting.GetAutoTarget()) or
-                    self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true))
+                return combat_state == "Combat" and Targeting.IHaveAggro(100) and
+                    -- we are under our defense start HP
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('DefenseStart') or
+                        -- we have met our defense count threshold
+                        self.ClassConfig.HelperFunctions.DefensiveDiscCheck(true) or
+                        -- we are fighting a named and we are (presumably) tanking it
+                        (Globals.AutoTargetIsNamed and Targeting.GetAutoTargetAggroPct() >= 100))
             end,
         },
         { --Offensive actions to temporarily boost damage dealt
@@ -284,9 +302,32 @@ local _ClassConfig = {
                     return Core.IsTanking() and Casting.SelfBuffAACheck(aaName)
                 end,
             },
-
         },
-        ['HateTools'] = {
+        ['HateTools(AggroTarget)'] = {
+            { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
+                name = "Taunt",
+                type = "Ability",
+                cond = function(self, abilityName, target)
+                    return Targeting.GetTargetDistance(target) < 30
+                end,
+            },
+            {
+                name = "Attention",
+                type = "Disc",
+            },
+            {
+                name = "Blast of Anger",
+                type = "AA",
+            },
+            {
+                name = "AddHate",
+                type = "Disc",
+                cond = function(self, discSpell)
+                    return Casting.DetSpellCheck(discSpell)
+                end,
+            },
+        },
+        ['HateTools(AutoTarget)'] = {
             { --more valuable on laz because we have less hate tools and no other hatelist + 1 abilities
                 name = "Taunt",
                 type = "Ability",
@@ -298,14 +339,14 @@ local _ClassConfig = {
                 name = "Ageless Enmity",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return (Targeting.IsNamed(target) or Targeting.GetAutoTargetPctHPs() < 90) and Targeting.LostAutoTargetAggro()
+                    return (Globals.AutoTargetIsNamed or Targeting.GetAutoTargetPctHPs() < 90) and Targeting.LostAutoTargetAggro()
                 end,
             },
             { --used to jumpstart hatred on named from the outset and prevent early rips from burns
                 name = "Attention",
                 type = "Disc",
                 cond = function(self, discSpell, target)
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -323,8 +364,7 @@ local _ClassConfig = {
                 name = "Projection of Fury",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    ---@diagnostic disable-next-line: undefined-field
-                    return Targeting.IsNamed(target)
+                    return Globals.AutoTargetIsNamed
                 end,
             },
         },
@@ -396,7 +436,7 @@ local _ClassConfig = {
                 end,
                 cond = function()
                     if mq.TLO.Me.Bandolier("Shield").Active() then return false end
-                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return (mq.TLO.Me.PctHPs() <= Config:GetSetting('EquipShield')) or (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("Shield") end,
             },
@@ -408,7 +448,7 @@ local _ClassConfig = {
                 end,
                 cond = function()
                     if mq.TLO.Me.Bandolier("DW").Active() then return false end
-                    return mq.TLO.Me.PctHPs() >= Config:GetSetting('EquipDW') and not (Targeting.IsNamed(Targeting.GetAutoTarget()) and Config:GetSetting('NamedShieldLock'))
+                    return mq.TLO.Me.PctHPs() >= Config:GetSetting('EquipDW') and not (Globals.AutoTargetIsNamed and Config:GetSetting('NamedShieldLock'))
                 end,
                 custom_func = function(self) return ItemManager.BandolierSwap("DW") end,
             },
@@ -521,7 +561,6 @@ local _ClassConfig = {
                 cond = function(self, aaName, target)
                     if not Config:GetSetting('DoBattleLeap') then return false end
                     return not Casting.IHaveBuff(aaName) and not Casting.IHaveBuff('Group Bestial Alignment')
-                        ---@diagnostic disable-next-line: undefined-field --Defs are not updated with HeadWet
                         and not mq.TLO.Me.HeadWet() --Stops Leap from launching us above the water's surface
                 end,
             },
@@ -859,14 +898,14 @@ local _ClassConfig = {
             Header = "Bandolier",
             Category = "Bandolier",
             Index = 104,
-            Tooltip = "Keep Shield equipped for Named mobs(must be in SpawnMaster or named.lua)",
+            Tooltip = "Keep Shield equipped for mobs detected as 'named' by RGMercs (see Named tab).",
             Default = true,
             FAQ = "Why does my WAR switch to a Shield on puny gray named?",
             Answer = "The Shield on Named option doesn't check levels, so feel free to disable this setting (or Bandolier swapping entirely) if you are farming fodder.",
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

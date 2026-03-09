@@ -1,10 +1,10 @@
 local mq           = require('mq')
 local Combat       = require('utils.combat')
 local Config       = require('utils.config')
+local Globals      = require("utils.globals")
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
-local DanNet       = require('lib.dannet.helpers')
 local Logger       = require("utils.logger")
 
 local _ClassConfig = {
@@ -324,31 +324,20 @@ local _ClassConfig = {
             if combatState == "combat" and Config:GetSetting('DoBattleRez') and Core.OkayToNotHeal() then
                 if Casting.AAReady("Blessing of Resurrection") then
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
-                elseif mq.TLO.FindItem("Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("Water Sprinkler of Nem Ankh")() then
+                elseif mq.TLO.FindItem("=Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
                     rezAction = okayToRez and Casting.UseItem("Water Sprinkler of Nem Ankh", corpseId)
                 end
             else
                 if Casting.AAReady("Blessing of Resurrection") then
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
-                end
-                if not Casting.CanUseAA("Blessing of Resurrection") and Casting.SpellReady(rezSpell, true) then
+                elseif mq.TLO.FindItem("=Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
+                    rezAction = okayToRez and Casting.UseItem("Water Sprinkler of Nem Ankh", corpseId)
+                elseif not Casting.CanUseAA("Blessing of Resurrection") and Casting.SpellReady(rezSpell, true) then
                     rezAction = okayToRez and Casting.UseSpell(rezSpell, corpseId, true, true)
                 end
             end
 
             return rezAction
-        end,
-        GetMainAssistPctMana = function()
-            local groupMember = mq.TLO.Group.Member(Config.Globals.MainAssist)
-            if groupMember and groupMember() then
-                return groupMember.PctMana() or 0
-            end
-
-            local ret = tonumber(DanNet.query(Config.Globals.MainAssist, "Me.PctMana", 1000))
-
-            if ret and type(ret) == 'number' then return ret end
-
-            return mq.TLO.Spawn(string.format("PC =%s", Config.Globals.MainAssist)).PctMana() or 0
         end,
         --function to make sure we don't have non-hostiles in range before we use AE damage or non-taunt AE hate abilities
         AETargetCheck = function(minCount, printDebug)
@@ -437,7 +426,7 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -456,7 +445,7 @@ local _ClassConfig = {
                 type = "Item",
                 cond = function(self, itemName, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -473,14 +462,14 @@ local _ClassConfig = {
                 name = "Focused Celestial Regeneration",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
                 name = "Blessing of Sanctuary",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return target.ID() == (mq.TLO.Target.AggroHolder.ID() and not Targeting.TargetIsMA(target))
+                    return target.ID() == (mq.TLO.Target.AggroHolder.ID() and not Targeting.TargetIsATank(target))
                 end,
             },
             { --The stuff above is down, lets make mainhealpoint faster.
@@ -505,7 +494,7 @@ local _ClassConfig = {
                 name = "CompleteHeal",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting("DoCompleteHeal") or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting("DoCompleteHeal") or not Targeting.TargetIsATank(target) then return false end
                     return (target.PctHPs() or 999) <= Config:GetSetting('CompleteHealPct')
                 end,
             },
@@ -513,7 +502,7 @@ local _ClassConfig = {
                 name = "HealingLight",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return not (Config:GetSetting("DoCompleteHeal") and Targeting.TargetIsMA(target))
+                    return not (Config:GetSetting("DoCompleteHeal") and Targeting.TargetIsATank(target))
                 end,
             },
         },
@@ -529,8 +518,9 @@ local _ClassConfig = {
         },
         { --Spells that should be checked on group members
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self) return Casting.GetBuffableGroupIDs() end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and Casting.OkayToBuff()
             end,
@@ -549,7 +539,7 @@ local _ClassConfig = {
             timer = 30,
             state = 1,
             steps = 1,
-            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverence") or Casting.CanUseAA("Quiet Miracle")) end,
+            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverance") or Casting.CanUseAA("Quiet Miracle")) end,
             targetId = function(self)
                 return { Combat.FindWorstHurtManaGroupMember(Config:GetSetting('ManaRestorePct')),
                     Combat.FindWorstHurtManaXT(Config:GetSetting('ManaRestorePct')), }
@@ -588,7 +578,7 @@ local _ClassConfig = {
     ['Rotations']         = {
         ['ManaRestore'] = {
             {
-                name = "Veturika's Perseverence",
+                name = "Veturika's Perseverance",
                 type = "AA",
                 cond = function(self, aaName, target)
                     return Targeting.TargetIsMyself(target) and Casting.AmIBuffable()
@@ -619,7 +609,7 @@ local _ClassConfig = {
             },
             { -- Spire, the SpireChoice setting will determine which ability is displayed/used.
                 name_func = function(self)
-                    local spireAbil = string.format("Fundament: %s Spire of Divinity", Config.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
+                    local spireAbil = string.format("Fundament: %s Spire of Divinity", Globals.Constants.SpireChoices[Config:GetSetting('SpireChoice') or 4])
                     return Casting.CanUseAA(spireAbil) and spireAbil or "Spire Not Purchased/Selected"
                 end,
                 type = "AA",
@@ -706,7 +696,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function(self) return Config:GetSetting('DoHealStun') end,
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Targeting.IsNamed(target) and not Casting.StunImmuneTarget(target)
+                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed and not Casting.StunImmuneTarget(target)
                 end,
             },
             {
@@ -716,7 +706,7 @@ local _ClassConfig = {
                 cond = function(self, spell, target)
                     local targetLevel = Targeting.GetAutoTargetLevel()
                     if targetLevel == 0 or targetLevel > 55 then return false end
-                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Casting.HaveManaToNuke(true) and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -821,7 +811,7 @@ local _ClassConfig = {
                 name = "Divine Guardian",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    if not Targeting.TargetIsMA(target) then return false end
+                    if not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
@@ -861,7 +851,7 @@ local _ClassConfig = {
                 name = "SingleVieBuff",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoVieBuff') or self:GetResolvedActionMapItem('GroupVieBuff') or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting('DoVieBuff') or self:GetResolvedActionMapItem('GroupVieBuff') or not Targeting.TargetIsATank(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -869,7 +859,7 @@ local _ClassConfig = {
                 name = "DivineBuff",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoDivineBuff') or not Targeting.TargetIsMA(target) then return false end
+                    if not Config:GetSetting('DoDivineBuff') or not Targeting.TargetIsATank(target) then return false end
                     return Casting.CastReady(spell) and Casting.GroupBuffCheck(spell, target) and Casting.ReagentCheck(spell)
                 end,
             },
@@ -995,10 +985,10 @@ local _ClassConfig = {
                 "Second Spire: Healing Power Buff to Self.\n" ..
                 "Third Spire: Group Mitigation Buff.",
             Type = "Combo",
-            ComboOptions = Config.Constants.SpireChoices,
+            ComboOptions = Globals.Constants.SpireChoices,
             Default = 3,
             Min = 1,
-            Max = #Config.Constants.SpireChoices,
+            Max = #Globals.Constants.SpireChoices,
         },
 
         --Combat
@@ -1289,7 +1279,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release customized specifically for Project Lazarus server.\n\n" ..
                 "  This config should perform admirably from start to endgame.\n\n" ..

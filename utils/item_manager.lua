@@ -1,5 +1,6 @@
 local mq            = require('mq')
 local Targeting     = require("utils.targeting")
+local Movement      = require("utils.movement")
 local Config        = require("utils.config")
 local Core          = require("utils.core")
 local Logger        = require("utils.logger")
@@ -24,7 +25,7 @@ function ItemManager.GiveTo(toId, itemName, count)
 
     if mq.TLO.Target.Distance3D() >= 25 then
         Logger.log_debug("\arGiveTo but Target is too far away - moving closer!")
-        Core.DoCmd("/nav id %d |log=off dist=10")
+        Movement:DoNav(false, "id %d |log=off dist=10")
 
         mq.delay("10s", function() return mq.TLO.Navigation.Active() end)
     end
@@ -41,13 +42,13 @@ function ItemManager.GiveTo(toId, itemName, count)
 
     -- Click OK on trade window and wait for it to go away
     if Targeting.TargetIsType("pc") then
-        mq.delay("5s", function() return mq.TLO.Window("TradeWnd").Open() end)
+        mq.delay("5s", function() return mq.TLO.Window("TradeWnd").Open() == true end)
         mq.TLO.Window("TradeWnd").Child("TRDW_Trade_Button").LeftMouseUp()
-        mq.delay("5s", function() return not mq.TLO.Window("TradeWnd").Open() end)
+        mq.delay("5s", function() return mq.TLO.Window("TradeWnd").Open() == false end)
     else
-        mq.delay("5s", function() return mq.TLO.Window("GiveWnd").Open() end)
+        mq.delay("5s", function() return mq.TLO.Window("GiveWnd").Open() == true end)
         mq.TLO.Window("GiveWnd").Child("GVW_Give_Button").LeftMouseUp()
-        mq.delay("5s", function() return not mq.TLO.Window("GiveWnd").Open() end)
+        mq.delay("5s", function() return mq.TLO.Window("GiveWnd").Open() == false end)
     end
 
     -- We're giving something to a pet. In this case if the pet gives it back,

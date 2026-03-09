@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -884,10 +885,9 @@ return {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -1013,7 +1013,7 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     return Core.IsModeActive('Tank') and
-                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Targeting.IsNamed(target)) and Casting.NoDiscActive()
+                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Globals.AutoTargetIsNamed) and Casting.NoDiscActive()
                 end,
             },
             {
@@ -1021,7 +1021,7 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     return Core.IsModeActive('Tank') and
-                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Targeting.IsNamed(target)) and Casting.NoDiscActive()
+                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Globals.AutoTargetIsNamed) and Casting.NoDiscActive()
                 end,
             },
             {
@@ -1029,7 +1029,7 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     return Core.IsModeActive('Tank') and
-                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Targeting.IsNamed(target)) and Casting.NoDiscActive()
+                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Globals.AutoTargetIsNamed) and Casting.NoDiscActive()
                 end,
             },
             {
@@ -1037,7 +1037,7 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell, target)
                     return Core.IsModeActive('Tank') and
-                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Targeting.IsNamed(target)) and Casting.NoDiscActive()
+                        (mq.TLO.SpawnCount("NPC radius 60 zradius 50")() > 2 or Globals.AutoTargetIsNamed) and Casting.NoDiscActive()
                 end,
             },
             {
@@ -1655,7 +1655,7 @@ return {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config is largely a port from older code, and has seen only minor adjustments. It has been flagged for revamp when we have the chance!\n\n" ..

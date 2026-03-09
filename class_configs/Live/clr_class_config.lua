@@ -4,7 +4,6 @@ local Config       = require('utils.config')
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
-local DanNet       = require('lib.dannet.helpers')
 local Logger       = require("utils.logger")
 
 local _ClassConfig = {
@@ -369,6 +368,8 @@ local _ClassConfig = {
             "Valor",
             "Temperance",
             "Blessing of Temperance",
+            "Aegolism",
+            "Ancient: Gift of Aegolism",
             "Blessing of Aegolism",
             "Hand of Virtue",
             "Hand of Conviction",
@@ -742,31 +743,20 @@ local _ClassConfig = {
             if combatState == "combat" and Config:GetSetting('DoBattleRez') and Core.OkayToNotHeal() then
                 if Casting.AAReady("Blessing of Resurrection") then
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
-                elseif mq.TLO.FindItem("Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("Water Sprinkler of Nem Ankh")() then
+                elseif mq.TLO.FindItem("=Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
                     rezAction = okayToRez and Casting.UseItem("Water Sprinkler of Nem Ankh", corpseId)
                 end
             else
                 if Casting.AAReady("Blessing of Resurrection") then
                     rezAction = okayToRez and Casting.UseAA("Blessing of Resurrection", corpseId, true, 1)
-                end
-                if not Casting.CanUseAA("Blessing of Resurrection") and Casting.SpellReady(rezSpell, true) then
+                elseif mq.TLO.FindItem("=Water Sprinkler of Nem Ankh")() and mq.TLO.Me.ItemReady("=Water Sprinkler of Nem Ankh")() then
+                    rezAction = okayToRez and Casting.UseItem("Water Sprinkler of Nem Ankh", corpseId)
+                elseif not Casting.CanUseAA("Blessing of Resurrection") and Casting.SpellReady(rezSpell, true) then
                     rezAction = okayToRez and Casting.UseSpell(rezSpell, corpseId, true, true)
                 end
             end
 
             return rezAction
-        end,
-        GetMainAssistPctMana = function()
-            local groupMember = mq.TLO.Group.Member(Config.Globals.MainAssist)
-            if groupMember and groupMember() then
-                return groupMember.PctMana() or 0
-            end
-
-            local ret = tonumber(DanNet.query(Config.Globals.MainAssist, "Me.PctMana", 1000))
-
-            if ret and type(ret) == 'number' then return ret end
-
-            return mq.TLO.Spawn(string.format("PC =%s", Config.Globals.MainAssist)).PctMana() or 0
         end,
     },
     -- These are handled differently from normal rotations in that we try to make some intelligent desicions about which spells to use instead
@@ -943,14 +933,14 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "Veturika's Perseverence",
+                name = "Veturika's Perseverance",
                 type = "AA",
                 cond = function(self, aaName, target)
                     return Targeting.TargetIsMyself(target)
                 end,
             },
             { --The stuff above is down, lets make mainhealpoint chonkier. Homework: Wondering if we should be using this more/elsewhere.
-                name = "Channeling of the Divine",
+                name = "Channeling the Divine",
                 type = "AA",
             },
             {
@@ -1121,8 +1111,9 @@ local _ClassConfig = {
         },
         { --Spells that should be checked on group members
             name = 'GroupBuff',
-            timer = 60,
-            targetId = function(self) return Casting.GetBuffableGroupIDs() end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and (not Core.IsModeActive('Heal') or Core.OkayToNotHeal()) and Casting.OkayToBuff()
             end,
@@ -1141,7 +1132,7 @@ local _ClassConfig = {
             timer = 30,
             state = 1,
             steps = 1,
-            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverence") or Casting.CanUseAA("Quiet Prayer")) end,
+            load_cond = function() return Config:GetSetting('DoManaRestore') and (Casting.CanUseAA("Veturika's Perseverance") or Casting.CanUseAA("Quiet Prayer")) end,
             targetId = function(self)
                 return { Combat.FindWorstHurtManaGroupMember(Config:GetSetting('ManaRestorePct')),
                     Combat.FindWorstHurtManaXT(Config:GetSetting('ManaRestorePct')), }
@@ -1176,7 +1167,7 @@ local _ClassConfig = {
     ['Rotations']         = {
         ['ManaRestore'] = {
             {
-                name = "Veturika's Perseverence",
+                name = "Veturika's Perseverance",
                 type = "AA",
                 cond = function(self, aaName, target)
                     return Targeting.TargetIsMyself(target) and Casting.AmIBuffable()
@@ -1805,7 +1796,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

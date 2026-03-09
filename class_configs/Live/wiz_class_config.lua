@@ -5,6 +5,7 @@
 
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Modules   = require("utils.modules")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -34,13 +35,13 @@ return {
             "Frostbound Covenant",
             "Frostbound Alliance",
         },
-        ['DichoSpell'] = {
-            "Reciprocal Fire",
-            "Ecliptic Fire",
-            "Composite Fire",
-            "Dissident Fire",
-            "Dichotomic Fire",
-        },
+        -- ['DichoSpell'] = {
+        --     "Reciprocal Fire",
+        --     "Ecliptic Fire",
+        --     "Composite Fire",
+        --     "Dissident Fire",
+        --     "Dichotomic Fire",
+        -- },
         ['IceClaw'] = {
             "Claw of Tsikut",
             "Claw of the Void",
@@ -684,7 +685,7 @@ return {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and not Targeting.IsNamed(Targeting.GetAutoTarget()) and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
+                return combat_state == "Combat" and not Globals.AutoTargetIsNamed and Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
         { --Keep things from doing
@@ -791,7 +792,7 @@ return {
             name = 'CombatBuff',
             state = 1,
             steps = 1,
-            timer = 30, -- only run every 30 seconds at most.
+            timer = 10,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return combat_state == "Combat"
@@ -860,14 +861,14 @@ return {
                 name = "Mind Crash",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 90
                 end,
             },
             {
                 name = "Arcane Whisper",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() > 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 90
                 end,
             },
             {
@@ -913,7 +914,7 @@ return {
                 name = "StunSpell",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return Casting.HaveManaToDebuff() and Targeting.TargetNotStunned() and not Targeting.IsNamed(target) and not Casting.StunImmuneTarget(target)
+                    return Casting.HaveManaToDebuff() and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed and not Casting.StunImmuneTarget(target)
                 end,
             },
         },
@@ -1613,7 +1614,7 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..

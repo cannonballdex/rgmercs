@@ -1,5 +1,6 @@
 local mq           = require('mq')
 local Config       = require('utils.config')
+local Globals      = require('utils.globals')
 local Core         = require("utils.core")
 local Targeting    = require("utils.targeting")
 local Casting      = require("utils.casting")
@@ -821,6 +822,22 @@ local _ClassConfig = {
             "Charm Animals",
             "Befriend Animal",
         },
+        ['Barkspur'] = {
+            "Barkspur XIII",
+            "Frondbarb",
+            "Duskthorn",
+            "Vinespike",
+            "Thornspike",
+            "Daggerthorn",
+            "Stemfang",
+            "Vinespur",
+            "Thornspur",
+            "Frondspur",
+            "Fernspike",
+            "Fernspur",
+            "Barkspur",
+        },
+
     },
     ['HealRotationOrder'] = {
         {
@@ -849,7 +866,7 @@ local _ClassConfig = {
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -857,7 +874,7 @@ local _ClassConfig = {
                 type = "AA",
                 cond = function(self, aaName, target)
                     if not Targeting.GroupedWithTarget(target) then return false end
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -868,7 +885,7 @@ local _ClassConfig = {
                 name = "Blessing of Tunare",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.TargetIsMA(target)
+                    return Targeting.TargetIsATank(target)
                 end,
             },
             {
@@ -936,10 +953,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds tops.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Core.OkayToNotHeal() and Casting.OkayToBuff()
             end,
@@ -960,7 +976,7 @@ local _ClassConfig = {
             load_cond = function() return Config:GetSetting('DoSnare') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat" and Core.OkayToNotHeal() and not Targeting.IsNamed(Targeting.GetAutoTarget()) and
+                return combat_state == "Combat" and Core.OkayToNotHeal() and not Globals.AutoTargetIsNamed and
                     Targeting.GetXTHaterCount() <= Config:GetSetting('SnareCount')
             end,
         },
@@ -980,6 +996,16 @@ local _ClassConfig = {
             steps = 1,
             load_cond = function(self) return Config:GetSetting('DoTwinHeal') and self:GetResolvedActionMapItem('TwinHealNuke') end,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
+            cond = function(self, combat_state)
+                return combat_state == "Combat" and Core.OkayToNotHeal()
+            end,
+        },
+        {
+            name = 'Barkspur',
+            state = 1,
+            steps = 1,
+            load_cond = function(self) return Config:GetSetting('DoBarkspur') and self:GetResolvedActionMapItem('Barkspur') end,
+            targetId = function(self) return { Core.GetMainAssistId(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Combat" and Core.OkayToNotHeal()
             end,
@@ -1010,6 +1036,7 @@ local _ClassConfig = {
             {
                 name = "NaturesWrathDot",
                 type = "Spell",
+                load_cond = function(self) return Config:GetSetting('DoNatureDot') end,
                 cond = function(self)
                     return Casting.OkayToNuke(true)
                 end,
@@ -1017,6 +1044,7 @@ local _ClassConfig = {
             {
                 name = "SunDot",
                 type = "Spell",
+                load_cond = function(self) return Config:GetSetting('DoSunDot') end,
                 cond = function(self, spell)
                     return Casting.DotSpellCheck(spell) and Casting.HaveManaToDot()
                 end,
@@ -1024,8 +1052,9 @@ local _ClassConfig = {
             {
                 name = "HordeDot",
                 type = "Spell",
+                load_cond = function(self) return Config:GetSetting('DoHordeDot') end,
                 cond = function(self, spell, target)
-                    return Casting.DotSpellCheck(spell) and (Casting.GOMCheck() or Targeting.IsNamed(target))
+                    return Casting.DotSpellCheck(spell) and (Casting.GOMCheck() or Globals.AutoTargetIsNamed)
                 end,
             },
             {
@@ -1069,7 +1098,7 @@ local _ClassConfig = {
                 name = "StunDD",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return Casting.OkayToNuke(true) and Targeting.TargetNotStunned() and not Targeting.IsNamed(target)
+                    return Casting.OkayToNuke(true) and Targeting.TargetNotStunned() and not Globals.AutoTargetIsNamed
                 end,
             },
             {
@@ -1162,6 +1191,7 @@ local _ClassConfig = {
             {
                 name = "TwincastSpell",
                 type = "Spell",
+                load_cond = function(self) return Config:GetSetting('DoTwincast') end,
                 cond = function(self)
                     return not mq.TLO.Me.Buff("Twincast")()
                 end,
@@ -1195,8 +1225,8 @@ local _ClassConfig = {
             {
                 name = "Season's Wrath",
                 type = "AA",
-                cond = function(self, aaName)
-                    return Casting.DetAACheck(aaName)
+                cond = function(self, aaName, target)
+                    return Casting.DetAACheck(aaName, target)
                 end,
             },
             {
@@ -1204,7 +1234,7 @@ local _ClassConfig = {
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoRoDebuff') or Casting.CanUseAA("Blessing of Ro") then return false end
-                    return Casting.DetSpellCheck(spell)
+                    return Casting.DetSpellCheck(spell, target)
                 end,
             },
         },
@@ -1212,6 +1242,7 @@ local _ClassConfig = {
             {
                 name = "Entrap",
                 type = "AA",
+                load_cond = function(self) return Casting.CanUseAA("Entrap") end,
                 cond = function(self, aaName, target)
                     return Casting.DetAACheck(aaName) and Targeting.MobHasLowHP(target) and not Casting.SnareImmuneTarget(target)
                 end,
@@ -1219,8 +1250,8 @@ local _ClassConfig = {
             {
                 name = "SnareSpell",
                 type = "Spell",
+                load_cond = function(self) return not Casting.CanUseAA("Entrap") end,
                 cond = function(self, spell, target)
-                    if Casting.CanUseAA("Entrap") then return false end
                     return Casting.DetSpellCheck(spell) and Targeting.MobHasLowHP(target) and not Casting.SnareImmuneTarget(target)
                 end,
             },
@@ -1230,7 +1261,7 @@ local _ClassConfig = {
                 name = "Swarm of Fireflies",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.TargetIsMA(target) and Casting.GroupBuffAACheck(aaName, target)
+                    return Targeting.TargetIsATank(target) and Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
             {
@@ -1250,6 +1281,7 @@ local _ClassConfig = {
                 cond = function(self, aaName, target)
                     local bookSpell = self:GetResolvedActionMapItem('MoveSpells')
                     local aaSpell = Casting.GetAASpell(aaName)
+                    if Config.TempSettings.NoLevZone then return false end
                     if not Config:GetSetting('DoMoveBuffs') or (bookSpell and bookSpell.Level() or 999) > (aaSpell.Level() or 0) then return false end
 
                     return Casting.GroupBuffAACheck(aaName, target)
@@ -1260,6 +1292,7 @@ local _ClassConfig = {
                 type = "Spell",
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if Config.TempSettings.NoLevZone then return false end
                     local aaSpellLvl = mq.TLO.Me.AltAbility("Spirit of Eagles").Spell.Trigger(1).Level() or 0
                     if not Config:GetSetting("DoMoveBuffs") or aaSpellLvl >= (spell.Level() or 0) then return false end
                     return Casting.GroupBuffCheck(spell, target)
@@ -1276,8 +1309,8 @@ local _ClassConfig = {
             {
                 name = "TempHPBuff",
                 type = "Spell",
+                load_cond = function(self) return Config:GetSetting('DoTempHP') end,
                 cond = function(self, spell, target)
-                    if not Config:GetSetting('DoTempHP') then return false end
                     return Targeting.TargetClassIs("WAR", target) and Casting.CastReady(spell) and Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1310,7 +1343,7 @@ local _ClassConfig = {
                 name = "Wrath of the Wild",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.TargetIsMA(target) and Casting.GroupBuffAACheck(aaName, target)
+                    return Targeting.TargetIsATank(target) and Casting.GroupBuffAACheck(aaName, target)
                 end,
             },
         },
@@ -1386,147 +1419,42 @@ local _ClassConfig = {
                 end,
             },
         },
+        ['Barkspur'] = {
+            {
+                name = "Barkspur",
+                type = "Spell",
+                cond = function(self, spell, target)
+                    if not Casting.CastReady(spell) then return false end
+                    return Casting.GroupBuffCheck(spell, target, false, true)
+                end,
+            },
+        },
     },
-    ['Spells']            = {
+    ['SpellList']         = {
         {
-            gem = 1,
+            name = "Heal Mode",
+            -- cond = function(self) return true end, --Kept here for illustration, this line could be removed in this instance since we aren't using conditions.
             spells = {
                 { name = "LongHeal", },
-            },
-        },
-        {
-            gem = 2,
-            spells = {
-                { name = "QuickHealSurge", cond = function(self) return mq.TLO.Me.Level() >= 75 end, },
-
-
-            },
-        },
-        {
-            gem = 3,
-            spells = {
-                -- [ HEAL MODE ] --
-                { name = "QuickGroupHeal", cond = function(self) return mq.TLO.Me.Level() >= 90 end, },
-
-            },
-        },
-        {
-            gem = 4,
-            spells = {
-
-                { name = "QuickHeal", cond = function(self) return mq.TLO.Me.Level() >= 90 end, },
-                { name = "StunDD", },
-
-            },
-        },
-        {
-            gem = 5,
-            spells = {
-
-                { name = "LongGroupHeal", cond = function(self) return mq.TLO.Me.Level() >= 70 end, },
-                { name = "WinterFireDD", },
-
-            },
-        },
-        {
-            gem = 6,
-            spells = {
-
-                {
-                    name = "RemoteSunDD",
-                    cond = function(self)
-                        return mq.TLO.Me.Level() >= 83 --and Config:GetSetting('DoFire')
-                    end,
-                },
-                {
-                    name = "SnareSpell",
-                    cond = function(self)
-                        return Config:GetSetting('DoSnare')
-                    end,
-                },
-                -- {
-                --     name = "RemoteMoonDD",
-                --     cond = function(self)
-                --         return mq.TLO.Me.Level() >= 83 and not Config:GetSetting('DoFire')
-                --     end,
-                -- },
-
-            },
-        },
-        {
-            gem = 7,
-            spells = {
-
-                --{ name = "FrostDebuff", cond = function(self) return mq.TLO.Me.Level() >= 74 and not Config:GetSetting('DoFire') end, },
-                { name = "HordeDot", cond = function(self) return Casting.CanUseAA("Blessing of Ro") end, },
-                { name = "RoDebuff", cond = function(self) return true end, },
-
-            },
-        },
-        {
-            gem = 8,
-            spells = {
-
-                { name = "TwinHealNuke",        cond = function(self) return Config:GetSetting("DoTwinHeal") end, },
-                { name = "GroupCure",           cond = function(self) return true end, },
-                { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') end, },
-                { name = "ReptileCombatInnate", cond = function(self) return true end, },
-            },
-        },
-        {
-            gem = 9,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-
-                { name = "SunDot", cond = function(self) return true end, }, --Config:GetSetting("DoFire") end, },
-            },
-        },
-        {
-            gem = 10,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-                { name = "NaturesWrathDot", cond = function(self) return true end, },
-
-            },
-        },
-        {
-            gem = 11,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-
+                { name = "QuickHealSurge",      cond = function(self) return mq.TLO.Me.Level() >= 75 end, },
+                { name = "QuickHeal",           cond = function(self) return mq.TLO.Me.Level() >= 90 end, },
+                { name = "QuickGroupHeal",      cond = function(self) return mq.TLO.Me.Level() >= 90 end, },
+                { name = "LongGroupHeal",       cond = function(self) return mq.TLO.Me.Level() >= 70 end, },
+                { name = "SnareSpell",          cond = function(self) return Config:GetSetting("DoSnare") and not Casting.CanUseAA("Entrap") end, },
+                { name = "RoDebuff",            cond = function(self) return not Casting.CanUseAA("Blessing of Ro") end, },
+                { name = "TwincastSpell",       cond = function(self) return Config:GetSetting("DoTwincast") end, },
                 { name = "DichoSpell",          cond = function(self) return mq.TLO.Me.Level() >= 101 end, },
-                { name = "GroupCure",           cond = function(self) return true end, },
+                { name = "RemoteSunDD",         cond = function(self) return mq.TLO.Me.Level() >= 83 end, },
+                { name = "NaturesWrathDot",     cond = function(self) return Config:GetSetting("DoNatureDot") end, },
+                { name = "SunDot",              cond = function(self) return Config:GetSetting("DoSunDot") end, },
+                { name = "HordeDot",            cond = function(self) return Config:GetSetting("DoHordeDot") end, },
+                { name = "TwinHealNuke",        cond = function(self) return Config:GetSetting("DoTwinHeal") end, },
+                { name = "StunDD",              cond = function(self) return mq.TLO.Me.Level() < 71 end, },
+                { name = "WinterFireDD",        cond = function(self) return mq.TLO.Me.Level() < 71 end, },
                 { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') end, },
-                { name = "ReptileCombatInnate", cond = function(self) return true end, },
-            },
-        },
-        {
-            gem = 12,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-                { name = "TwincastSpell",       cond = function(self) return true end, },
-                { name = "GroupCure",           cond = function(self) return true end, },
-                { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') end, },
-                { name = "ReptileCombatInnate", cond = function(self) return true end, },
-            },
-        },
-        {
-            gem = 13,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-                { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') and mq.TLO.Me.NumGems() == 14 end, },
-                { name = "GroupCure",           cond = function(self) return true end, },
-                { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') end, },
-                { name = "ReptileCombatInnate", cond = function(self) return true end, },
-            },
-        },
-        {
-            gem = 14,
-            cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
-            spells = {
-                { name = "GroupCure",           cond = function(self) return true end, },
-                { name = "TempHPBuff",          cond = function(self) return Config:GetSetting('DoTempHP') end, },
-                { name = "ReptileCombatInnate", cond = function(self) return true end, },
+                { name = "Barkspur",            cond = function(self) return Config:GetSetting('DoBarkspur') end, },
+                { name = "ReptileCombatInnate", },
+                { name = "GroupCure", },
             },
         },
     },
@@ -1620,6 +1548,33 @@ local _ClassConfig = {
             RequiresLoadoutChange = true,
             Default = true,
         },
+        ['DoHordeDot']   = {
+            DisplayName = "Horde Dot",
+            Group = "Abilities",
+            Header = "Damage",
+            Category = "Over Time",
+            Tooltip = "Use Horde Dot on named or a GoM proc.",
+            RequiresLoadoutChange = true,
+            Default = true,
+        },
+        ['DoNatureDot']  = {
+            DisplayName = "Horde Dot",
+            Group = "Abilities",
+            Header = "Damage",
+            Category = "Over Time",
+            Tooltip = "Use your Nature's Wrath line Dot.",
+            RequiresLoadoutChange = true,
+            Default = true,
+        },
+        ['DoSunDot']     = {
+            DisplayName = "Horde Dot",
+            Group = "Abilities",
+            Header = "Damage",
+            Category = "Over Time",
+            Tooltip = "Use your Sun line Dot.",
+            RequiresLoadoutChange = true,
+            Default = true,
+        },
         ['DoHPBuff']     = {
             DisplayName = "Group HP Buff",
             Group = "Abilities",
@@ -1637,7 +1592,7 @@ local _ClassConfig = {
             Category = "Group",
             Tooltip = "Use Temp HP Buff (Only for WAR, other tanks have their own)",
             RequiresLoadoutChange = true,
-            Default = true,
+            Default = false,
             FAQ = "Why isn't my Temp HP Buff being used?",
             Answer = "You either have [DoTempHP] disabled, or you don't have a Warrior in your group (Other tanks have their own Temp HP Buff).",
         },
@@ -1650,6 +1605,14 @@ local _ClassConfig = {
             Default = true,
             FAQ = "Why am I spamming my Group Regen buff?",
             Answer = "Certain Shaman and Druid group regen buffs report cross-stacking. You should deselect the option on one of the PCs if they are grouped together.",
+        },
+        ['DoTwincast']   = {
+            DisplayName = "Use Twincast Spell",
+            Group = "Abilities",
+            Header = "Buffs",
+            Category = "Self",
+            Tooltip = "Use your Twincast spell during burns.",
+            Default = false,
         },
         ['DoRunSpeed']   = {
             DisplayName = "Orphaned",
@@ -1689,9 +1652,18 @@ local _ClassConfig = {
             Default = false,
             RequiresLoadoutChange = true,
         },
+        ['DoBarkspur']   = {
+            DisplayName = "Use Barkspur",
+            Group = "Abilities",
+            Header = "Buffs",
+            Category = "Group",
+            Tooltip = "Use your short duration damage shield (Barkspur line) on the MA during combat.",
+            RequiresLoadoutChange = true,
+            Default = false,
+        },
     },
     ['ClassFAQ']          = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is an Alpha config aimed at late game live.\n\n" ..
                 "  It should perform well as a healer, but may be lacking typical options or configuration.\n\n" ..

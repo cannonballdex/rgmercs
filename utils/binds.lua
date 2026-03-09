@@ -1,12 +1,14 @@
 local mq          = require('mq')
 local Config      = require('utils.config')
+local Globals     = require('utils.globals')
 local Core        = require("utils.core")
+local Comms       = require("utils.comms")
 local Modules     = require("utils.modules")
 local Targeting   = require("utils.targeting")
 local Strings     = require("utils.strings")
 local Logger      = require("utils.logger")
 local ConfigShare = require("utils.rg_config_share")
-local DanNet      = require('lib.dannet.helpers')
+local Set         = require('mq.set')
 
 local Binds       = { _version = '0.1a', _name = "Binds", _author = 'Derple', }
 
@@ -15,6 +17,13 @@ Binds.MainHandler = function(cmd, ...)
 
     if Binds.Handlers[cmd] then
         return Binds.Handlers[cmd].handler(...)
+    end
+
+    -- try to process as a substring
+    for bindCmd, bindData in pairs(Binds.Handlers) do
+        if Strings.StartsWith(bindCmd, cmd) then
+            return bindData.handler(...)
+        end
     end
 
     local processed = false
@@ -59,7 +68,7 @@ Binds.Handlers    = {
         about = "Sets a specific setting for this character and all RGMercs peers.",
         handler = function(config, value)
             Config:HandleBind(config, value)
-            local peers = Config:GetPeers()
+            local peers = Comms.GetPeers(false)
             for _, peer in pairs(peers) do
                 if peer ~= mq.TLO.Me.Name() then
                     Config:PeerSetSetting(peer, config, value)
@@ -90,43 +99,68 @@ Binds.Handlers    = {
             Config:ClearAllTempSettings()
         end,
     },
-    ['forcecombat'] = {
-        usage = "/rgl forcecombat <id?>",
+    ['ignoretarget'] = {
+        usage = "/rgl ignoretarget <id?>",
         about =
-        "Will force targeting and combat on a (potentially non-hostile) entity. If no ID is supplied, it will use your current target. See associated FAQ entry.",
+        "Will force target to be ignored when picking your assist target as the MA.",
         handler = function(targetId)
             targetId = targetId and tonumber(targetId) or mq.TLO.Target.ID()
             if targetId > 0 then
-                if mq.TLO.Target.ID() ~= targetId then
-                    Targeting.SetTarget(targetId, true)
-                end
-                Core.DoCmd("/xtarget set 1 currenttarget")
-                mq.delay("2s", function() return mq.TLO.Me.XTarget(1).ID() == mq.TLO.Target.ID() end)
-                Logger.log_info("\awForced Combat Targeting: %s", mq.TLO.Me.XTarget(1).CleanName())
-                Config.Globals.ForceCombatID = targetId
-                Config.Globals.ForceTargetID = targetId
+                Logger.log_info("\awIgnored Target: %d", targetId)
+                Globals.IgnoredTargetIDs:add(targetId)
             else
-                Logger.log_info("\awForced Combat requires a valid supplied ID or target!")
+                Logger.log_info("\awIgnoring a target requires a valid supplied ID or target!")
             end
+        end,
+    },
+    ['ignoretargetclear'] = {
+        usage = "/rgl ignoretargetclear",
+        about = "Will clear all ignored targets.",
+        handler = function()
+            Globals.IgnoredTargetIDs = Set.new({})
+            Logger.log_info("\awIgnored targets cleared.")
+        end,
+    },
+    ['forcecombat'] = {
+        usage = "/rgl forcecombat <id?>",
+        about =
+        "Alias for /rgl forcetarget. Will force the current target or <id> to be your autotarget no matter what until it is no longer valid. Can force combat on non-hostiles.",
+        handler = function(targetId)
+            local forcedTarget = targetId and mq.TLO.Spawn(targetId) or mq.TLO.Target
+            if forcedTarget and forcedTarget() and forcedTarget.ID() > 0 and (Targeting.TargetIsType("npc", forcedTarget) or Targeting.TargetIsType("npcpet", forcedTarget) or Targeting.TargetIsType("object", forcedTarget)) then
+                Globals.ForceTargetID = forcedTarget.ID()
+                Logger.log_info("\awForced Target: %s", forcedTarget.CleanName() or "None")
+            end
+            Logger.log_warning("This command has been deprecated! The forcecombat command has been replaced by /rgl forcetarget and is slated for eventual removal.")
         end,
     },
     ['forcecombatclear'] = {
         usage = "/rgl forcecombatclear",
-        about = "Will cancel the current forced combat and reset the first XT slot if needed.",
+        about = "Alias for /rgl forcetargetclear. Will clear the current forced target.",
         handler = function()
-            Logger.log_info("\awDisabling forced combat against %s(id:%d)!", mq.TLO.Spawn(Config.Globals.ForceCombatID).CleanName() or "Unknown", Config.Globals.ForceCombatID)
-            Targeting.ClearTarget()
+            Globals.ForceTargetID = 0
+            Logger.log_info("\awForced target cleared.")
+            Logger.log_warning(
+                "This command has been deprecated! The forcecombatclear command has been replaced by /rgl forcetargetclear and is slated for eventual removal.")
         end,
     },
     ['forcetarget'] = {
         usage = "/rgl forcetarget <id?>",
-        about = "Will force the current target or <id> to be your autotarget no matter what until it is no longer valid.",
+        about = "Will force the current target or <id> to be your autotarget no matter what until it is no longer valid. Can force combat on non-hostiles.",
         handler = function(targetId)
             local forcedTarget = targetId and mq.TLO.Spawn(targetId) or mq.TLO.Target
-            if forcedTarget and forcedTarget() and forcedTarget.ID() > 0 and (Targeting.TargetIsType("npc", forcedTarget) or Targeting.TargetIsType("npcpet", forcedTarget)) then
-                Config.Globals.ForceTargetID = forcedTarget.ID()
+            if forcedTarget and forcedTarget() and forcedTarget.ID() > 0 and (Targeting.TargetIsType("npc", forcedTarget) or Targeting.TargetIsType("npcpet", forcedTarget) or Targeting.TargetIsType("object", forcedTarget)) then
+                Globals.ForceTargetID = forcedTarget.ID()
                 Logger.log_info("\awForced Target: %s", forcedTarget.CleanName() or "None")
             end
+        end,
+    },
+    ['forcetargetclear'] = {
+        usage = "/rgl forcetargetclear",
+        about = "Will clear the current forced target.",
+        handler = function()
+            Globals.ForceTargetID = 0
+            Logger.log_info("\awForced target cleared.")
         end,
     },
     ['forcenamed'] = {
@@ -204,14 +238,14 @@ Binds.Handlers    = {
         about = "Toggles or sets backoff flag, which temporarily stops the PC from assisting or engaging.",
         handler = function(value)
             if value == nil then
-                Config.Globals.BackOffFlag = not Config.Globals.BackOffFlag
+                Globals.BackOffFlag = not Globals.BackOffFlag
             elseif value:lower() == "on" or value == "1" then
-                Config.Globals.BackOffFlag = true
+                Globals.BackOffFlag = true
             else
-                Config.Globals.BackOffFlag = false
+                Globals.BackOffFlag = false
             end
 
-            Logger.log_info("\ayBackoff \awset to: %s", Strings.BoolToColorString(Config.Globals.BackOffFlag))
+            Logger.log_info("\ayBackoff \awset to: %s", Strings.BoolToColorString(Globals.BackOffFlag))
         end,
     },
     ['qsay'] = {
@@ -272,35 +306,35 @@ Binds.Handlers    = {
         usage = "/rgl setlogfilter <filter|filter|filter|...>",
         about = "Set a Lua regex filter to match log lines against before printing (does not effect file logging).",
         handler = function(text)
-            Logger.set_log_filter(text)
+            Config:SetSetting('LogFilter', text)
         end,
     },
     ['clearlogfilter'] = {
         usage = "/rgl clearlogfilter",
         about = "Clear log regex filter.",
         handler = function(...)
-            Logger.clear_log_filter()
+            Config:SetSetting('LogFilter', "")
         end,
     },
     ['togglepause'] = {
         usage = "/rgl togglepause",
         about = "Toggle the pause state of your RGMercs Main Loop.",
         handler = function()
-            Config.Globals.PauseMain = not Config.Globals.PauseMain
+            Globals.PauseMain = not Globals.PauseMain
         end,
     },
     ['pause'] = {
         usage = "/rgl pause",
         about = "Pauses your RGMercs Main Loop.",
         handler = function()
-            Config.Globals.PauseMain = true
+            Globals.PauseMain = true
         end,
     },
     ['pauseall'] = {
         usage = "/rgl pauseall",
         about = "Pauses the RGMercs Main Loop for every client running RGMercs.",
         handler = function()
-            Config.Globals.PauseMain = true
+            Globals.PauseMain = true
             Core.DoCmd("/squelch /dge /rgl pause")
             Logger.log_info("\ayAll clients paused!")
         end,
@@ -309,31 +343,39 @@ Binds.Handlers    = {
         usage = "/rgl unpause",
         about = "Unpauses your RGMercs Main Loop.",
         handler = function()
-            Config.Globals.PauseMain = false
+            Globals.PauseMain = false
         end,
     },
     ['unpauseall'] = {
         usage = "/rgl unpauseall",
         about = "Unpauses the RGMercs Main Loop for every client running RGMercs.",
         handler = function()
-            Config.Globals.PauseMain = false
+            Globals.PauseMain = false
             Core.DoCmd("/squelch /dge /rgl unpause")
-            Logger.log_info("\agAll clients paused!")
+            Logger.log_info("\agAll clients unpaused!")
+        end,
+    },
+    ['rescanloadout'] = {
+        usage = "/rgl rescanloadout",
+        about = "Rescans your current loadout for changes.",
+        handler = function()
+            Modules:ExecModule("Class", "RescanLoadout")
         end,
     },
     ['yes'] = {
         usage = "/rgl yes",
         about = "All groupmembers running RGMercs will click on every possible 'Yes' Dialogue they have up.",
         handler = function()
-            Core.DoCmd("/dgga /notify LargeDialogWindow LDW_YesButton leftmouseup")
-            Core.DoCmd("/dgga /notify LargeDialogWindow LDW_OkButton leftmouseup")
-            Core.DoCmd("/dgga /notify ConfirmationDialogBox CD_Yes_Button leftmouseup")
-            Core.DoCmd("/dgga /notify ConfirmationDialogBox CD_OK_Button leftmouseup")
-            Core.DoCmd("/dgga /notify TradeWND TRDW_Trade_Button leftmouseup")
-            Core.DoCmd("/dgga /notify GiveWnd GVW_Give_Button leftmouseup ")
-            Core.DoCmd("/dgga /notify ProgressionSelectionWnd ProgressionTemplateSelectAcceptButton leftmouseup")
-            Core.DoCmd("/dgga /notify TaskSelectWnd TSEL_AcceptButton leftmouseup")
-            Core.DoCmd("/dgga /notify RaidWindow RAID_AcceptButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify LargeDialogWindow LDW_YesButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify LargeDialogWindow LDW_YesButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify LargeDialogWindow LDW_OkButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify ConfirmationDialogBox CD_Yes_Button leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify ConfirmationDialogBox CD_OK_Button leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify TradeWND TRDW_Trade_Button leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify GiveWnd GVW_Give_Button leftmouseup ")
+            Comms.SendAllPeersDoCmd(false, true, "/notify ProgressionSelectionWnd ProgressionTemplateSelectAcceptButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify TaskSelectWnd TSEL_AcceptButton leftmouseup")
+            Comms.SendAllPeersDoCmd(false, true, "/notify RaidWindow RAID_AcceptButton leftmouseup")
         end,
     },
     ['circle'] = {
@@ -342,27 +384,22 @@ Binds.Handlers    = {
         handler = function(radius)
             if not radius then radius = 15 end
 
-            local peerCount = mq.TLO.DanNet.PeerCount()
+            local peers = Comms.GetPeers(false)
+            local peerCount = #peers
             if peerCount < 1 then return end
             local angle_step = (2 * math.pi) / peerCount
 
-            --local myHeading = mq.TLO.Me.Heading.Degrees() - multiplier
-            --local baseRadian = 360 / peerCount
+            for i, peerFullName in ipairs(peers) do
+                local peerName = Comms.GetNameFromPeer(peerFullName)
+                local radians = (i - 1) * angle_step
+                local xMove = math.cos(radians) * (radius)
+                local yMove = math.sin(radians) * (radius)
 
-            for i = 1, peerCount do
-                ---@diagnostic disable-next-line: redundant-parameter
-                local peer = mq.TLO.DanNet.Peers(i)()
-                if peer and peer:len() > 0 then
-                    local radians = i * angle_step
-                    local xMove = math.cos(radians) * (i + radius)
-                    local yMove = math.sin(radians) * (i + radius)
+                local xOff = mq.TLO.Me.X() + math.floor(xMove)
+                local yOff = mq.TLO.Me.Y() + math.floor(yMove)
 
-                    local xOff = mq.TLO.Me.X() + math.floor(xMove)
-                    local yOff = mq.TLO.Me.Y() + math.floor(yMove)
-
-                    Core.DoCmd("/dex %s /nav locyxz %2.3f %2.3f %2.3f", peer, yOff, xOff, mq.TLO.Me.Z())
-                    Core.DoCmd("/dex %s /timed 50 /face %s", peer, mq.TLO.Me.DisplayName())
-                end
+                Core.DoCmd("/dex %s /nav locyxz %2.3f %2.3f %2.3f", peerName, yOff, xOff, mq.TLO.Me.Z())
+                Core.DoCmd("/dex %s /timed 50 /face %s", peerName, mq.TLO.Me.DisplayName())
             end
         end,
     },
@@ -371,15 +408,15 @@ Binds.Handlers    = {
         about = "Toggle minimizing of the RGMercs window to a small icon.",
         handler = function()
             if not Config:GetSetting('EnableAFUI') then
-                Config.Globals.Minimized = not Config.Globals.Minimized
+                Globals.Minimized = not Globals.Minimized
             end
         end,
     },
     ['help'] = {
         handler = function()
             printf("RGMercs [%s/%s] by: %s running for %s (%s)", Config._version, Config._subVersion, Config._author,
-                Config.Globals.CurLoadedChar,
-                Config.Globals.CurLoadedClass)
+                Globals.CurLoadedChar,
+                Globals.CurLoadedClass)
             printf("\n\agCore \awCommand Help\aw\n------------\n")
             for c, d in pairs(Binds.Handlers) do
                 if c ~= "help" then

@@ -1,5 +1,6 @@
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require("utils.globals")
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
 local Casting   = require("utils.casting")
@@ -70,6 +71,9 @@ return {
             "Healing Determination Discipline",
             "Healing Will Discipline",
         },
+        ['PoisonGuide'] = {
+            "Guide of Toxicity",
+        },
     },
     ['RotationOrder']   = {
         {
@@ -97,7 +101,7 @@ return {
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
                 return Targeting.GetXTHaterCount() > 0 and
-                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Targeting.IsNamed(Targeting.GetAutoTarget()) and mq.TLO.Me.PctAggro() > 99))
+                    (mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart') or (Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() > 99))
             end,
         },
         {
@@ -131,6 +135,13 @@ return {
     },
     ['Rotations']       = {
         ['Burn'] = {
+            {
+                name = "Guide of Toxicity",
+                type = "Disc",
+                cond = function(self, discSpell, target)
+                    return Casting.SelfBuffCheck(discSpell)
+                end,
+            },
             {
                 name = "OoW_Chest",
                 type = "Item",
@@ -324,6 +335,7 @@ return {
             return false
         end,
         PreEngage = function(target)
+            if not target or not target() then return end
             local openerAbility = Core.GetResolvedActionMapItem('SneakAttack')
 
             if not Config:GetSetting("DoOpener") or not openerAbility then return end
@@ -331,7 +343,7 @@ return {
             Logger.log_debug("\ayPreEngage(): Testing Opener ability = %s", openerAbility or "None")
 
             if mq.TLO.Me.CombatAbilityReady(openerAbility)() and not mq.TLO.Me.AbilityReady("Hide")() and mq.TLO.Me.AbilityTimer("Hide")() <= math.max(0, mq.TLO.Me.AbilityTimerTotal("Hide")() - 4000) and mq.TLO.Me.Invis() then
-                Casting.UseDisc(openerAbility, target)
+                Casting.UseDisc(openerAbility, target.ID())
                 Logger.log_debug("\agPreEngage(): Using Opener ability = %s", openerAbility or "None")
             else
                 Logger.log_debug("\arPreEngage(): NOT using Opener ability = %s, DoOpener = %s, Hide Ready = %s, Hide Timer = %d, Invis = %s", openerAbility or "None",
@@ -414,7 +426,7 @@ return {
             Category = "Self",
             Index = 101,
             Tooltip = "Use Hide/Sneak during Downtime.",
-            Default = true,
+            Default = false,
         },
         ['DoOpener']        = {
             DisplayName = "Use Openers",
@@ -525,10 +537,10 @@ return {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is currently a Work-In-Progress that was originally based off of the Project Lazarus config.\n\n" ..
-                "  Up until level 70, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
+                "  Up until level 71, it should work quite well, but may need some clickies managed on the clickies tab.\n\n" ..
                 "  After level 65, however, there hasn't been any playtesting... some AA may need to be added or removed still, and some Laz-specific entries may remain.\n\n" ..
                 "  Community effort and feedback are required for robust, resilient class configs, and PRs are highly encouraged!",
             Settings_Used = "",

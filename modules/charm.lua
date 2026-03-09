@@ -1,8 +1,10 @@
 -- Sample Basic Class Module
 local mq        = require('mq')
 local Config    = require('utils.config')
+local Globals   = require('utils.globals')
 local Core      = require("utils.core")
 local Targeting = require("utils.targeting")
+local Combat    = require("utils.combat")
 local Casting   = require("utils.casting")
 local Ui        = require("utils.ui")
 local Comms     = require("utils.comms")
@@ -11,21 +13,23 @@ local Strings   = require("utils.strings")
 local Files     = require("utils.files")
 local Logger    = require("utils.logger")
 local Modules   = require("utils.modules")
-local Set       = require("mq.Set")
+local Events    = require("utils.events")
 local Icons     = require('mq.ICONS')
+local Base      = require("modules.base")
 
 require('utils.datatypes')
 
-local Module                     = { _version = '0.1a', _name = "Charm", _author = 'Grimmier', }
-Module.__index                   = Module
-Module.ModuleLoaded              = false
-Module.CombatState               = "None"
-Module.SaveRequested             = nil
+local Module   = { _version = '0.1a', _name = "Charm", _author = 'Grimmier', }
+Module.__index = Module
+Module.__index = Module
+setmetatable(Module, { __index = Base, })
+Module.FAQ                       = {}
+Module.CommandHandlers           = {}
 
+Module.CombatState               = "None"
 Module.TempSettings              = {}
 Module.TempSettings.CharmImmune  = {}
 Module.TempSettings.CharmTracker = {}
-Module.FAQ                       = {}
 Module.ImmuneTable               = {}
 
 Module.DefaultConfig             = {
@@ -120,7 +124,7 @@ Module.DefaultConfig             = {
 		Header      = "Charm",
 		Category    = "Charm Targets",
 		Index       = 4,
-		Default     = 0,
+		Default     = 200,
 		Min         = 1,
 		Max         = 200,
 		Tooltip     = "If Auto Level Range is disabled, the maximum level of a potential charm target for charm spells.",
@@ -131,7 +135,7 @@ Module.DefaultConfig             = {
 		Header      = "Charm",
 		Category    = "Charm Targets",
 		Index       = 5,
-		Default     = 0,
+		Default     = 200,
 		Min         = 1,
 		Max         = 200,
 		Tooltip     = "If Auto Level Range is disabled, the maximum level of a potential charm target for Dire Charm.",
@@ -143,102 +147,37 @@ Module.DefaultConfig             = {
 	},
 }
 
-Module.FAQ                       = {
-}
-
-local function getConfigFileName()
-	local oldFile = mq.configDir ..
-		'/rgmercs/PCConfigs/' ..
-		Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-	local newFile = mq.configDir ..
-		'/rgmercs/PCConfigs/' ..
-		Module._name .. "_" .. Config.Globals.CurServerNormalized .. "_" .. Config.Globals.CurLoadedChar .. "_" .. Config.Globals.CurLoadedClass:lower() .. '.lua'
-
-	if Files.file_exists(newFile) then
-		return newFile
-	end
-
-	Files.copy_file(oldFile, newFile)
-
-	return newFile
+function Module:New()
+	return Base.New(self)
 end
 
 local function getImmuneFileName()
-	return mq.configDir ..
-		'/rgmercs/PCConfigs/' ..
-		Module._name .. "_Immune_" .. Config.Globals.CurServer .. "_" .. Config.Globals.CurLoadedChar .. '.lua'
-end
-
-function Module:SaveSettings(doBroadcast)
-	self.SaveRequested = { time = os.time(), broadcast = doBroadcast or false, }
-end
-
-function Module:WriteSettings()
-	if not self.SaveRequested then return end
-
-	mq.pickle(getConfigFileName(), Config:GetModuleSettings(self._name))
-
-	if self.SaveRequested.doBroadcast == true then
-		Comms.BroadcastMessage(self._name, "LoadSettings")
-	end
-
-	Logger.log_debug("\ag%s Module settings saved to %s, requested %s ago.", self._name, getConfigFileName(), Strings.FormatTime(os.time() - self.SaveRequested.time))
-
-	self.SaveRequested = nil
+	return Config.GetConfigFileName(Module._name .. "_Immune")
 end
 
 function Module:LoadSettings()
-	Logger.log_debug("\ar%s\ao Charm Module Loading Settings for: %s.", Config.Globals.CurLoadedClass,
-		Config.Globals.CurLoadedChar)
-	local settings_pickle_path = getConfigFileName()
-	local settings = {}
-	local firstSaveRequired = false
-
-	local config, err = loadfile(settings_pickle_path)
-	if err or not config then
-		Logger.log_error("\ay[%s]: Unable to load module settings file(%s), creating a new one!",
-			Config.Globals.CurLoadedClass, settings_pickle_path)
-		firstSaveRequired = true
-	else
-		settings = config()
-	end
-
-	if not settings or not self.DefaultConfig then
-		Logger.log_error("\arFailed to Load Charm Config for Classs: %s", Config.Globals.CurLoadedClass)
-		return
-	end
+	Base.LoadSettings(self)
 
 	local immune_pickle_path = getImmuneFileName()
 	local immuneConfig, immuneErr = loadfile(immune_pickle_path)
 	if immuneErr or not immuneConfig then
 		Logger.log_error("\ay[%s]: Unable to load Immune settings file(%s), creating a new one!",
-			Config.Globals.CurLoadedClass, immune_pickle_path)
+			Globals.CurLoadedClass, immune_pickle_path)
 		self.ImmuneTable = {}
 		mq.pickle(immune_pickle_path, self.ImmuneTable)
 	else
 		self.ImmuneTable = immuneConfig()
 	end
-
-	Config:RegisterModuleSettings(self._name, settings, self.DefaultConfig, self.FAQ, firstSaveRequired)
-end
-
-function Module.New()
-	local newModule = setmetatable({}, Module)
-	return newModule
 end
 
 function Module:Init()
-	Logger.log_debug("\agInitializing Charm Module...")
 	-- bards don't have DireCharm so hide the settings.
 	if Core.MyClassIs("BRD") then
 		self.DefaultConfig['DireCharm'] = nil
 		self.DefaultConfig['DireCharmMaxLvl'] = nil
 	end
-	self:LoadSettings()
 
-	self.ModuleLoaded = true
-
-	return { self = self, defaults = self.DefaultConfig, }
+	Base.Init(self)
 end
 
 function Module:ShouldRender()
@@ -246,19 +185,19 @@ function Module:ShouldRender()
 end
 
 function Module:Render()
-	Ui.RenderPopAndSettings(self._name)
+	Base.Render(self)
+
+	ImGui.NewLine()
 
 	if self.ModuleLoaded then
 		-- CCEd targets
 		if ImGui.CollapsingHeader("Charm Target List") then
 			ImGui.Indent()
 			if ImGui.BeginTable("CharmedList", 4, bit32.bor(ImGuiTableFlags.None, ImGuiTableFlags.Borders, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Resizable, ImGuiTableFlags.Hideable)) then
-				ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
 				ImGui.TableSetupColumn('Id', (ImGuiTableColumnFlags.WidthFixed), 70.0)
 				ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthFixed), 250.0)
 				ImGui.TableSetupColumn('Level', (ImGuiTableColumnFlags.WidthFixed), 150.0)
 				ImGui.TableSetupColumn('Body', (ImGuiTableColumnFlags.WidthStretch), 150.0)
-				ImGui.PopStyleColor()
 				ImGui.TableHeadersRow()
 				for id, data in pairs(self.TempSettings.CharmTracker) do
 					ImGui.TableNextColumn()
@@ -280,13 +219,11 @@ function Module:Render()
 		if ImGui.CollapsingHeader("Invalid Charm Targets") then
 			ImGui.Indent()
 			if ImGui.BeginTable("Immune", 5, bit32.bor(ImGuiTableFlags.None, ImGuiTableFlags.Borders, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Resizable, ImGuiTableFlags.Hideable)) then
-				ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
 				ImGui.TableSetupColumn('Id', (ImGuiTableColumnFlags.WidthFixed), 70.0)
 				ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthStretch), 250.0)
 				ImGui.TableSetupColumn('Lvl', ImGuiTableColumnFlags.WidthFixed, 70.0)
 				ImGui.TableSetupColumn('Body', (ImGuiTableColumnFlags.WidthFixed), 90.0)
 				ImGui.TableSetupColumn('Reason', (ImGuiTableColumnFlags.WidthFixed), 90.0)
-				ImGui.PopStyleColor()
 				ImGui.TableHeadersRow()
 				for id, data in pairs(self.TempSettings.CharmImmune) do
 					ImGui.TableNextColumn()
@@ -298,7 +235,7 @@ function Module:Render()
 					ImGui.TableNextColumn()
 					ImGui.Text(data.body)
 					ImGui.TableNextColumn()
-					ImGui.TextColored(ImVec4(0.983, 0.729, 0.290, 1.000), "%s", data.reason)
+					ImGui.TextColored(Globals.Constants.Colors.CharmReasonColor, "%s", data.reason)
 				end
 				for name, data in pairs(self.ImmuneTable[mq.TLO.Zone.ShortName()] or {}) do
 					for lvl, body in pairs(data) do
@@ -318,7 +255,7 @@ function Module:Render()
 							ImGui.TableNextColumn()
 							ImGui.Text(bodyType)
 							ImGui.TableNextColumn()
-							ImGui.TextColored(ImVec4(0.983, 0.729, 0.290, 1.000), "%s", reason)
+							ImGui.TextColored(Globals.Constants.Colors.CharmReasonColor, "%s", reason)
 						end
 					end
 				end
@@ -327,17 +264,6 @@ function Module:Render()
 			ImGui.Unindent()
 		end
 	end
-end
-
-function Module:Pop()
-	Config:SetSetting(self._name .. "_Popped", not Config:GetSetting(self._name .. "_Popped"))
-end
-
-function Module:HandleCharmBroke(mobName, breakerName)
-	Logger.log_debug("%s broke charm on ==> %s", breakerName, mobName)
-	Comms.HandleAnnounce(
-		string.format("\ar CHARM Broken: %s woke up \ag -> \ay %s \ag <- \ax", breakerName, mobName),
-		Config:GetSetting('CharmAnnounceGroup'), Config:GetSetting('CharmAnnounce'))
 end
 
 function Module:AddImmuneTarget(mobId, mobData)
@@ -421,7 +347,7 @@ function Module:CharmNow(charmId, useAA)
 	-- First thing we target the mob if we haven't already targeted them.
 	Core.DoCmd("/attack off")
 	local currentTargetID = mq.TLO.Target.ID()
-	if charmId == Config.Globals.AutoTargetID then return end
+	if charmId == Globals.AutoTargetID then return end
 	Targeting.SetTarget(charmId)
 
 	local charmSpell = self:GetCharmSpell()
@@ -430,10 +356,10 @@ function Module:CharmNow(charmId, useAA)
 	if not Core.MyClassIs("BRD") then
 		local dCharm = Config:GetSetting("DireCharm", true) == true
 		if dCharm and mq.TLO.Me.AltAbilityReady('Dire Charm') and (mq.TLO.Spawn(charmId).Level() or 0) <= Config:GetSetting('DireCharmMaxLvl') then
-			Comms.HandleAnnounce(
-				string.format("Performing DIRE CHARM --> %s", mq.TLO.Spawn(charmId).CleanName() or "Unknown"),
+			Comms.HandleAnnounce(Comms.FormatChatEvent("Dire Charm", mq.TLO.Spawn(charmId).CleanName(), mq.TLO.Me.DisplayName()),
 				Config:GetSetting('CharmAnnounceGroup'),
-				Config:GetSetting('CharmAnnounce'))
+				Config:GetSetting('CharmAnnounce'),
+				Config:GetSetting('AnnounceToRaidIfInRaid'))
 			Casting.UseAA("Dire Charm", charmId)
 		else
 			-- This may not work for Bards but will work for DRU/NEC/ENCs
@@ -442,20 +368,18 @@ function Module:CharmNow(charmId, useAA)
 		end
 	else
 		Logger.log_debug("Performing Bard CHARM --> %d", charmId)
-		-- TODO SongNow CharmSpell
 		Casting.UseSong(charmSpell.RankName(), charmId, false, 5)
 	end
 
 	mq.doevents()
 
-	if Casting.GetLastCastResultId() == Config.Constants.CastResults.CAST_SUCCESS and mq.TLO.Pet.ID() > 0 then
-		Comms.HandleAnnounce(string.format("\ag JUST CHARMED:\aw -> \ay %s <-",
-				mq.TLO.Spawn(charmId).CleanName(), charmId), Config:GetSetting('CharmAnnounceGroup'),
-			Config:GetSetting('CharmAnnounce'))
+	if Casting.GetLastCastResultId() == Globals.Constants.CastResults.CAST_SUCCESS and mq.TLO.Pet.ID() > 0 then
+		Comms.HandleAnnounce(Comms.FormatChatEvent("Charm Success", mq.TLO.Spawn(charmId).CleanName(), charmSpell.RankName()), Config:GetSetting('CharmAnnounceGroup'),
+			Config:GetSetting('CharmAnnounce'), Config:GetSetting('AnnounceToRaidIfInRaid'))
 	else
-		Comms.HandleAnnounce(string.format("\ar CHARM Failed: \ag -> \ay %s \ag <-",
-			mq.TLO.Spawn(charmId).CleanName(),
-			charmId), Config:GetSetting('CharmAnnounceGroup'), Config:GetSetting('CharmAnnounce'))
+		Comms.HandleAnnounce(Comms.FormatChatEvent("Charm Failed", mq.TLO.Spawn(charmId).CleanName(), charmSpell.RankName()), Config:GetSetting('CharmAnnounceGroup'),
+			Config:GetSetting('CharmAnnounce'),
+			Config:GetSetting('AnnounceToRaidIfInRaid'))
 	end
 
 	mq.doevents()
@@ -483,7 +407,7 @@ function Module:AddCCTarget(mobId)
 		duration = mq.TLO.Target.Charmed.Duration() or 0,
 		level = spawn.Level() or 0,
 		body = spawn.Body() or "Unknown",
-		last_check = os.clock() * 1000,
+		last_check = Globals.GetTimeMS(),
 		charm_spell = mq.TLO
 			.Target.Charmed() or "None",
 	}
@@ -624,7 +548,7 @@ function Module:ProcessCharmList()
 					Logger.log_debug("\ayProcessCharmList(%d) :: Distance(%d) LOS(%s)", id,
 						spawn.Distance(), Strings.BoolToColorString(spawn.LineOfSight()))
 				else
-					if id == Config.Globals.AutoTargetID then
+					if id == Globals.AutoTargetID then
 						Logger.log_debug("\ayProcessCharmList(%d) :: Mob is MA's target skipping", id)
 						table.insert(removeList, id)
 					else
@@ -636,7 +560,7 @@ function Module:ProcessCharmList()
 							mq.delay("3s", function() return not mq.TLO.Me.Combat() end)
 							Core.DoCmd("/stopcast")
 							Core.DoCmd("/stopsong")
-							mq.delay("3s", function() return not mq.TLO.Window("CastingWindow").Open() end)
+							mq.delay("3s", function() return mq.TLO.Window("CastingWindow").Open() == false end)
 						end
 
 						Targeting.SetTarget(id)
@@ -645,6 +569,8 @@ function Module:ProcessCharmList()
 						while not Casting.SpellReady(charmSpell) and maxWait > 0 do
 							mq.delay(100)
 							maxWait = maxWait - 100
+							mq.doevents()
+							Events.DoEvents()
 						end
 
 						self:CharmNow(id, false)
@@ -695,15 +621,17 @@ end
 
 function Module:UpdateTimings()
 	for _, data in pairs(self.TempSettings.CharmTracker) do
-		local timeDelta = (os.clock() * 1000) - data.last_check
+		local timeDelta = (Globals.GetTimeMS()) - data.last_check
 
 		data.duration = data.duration - timeDelta
 
-		data.last_check = os.clock() * 1000
+		data.last_check = Globals.GetTimeMS()
 	end
 end
 
-function Module:GiveTime(combat_state)
+function Module:GiveTime()
+	local combat_state = Combat.GetCachedCombatState()
+
 	if not Core.IsCharming() then return end
 
 	-- dead... whoops
@@ -718,46 +646,9 @@ function Module:GiveTime(combat_state)
 	self:DoCharm()
 end
 
-function Module:OnDeath()
-end
-
 function Module:OnZone()
 	self:ResetCharmStates()
 	-- Zone Handler
 end
-
-function Module:OnCombatModeChanged()
-end
-
-function Module:DoGetState()
-	-- Reture a reasonable state if queried
-	return "TODO"
-end
-
-function Module:GetCommandHandlers()
-	return { module = self._name, CommandHandlers = {}, }
-end
-
-function Module:GetFAQ()
-	return { module = self._name, FAQ = self.FAQ or {}, }
-end
-
----@param cmd string
----@param ... string
----@return boolean
-function Module:HandleBind(cmd, ...)
-	local params = ...
-	local handled = false
-	-- /rglua cmd handler
-	return handled
-end
-
-function Module:Shutdown()
-	Logger.log_debug("Charm Module Unloaded.")
-end
-
-mq.bind("/rgupcharm", function()
-	Modules:ExecModule("Charm", "UpdateCharmList")
-end)
 
 return Module

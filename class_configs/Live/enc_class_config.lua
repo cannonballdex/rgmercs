@@ -1,13 +1,34 @@
-local mq           = require('mq')
-local Config       = require('utils.config')
-local Logger       = require("utils.logger")
-local Core         = require("utils.core")
-local Modules      = require("utils.modules")
-local Targeting    = require("utils.targeting")
-local Casting      = require("utils.casting")
+local mq              = require('mq')
+local Config          = require('utils.config')
+local Globals         = require("utils.globals")
+local Logger          = require("utils.logger")
+local Core            = require("utils.core")
+local Modules         = require("utils.modules")
+local Targeting       = require("utils.targeting")
+local Casting         = require("utils.casting")
 
-local _ClassConfig = {
-    _version            = "1.4 - Live",
+-- Provide a valid aura name to check as they are named differently then the spells
+-- -- Only use the first word(s) of the aura name, they are all unique (enough)
+local auraSpellToName = {
+    ["Mana Recursion Aura XI"] = "Mana Recursion",
+    ["Mana Ripple Aura"] = "Mana Ripple",
+    ["Mana Radix Aura"] = "Mana Radix",                 -- "Mana Radix Aura"
+    ["Mana Replication Aura"] = "Mana Replication",     -- "Mana Replication Aura"
+    ["Mana Repetition Aura"] = "Mana Repetition",       -- "Mana Repetition Aura"
+    ["Mana Reciprocation Aura"] = "Mana Reciprocation", -- "Mana Reciprocation Aura"
+    ["Mana Reverberation Aura"] = "Mana Rev",           -- "Mana Rev. Aura"
+    ["Mana Repercussion Aura"] = "Mana Rep",            -- "Mana Rep. Aura"
+    ["Mana Reiteration Aura"] = "Mana Recursion",       -- "Mana Recursion Aura"
+    ["Mana Reiterate Aura"] = "Mana Reiterate",         -- "Mana Reiterate Aura"
+    ["Mana Resurgence Aura"] = "Mana Resurgence",       -- "Mana Resurgence Aura"
+    ["Mystifier's Aura"] = "Mystifier",                 -- "Mystifier's Aura"
+    ["Entrancer's Aura"] = "Entrancer",                 -- "Entrancer's Aura"
+    ["Illusionist's Aura"] = "Illusionist",             -- "Illusionist's Aura"
+    ["Beguiler's Aura"] = "Beguiler",                   -- "Beguiler's Aura"
+}
+
+local _ClassConfig    = {
+    _version            = "1.5 - Live",
     _author             = "Derple, Grimmier, Algar",
     ['ModeChecks']      = {
         CanMez     = function() return true end,
@@ -41,6 +62,7 @@ local _ClassConfig = {
             "Mana Reiteration Aura",
             "Mana Reiterate Aura",
             "Mana Resurgence Aura",
+            -- Use mana regen aura until spell proc is available
             "Mystifier's Aura",
             "Entrancer's Aura",
             "Illusionist's Aura",
@@ -674,22 +696,10 @@ local _ClassConfig = {
             "Pendril's Animation",
         },
         ['PetBuffSpell'] = {
-            ---Pet Buff Spell * Var Name: PetBuffSpell string outer
             "Empowered Minion IV",
-            "Speed of Margator",
-            "Speed of Vallon",
-            "Visions of Grandeur",
-            "Wondrous Rapidity",
-            "Aanya's Quickening",
-            "Swift Like the Wind",
-            "Celerity",
-            "Augmentation",
-            "Alacrity",
-            "Quickness",
             "Infused Minion",
             "Empowered Minion",
             "Invigorated Minion",
-            --- Speed of the Brood won't take effect properly on pets. Unless u Purchase the AA
         },
         ['MezAESpell'] = {
             "Mesmerizing Wave XV",
@@ -829,10 +839,9 @@ local _ClassConfig = {
         },
         {
             name = 'GroupBuff',
-            timer = 60, -- only run every 60 seconds top.
-            targetId = function(self)
-                return Casting.GetBuffableGroupIDs()
-            end,
+            state = 1,
+            steps = 1,
+            targetId = function(self) return Casting.GetBuffableIDs() end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -846,7 +855,7 @@ local _ClassConfig = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this
             name = 'PetBuff',
-            timer = 60,
+            timer = 10,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -924,7 +933,7 @@ local _ClassConfig = {
     },
     ['HelperFunctions'] = { --used to autoinventory our azure crystal after summon
         StashCrystal = function()
-            mq.delay("2s", function() return mq.TLO.Cursor() and mq.TLO.Cursor.ID() == mq.TLO.Me.AltAbility("Azure Mind Crystal").Spell.Base(1)() end)
+            mq.delay("2s", function() return mq.TLO.Cursor.ID() == mq.TLO.Me.AltAbility("Azure Mind Crystal").Spell.Base(1)() end)
 
             if not mq.TLO.Cursor() then
                 Logger.log_debug("No valid item found on cursor, item handling aborted.")
@@ -1033,6 +1042,7 @@ local _ClassConfig = {
                 active_cond = function(self, spell) return Casting.AuraActiveByName(spell.Name()) end,
                 pre_activate = function(self) self.ClassConfig.HelperFunctions.AuraCheck() end,
                 cond = function(self, spell)
+                    -- don't use this if we selected learners and don't have two auras
                     if Config:GetSetting('DoLearners') and not Casting.CanUseAA('Auroria Mastery') then return false end
                     return not Casting.AuraActiveByName(spell.Name())
                 end,
@@ -1041,13 +1051,19 @@ local _ClassConfig = {
                 name = "SpellProcAura",
                 type = "Spell",
                 active_cond = function(self, spell)
-                    local aura = string.sub(spell.Name() or "", 1, 8)
+                    local aura = spell and auraSpellToName[spell.Name()] or "None"
                     return Casting.AuraActiveByName(aura)
                 end,
                 pre_activate = function(self) self.ClassConfig.HelperFunctions.AuraCheck() end,
                 cond = function(self, spell)
-                    if (Config:GetSetting('DoLearners') and self:GetResolvedActionMapItem('LearnersAura')) or (self:GetResolvedActionMapItem('TwincastAura') and not Casting.CanUseAA('Auroria Mastery')) then return false end
-                    local aura = string.sub(spell.Name() or "", 1, 8)
+                    -- don't use this if we have learner's selected, whether one aura or two
+                    local useLearnersInstead = Config:GetSetting('DoLearners') and Core.GetResolvedActionMapItem('LearnersAura')
+                    -- don't use this if we don't have Twincast Aura up unless we don't have Twincast Aura or can use two auras
+                    local useTwinCastInstead = Core.GetResolvedActionMapItem('TwincastAura') and not Casting.CanUseAA('Auroria Mastery')
+
+                    if not spell or not spell() or useLearnersInstead or useTwinCastInstead then return false end
+                    -- get the proper aura name. Don't use rankname, the table doesn't support it. We are only searching the first word of the aura name.
+                    local aura = auraSpellToName[spell.Name()]
                     return not Casting.AuraActiveByName(aura)
                 end,
             },
@@ -1073,6 +1089,14 @@ local _ClassConfig = {
                 active_cond = function(self, spell) return mq.TLO.Me.PetBuff(spell.ID()).ID() end,
                 cond = function(self, spell) return Casting.PetBuffCheck(spell) end,
             },
+            {
+                name = "HasteBuff",
+                type = "Spell",
+                load_cond = function(self) return not Core.GetResolvedActionMapItem('PetBuffSpell') end,
+                active_cond = function(self, spell) return mq.TLO.Me.PetBuff(spell.ID()).ID() end,
+                cond = function(self, spell) return Casting.PetBuffCheck(spell) end,
+            },
+
         },
         ['GroupBuff'] = {
             {
@@ -1190,14 +1214,14 @@ local _ClassConfig = {
                 name = "Glyph Spray",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return ((Targeting.IsNamed(target) and target.Level() > mq.TLO.Me.Level()) or Core.GetMainAssistPctHPs() <= Config:GetSetting('EmergencyStart'))
+                    return ((Globals.AutoTargetIsNamed and target.Level() > mq.TLO.Me.Level()) or Core.GetMainAssistPctHPs() <= Config:GetSetting('EmergencyStart'))
                 end,
             },
             {
                 name = "Reactive Rune",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return ((Targeting.IsNamed(target) and target.Level() > mq.TLO.Me.Level()) or Core.GetMainAssistPctHPs() <= Config:GetSetting('EmergencyStart'))
+                    return ((Globals.AutoTargetIsNamed and target.Level() > mq.TLO.Me.Level()) or Core.GetMainAssistPctHPs() <= Config:GetSetting('EmergencyStart'))
                 end,
             },
             {
@@ -1213,21 +1237,21 @@ local _ClassConfig = {
             --     name = "Self Stasis",
             --     type = "AA",
             --     cond = function(self, aaName)
-            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Config.Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 30
+            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 30
             --     end,
             -- },
             -- { --This can interrupt spellcasting which can just make something worse. Let us trust healers and tanks.
             --     name = "Dimensional Instability",
             --     type = "AA",
             --     cond = function(self, aaName)
-            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Config.Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 30
+            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 30
             --     end,
             -- },
             {
                 name = "Beguiler's Directed Banishment",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    if target.ID() == Config.Globals.AutoTargetID then return false end
+                    if target.ID() == Globals.AutoTargetID then return false end
                     return mq.TLO.Me.PctAggro() > 99 and mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyStart')
                 end,
 
@@ -1251,14 +1275,14 @@ local _ClassConfig = {
             --     name = "Dimensional Shield",
             --     type = "AA",
             --     cond = function(self, aaName)
-            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Config.Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 80            --     end,
+            --         return mq.TLO.Me.TargetOfTarget.ID() == mq.TLO.Me.ID() and mq.TLO.Target.ID() == Globals.AutoTargetID and mq.TLO.Me.PctHPs() <= 80            --     end,
 
             -- },
             {
                 name = "Arcane Whisper",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() >= 90
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() >= 90
                 end,
 
             },
@@ -1266,7 +1290,7 @@ local _ClassConfig = {
                 name = "Silent Casting",
                 type = "AA",
                 cond = function(self, aaName, target)
-                    return Targeting.IsNamed(target) and mq.TLO.Me.PctAggro() >= 60
+                    return Globals.AutoTargetIsNamed and mq.TLO.Me.PctAggro() >= 60
                 end,
 
             },
@@ -1285,7 +1309,7 @@ local _ClassConfig = {
                 type = "Spell",
                 cond = function(self, spell, target)
                     if not Config:GetSetting('DoMindDot') then return false end
-                    return Casting.DotSpellCheck(spell) and (Targeting.IsNamed(target) or not Casting.IHaveBuff(spell and spell.Trigger()))
+                    return Casting.DotSpellCheck(spell) and (Globals.AutoTargetIsNamed or not Casting.IHaveBuff(spell and spell.Trigger()))
                 end,
             },
             {
@@ -1389,7 +1413,7 @@ local _ClassConfig = {
             {
                 name = "Mental Contortion",
                 type = "AA",
-                cond = function(self, aaName, target) return Targeting.IsNamed(target) end,
+                cond = function(self, aaName, target) return Globals.AutoTargetIsNamed end,
             },
             {
                 name = "Chromatic Haze",
@@ -1426,7 +1450,7 @@ local _ClassConfig = {
                 name = "TashSpell",
                 type = "Spell",
                 cond = function(self, spell, target)
-                    return Casting.DetSpellCheck(spell) and (not Casting.TargetHasBuff("Bite of Tashani") or Targeting.IsNamed(target))
+                    return Casting.DetSpellCheck(spell) and (not Casting.TargetHasBuff("Bite of Tashani") or Globals.AutoTargetIsNamed)
                 end,
             },
         },
@@ -1787,7 +1811,7 @@ local _ClassConfig = {
         },
     },
     ['ClassFAQ']        = {
-        [1] = {
+        {
             Question = "What is the current status of this class config?",
             Answer = "This class config is a current release aimed at official servers.\n\n" ..
                 "  This config should perform well from from start to endgame, but a TLP or emu player may find it to be lacking exact customization for a specific era.\n\n" ..
