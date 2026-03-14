@@ -989,7 +989,14 @@ local _ClassConfig = {
                 tooltip = Tooltips.ReflexStrike,
                 cond = function(self, discSpell)
                     local pct = Config:GetSetting('GroupManaPct')
-                    return (mq.TLO.Group.LowMana(pct)() or -1) >= Config:GetSetting('GroupManaCt')
+
+                    -- original condition (group mana recovery)
+                    local groupNeedsMana = (mq.TLO.Group.LowMana(pct)() or -1) >= Config:GetSetting('GroupManaCt')
+
+                    -- new condition (self endurance recovery)
+                    local lowEndurance = mq.TLO.Me.PctEndurance() < 40
+
+                    return groupNeedsMana or lowEndurance
                 end,
             },
             {
@@ -1453,7 +1460,7 @@ local _ClassConfig = {
             Category = "Common Rules",
             Index = 102,
             Tooltip = "Minimum End% to use Bellow or Dicho outside of burns.",
-            Default = 20,
+            Default = 50,
             Min = 1,
             Max = 100,
             ConfigType = "Advanced",
