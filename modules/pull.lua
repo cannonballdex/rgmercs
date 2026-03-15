@@ -2448,6 +2448,7 @@ function Module:GiveTime()
                     end
 
                     Core.DoCmd("/autofire %d", self.TempSettings.PullID)
+                    mq.delay(1000)
                     Core.DoCmd("/autofire off")
                     if self:IsPullMode("Chain") and Targeting.DiffXTHaterIDs(startingXTargs) then
                         break
