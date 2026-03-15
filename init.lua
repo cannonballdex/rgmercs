@@ -96,7 +96,13 @@ local function RGMercsGUI()
             if theme ~= nil then
                 for _, t in pairs(theme) do
                     if t.color then
-                        ImGui.PushStyleColor(Ui.GetImGuiColorId(t.element), t.color.r or t.color.x,
+                        local colorId = Ui.GetImGuiColorId(t.element)
+
+                        if type(colorId) ~= 'number' then
+                            colorId = tonumber(colorId) or 0
+                        end
+
+                        ImGui.PushStyleColor(colorId, t.color.r or t.color.x,
                             t.color.g or t.color.y,
                             t.color.b or t.color
                             .z, t.color.a or t.color.w)
@@ -366,7 +372,6 @@ local function Main()
     if Globals.PauseMain then
         mq.delay(100)
         mq.doevents()
-        Events.DoEvents()
         if Config:GetSetting('RunMovePaused') then
             Modules:ExecModule("Movement", "GiveTime")
         end

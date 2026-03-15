@@ -188,8 +188,8 @@ local _ClassConfig = {
             --Bard Timers alternate between 6 and 3 every expansion. (Update: TOB has thrown this on its head)
             --We have to manage selection so we don't have insultsong2 using the same timer.
             --"Cutting Insult X", -- 127 push, timer 6
-            "Yaran's Disdain",  -- 123 nopush, timer 6, TOB *THIS TIMER MAY BE INCORRECT, does not follow pattern*
-            "Eoreg's Insult",   -- 122 push, timer 3, LS
+            "Yaran's Disdain",  -- 123 nopush, timer 3,
+            -- "Eoreg's Insult",   -- 122 push, timer 3, LS
             "Nord's Disdain",   -- 118 nopush, timer 6, NoS
             -- "Sogran's Insult",  -- 117 push, timer 6, ToL
             "Yelinak's Insult", -- 115 nopush, timer 3
@@ -210,8 +210,8 @@ local _ClassConfig = {
         },
         ['InsultSong2'] = {
             -- "Cutting Insult X", -- 127 push, timer 6
-            "Yaran's Disdain",  -- 123 nopush, timer 6, TOB *THIS TIMER MAY BE INCORRECT, does not follow pattern*
-            "Eoreg's Insult",   -- 122 push, timer 3, LS
+            "Yaran's Disdain",  -- 123 nopush, timer 3,
+            -- "Eoreg's Insult",   -- 122 push, timer 3, LS
             "Nord's Disdain",   -- 118 nopush, timer 6, NoS
             -- "Sogran's Insult",  -- 117 push, timer 6, ToL
             "Yelinak's Insult", -- 115 nopush, timer 3
@@ -989,14 +989,7 @@ local _ClassConfig = {
                 tooltip = Tooltips.ReflexStrike,
                 cond = function(self, discSpell)
                     local pct = Config:GetSetting('GroupManaPct')
-
-                    -- original condition (group mana recovery)
-                    local groupNeedsMana = (mq.TLO.Group.LowMana(pct)() or -1) >= Config:GetSetting('GroupManaCt')
-
-                    -- new condition (self endurance recovery)
-                    local lowEndurance = mq.TLO.Me.PctEndurance() < 40
-
-                    return groupNeedsMana or lowEndurance
+                    return (mq.TLO.Group.LowMana(pct)() or -1) >= Config:GetSetting('GroupManaCt')
                 end,
             },
             {
@@ -1460,7 +1453,7 @@ local _ClassConfig = {
             Category = "Common Rules",
             Index = 102,
             Tooltip = "Minimum End% to use Bellow or Dicho outside of burns.",
-            Default = 50,
+            Default = 20,
             Min = 1,
             Max = 100,
             ConfigType = "Advanced",

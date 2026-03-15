@@ -12,7 +12,6 @@ Comms.LastHeartbeat        = 0
 Comms.Peers                = Set.new({})
 Comms.PeersToServerNameMap = {}
 Comms.PeersHeartbeats      = {}
-Comms.HeartbeatCoroutine   = nil
 
 -- Putting this here for lack of a beter spot.
 --- @param peerName string? The character name string if not supplied then we use Me.DisplayName()
@@ -158,6 +157,8 @@ function Comms.SendHeartbeat(assist, chase)
         Blocked       = Globals.CurrentBlocked,
         PetBuffs      = Globals.CurrentPetBuffs,
         PetBlocked    = Globals.CurrentPetBlocked,
+        OpenBuffSlots = mq.TLO.Me.MaxBuffSlots() - mq.TLO.Me.BuffCount(),
+        MaxBuffSlots  = mq.TLO.Me.MaxBuffSlots(),
     }
     Comms.BroadcastMessage("RGMercs", "Heartbeat", heartBeat)
     -- update our own heartbeat too
@@ -203,7 +204,15 @@ end
 function Comms.UpdatePeerHeartbeat(peer, data)
     Comms.Peers:add(peer)
     Comms.PeersToServerNameMap[peer] = { Server = data.Server, Name = data.Name, }
-    Comms.PeersHeartbeats[peer] = { LastHeartbeat = Globals.GetTimeSeconds(), Data = data or {}, }
+
+    -- tables that are empty come across actors as nil so we need to fix them up.
+    data.Buffs                       = data.Buffs or {}
+    data.Songs                       = data.Songs or {}
+    data.Blocked                     = data.Blocked or {}
+    data.PetBuffs                    = data.PetBuffs or {}
+    data.PetBlocked                  = data.PetBlocked or {}
+
+    Comms.PeersHeartbeats[peer]      = { LastHeartbeat = Globals.GetTimeSeconds(), Data = data or {}, }
 end
 
 function Comms.ValidatePeers(timeout)

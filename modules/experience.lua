@@ -317,61 +317,71 @@ function Module:CheckAAExpChanged()
 end
 
 function Module:GiveTime(combat_state)
+    local now = os.clock()
+
     if mq.TLO.EverQuest.GameState() == "INGAME" then
         if self:CheckExpChanged() then
-            Logger.log_debug("\ayXP Gained: \ag%02.3f%% \aw|| \ayXP Total: \ag%02.3f%% \aw|| \ayStart: \am%d \ayCur: \am%d \ayExp/Sec: \ag%2.3f%%",
+            Logger.log_debug(
+                "\ayXP Gained: \ag%02.3f%% \aw|| \ayXP Total: \ag%02.3f%% \aw|| \ayStart: \am%d \ayCur: \am%d \ayExp/Sec: \ag%2.3f%%",
                 self.TrackXP.Experience.Gained / self.TrackXP.XPTotalDivider,
                 self.TrackXP.Experience.Total / self.TrackXP.XPTotalDivider,
                 self.TrackXP.StartTime,
-                os.clock(),
-                self.TrackXP.Experience.Total / self.TrackXP.XPTotalDivider / ((os.clock()) - self.TrackXP.StartTime))
+                now,
+                self.TrackXP.Experience.Total / self.TrackXP.XPTotalDivider / (now - self.TrackXP.StartTime)
+            )
         end
 
         if not self.XPEvents.Exp then
             self.XPEvents.Exp = {
-                lastFrame = os.clock(),
-                expEvents =
-                    ScrollingPlotBuffer:new(),
+                lastFrame = now,
+                expEvents = ScrollingPlotBuffer:new(),
             }
         end
 
-        self.XPEvents.Exp.lastFrame = os.clock()
+        self.XPEvents.Exp.lastFrame = now
         ---@diagnostic disable-next-line: undefined-field
-        self.XPEvents.Exp.expEvents:AddPoint(os.clock(), (self.TrackXP.Experience.Total / ((os.clock()) - self.TrackXP.StartTime)) * 10)
+        self.XPEvents.Exp.expEvents:AddPoint(now, (self.TrackXP.Experience.Total / (now - self.TrackXP.StartTime)) * 10)
 
-        self.XPPerSecond    = (self.TrackXP.Experience.Total / self.TrackXP.XPTotalDivider) / (os.clock() - self.TrackXP.StartTime)
-        self.XPToNextLevel  = self.TrackXP.XPTotalPerLevel - mq.TLO.Me.Exp()
-        self.SecondsToLevel = self.XPToNextLevel / (self.XPPerSecond * self.TrackXP.XPTotalDivider)
-        self.TimeToLevel    = self.XPPerSecond <= 0 and "<Unknown>" or Strings.FormatTime(self.SecondsToLevel, "%d Days %d Hours %d Mins")
+        self.XPPerSecond = (self.TrackXP.Experience.Total / self.TrackXP.XPTotalDivider) / (now - self.TrackXP.StartTime)
+        self.XPToNextLevel = self.TrackXP.XPTotalPerLevel - mq.TLO.Me.Exp()
+
+        if self.XPPerSecond > 0 then
+            self.SecondsToLevel = self.XPToNextLevel / (self.XPPerSecond * self.TrackXP.XPTotalDivider)
+            self.TimeToLevel = Strings.FormatTime(self.SecondsToLevel)
+        else
+            self.SecondsToLevel = 0
+            self.TimeToLevel = "<Unknown>"
+        end
 
         if mq.TLO.Me.PctAAExp() > 0 and self:CheckAAExpChanged() then
-            Logger.log_debug("\ayAA Gained: \ag%2.2f%% \aw|| \ayAA Total: \ag%2.2f%%", self.TrackXP.AAExperience.Gained / self.TrackXP.XPTotalDivider,
-                self.TrackXP.AAExperience.Total / self.TrackXP.XPTotalDivider)
+            Logger.log_debug(
+                "\ayAA Gained: \ag%2.2f%% \aw|| \ayAA Total: \ag%2.2f%%",
+                self.TrackXP.AAExperience.Gained / self.TrackXP.XPTotalDivider,
+                self.TrackXP.AAExperience.Total / self.TrackXP.XPTotalDivider
+            )
         end
 
         if not self.XPEvents.AA then
             self.XPEvents.AA = {
-                lastFrame = os.clock(),
-                expEvents =
-                    ScrollingPlotBuffer:new(),
+                lastFrame = now,
+                expEvents = ScrollingPlotBuffer:new(),
             }
         end
 
-        self.XPEvents.AA.lastFrame = os.clock()
+        self.XPEvents.AA.lastFrame = now
         ---@diagnostic disable-next-line: undefined-field
-        self.XPEvents.AA.expEvents:AddPoint(os.clock(), (self.TrackXP.AAExperience.Total / ((os.clock()) - self.TrackXP.StartTime)))
+        self.XPEvents.AA.expEvents:AddPoint(now, self.TrackXP.AAExperience.Total / (now - self.TrackXP.StartTime))
     end
 
     local multiplier = tonumber(self.DefaultConfig.GraphMultiplier.ComboOptions[self.settings.GraphMultiplier])
-    if os.clock() - self.LastExtentsCheck > 0.01 then
+    if now - self.LastExtentsCheck > 0.01 then
         self.GoalMaxExpPerSec = 0
-        self.LastExtentsCheck = os.clock()
+        self.LastExtentsCheck = now
         for _, expData in pairs(self.XPEvents) do
             for idx, exp in ipairs(expData.expEvents.DataY) do
                 exp = exp * multiplier
-                -- is this entry visible?
-                local visible = expData.expEvents.DataX[idx] > os.clock() - self.settings.ExpSecondsToStore and
-                    expData.expEvents.DataX[idx] < os.clock()
+                local visible = expData.expEvents.DataX[idx] > now - self.settings.ExpSecondsToStore
+                    and expData.expEvents.DataX[idx] < now
                 if visible and exp > self.GoalMaxExpPerSec then
                     self.GoalMaxExpPerSec = (math.ceil(exp / self.MaxStep) * self.MaxStep) * 1.25
                 end

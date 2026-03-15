@@ -1,121 +1,125 @@
-local mq                             = require('mq')
-local RGMercUtils                    = require("utils.rgmercs_utils")
-local Set                            = require("mq.Set")
+local mq = require('mq')
+local RGMercUtils = require("utils.rgmercs_utils")
+local RGMercsLogger = require("utils.rgmercs_logger")
+local RGMercModules = require("utils.rgmercs_modules")
+local Set = require("mq.Set")
 
-local Config                         = {
+local Config = {
     _version = '1.0 Beta',
-    _subVersion = "2023 Laurion\'s Song!",
-    _name =
-    "RGMercs Lua Edition",
+    _subVersion = "2023 Laurion's Song!",
+    _name = "RGMercs Lua Edition",
     _author = 'Derple, Morisato, Greyn, Algar, Grimmier',
 }
-Config.__index                       = Config
-Config.settings                      = {}
-Config.FAQ                           = {}
+
+Config.__index = Config
+Config.settings = {}
+Config.FAQ = {}
 
 -- Global State
-Config.Globals                       = {}
-Config.Globals.MainAssist            = ""
-Config.Globals.AutoTargetID          = 0
-Config.Globals.ForceTargetID         = 0
-Config.Globals.SubmodulesLoaded      = false
-Config.Globals.PauseMain             = false
-Config.Globals.LastMove              = nil
-Config.Globals.BackOffFlag           = false
-Config.Globals.InMedState            = false
-Config.Globals.LastPetCmd            = 0
-Config.Globals.LastFaceTime          = 0
-Config.Globals.CurZoneId             = mq.TLO.Zone.ID()
-Config.Globals.CurLoadedChar         = mq.TLO.Me.DisplayName()
-Config.Globals.CurLoadedClass        = mq.TLO.Me.Class.ShortName()
-Config.Globals.CurServer             = mq.TLO.EverQuest.Server():gsub(" ", "")
-Config.Globals.CastResult            = 0
-Config.Globals.BuildType             = mq.TLO.MacroQuest.BuildName()
-Config.Globals.Minimized             = false
-Config.Globals.LastUsedSpell         = "None"
+Config.Globals = {}
+Config.Globals.MainAssist = ""
+Config.Globals.AutoTargetID = 0
+Config.Globals.ForceTargetID = 0
+Config.Globals.SubmodulesLoaded = false
+Config.Globals.PauseMain = false
+Config.Globals.LastMove = nil
+Config.Globals.BackOffFlag = false
+Config.Globals.InMedState = false
+Config.Globals.LastPetCmd = 0
+Config.Globals.LastFaceTime = 0
+Config.Globals.CurZoneId = mq.TLO.Zone.ID()
+Config.Globals.CurLoadedChar = mq.TLO.Me.DisplayName()
+Config.Globals.CurLoadedClass = mq.TLO.Me.Class.ShortName()
+Config.Globals.CurServer = mq.TLO.EverQuest.Server():gsub(" ", "")
+Config.Globals.CastResult = 0
+Config.Globals.BuildType = mq.TLO.MacroQuest.BuildName()
+Config.Globals.Minimized = false
+Config.Globals.LastUsedSpell = "None"
 
 -- Constants
-Config.Constants                     = {}
-Config.Constants.RGCasters           = Set.new({ "BRD", "BST", "CLR", "DRU", "ENC", "MAG", "NEC", "PAL", "RNG", "SHD",
-    "SHM", "WIZ", })
-Config.Constants.RGMelee             = Set.new({ "BRD", "SHD", "PAL", "WAR", "ROG", "BER", "MNK", "RNG", "BST", })
-Config.Constants.RGHybrid            = Set.new({ "SHD", "PAL", "RNG", "BST", "BRD", })
-Config.Constants.RGTank              = Set.new({ "WAR", "PAL", "SHD", })
-Config.Constants.RGModRod            = Set.new({ "BST", "CLR", "DRU", "SHM", "MAG", "ENC", "WIZ", "NEC", "PAL", "RNG",
-    "SHD", })
-Config.Constants.RGPetClass          = Set.new({ "BST", "NEC", "MAG", "SHM", "ENC", "SHD", })
-Config.Constants.RGMezAnims          = Set.new({ 1, 5, 6, 27, 43, 44, 45, 80, 82, 112, 134, 135, })
-Config.Constants.ModRods             = { "Modulation Shard", "Transvergence", "Modulation", "Modulating", }
-Config.Constants.SpellBookSlots      = 1120
+Config.Constants = {}
+Config.Constants.RGCasters = Set.new({ "BRD", "BST", "CLR", "DRU", "ENC", "MAG", "NEC", "PAL", "RNG", "SHD", "SHM", "WIZ" })
+Config.Constants.RGMelee = Set.new({ "BRD", "SHD", "PAL", "WAR", "ROG", "BER", "MNK", "RNG", "BST" })
+Config.Constants.RGHybrid = Set.new({ "SHD", "PAL", "RNG", "BST", "BRD" })
+Config.Constants.RGTank = Set.new({ "WAR", "PAL", "SHD" })
+Config.Constants.RGModRod = Set.new({ "BST", "CLR", "DRU", "SHM", "MAG", "ENC", "WIZ", "NEC", "PAL", "RNG", "SHD" })
+Config.Constants.RGPetClass = Set.new({ "BST", "NEC", "MAG", "SHM", "ENC", "SHD" })
+Config.Constants.RGMezAnims = Set.new({ 1, 5, 6, 27, 43, 44, 45, 80, 82, 112, 134, 135 })
+Config.Constants.ModRods = { "Modulation Shard", "Transvergence", "Modulation", "Modulating" }
+Config.Constants.SpellBookSlots = 1120
 
-Config.Constants.CastResults         = {
+Config.Constants.CastResults = {
     ['CAST_RESULT_NONE'] = 0,
-    ['CAST_SUCCESS']     = 1,
-    ['CAST_BLOCKED']     = 2,
-    ['CAST_IMMUNE']      = 3,
-    ['CAST_FDFAIL']      = 4,
-    ['CAST_COMPONENTS']  = 5,
-    ['CAST_CANNOTSEE']   = 6,
-    ['CAST_TAKEHOLD']    = 7,
-    ['CAST_STUNNED']     = 8,
-    ['CAST_STANDING']    = 9,
-    ['CAST_RESISTED']    = 10,
-    ['CAST_RECOVER']     = 11,
-    ['CAST_PENDING']     = 12,
-    ['CAST_OUTDOORS']    = 13,
-    ['CAST_OUTOFRANGE']  = 14,
-    ['CAST_OUTOFMANA']   = 15,
-    ['CAST_NOTREADY']    = 16,
-    ['CAST_NOTARGET']    = 17,
+    ['CAST_SUCCESS'] = 1,
+    ['CAST_BLOCKED'] = 2,
+    ['CAST_IMMUNE'] = 3,
+    ['CAST_FDFAIL'] = 4,
+    ['CAST_COMPONENTS'] = 5,
+    ['CAST_CANNOTSEE'] = 6,
+    ['CAST_TAKEHOLD'] = 7,
+    ['CAST_STUNNED'] = 8,
+    ['CAST_STANDING'] = 9,
+    ['CAST_RESISTED'] = 10,
+    ['CAST_RECOVER'] = 11,
+    ['CAST_PENDING'] = 12,
+    ['CAST_OUTDOORS'] = 13,
+    ['CAST_OUTOFRANGE'] = 14,
+    ['CAST_OUTOFMANA'] = 15,
+    ['CAST_NOTREADY'] = 16,
+    ['CAST_NOTARGET'] = 17,
     ['CAST_INTERRUPTED'] = 18,
-    ['CAST_FIZZLE']      = 19,
-    ['CAST_DISTRACTED']  = 20,
-    ['CAST_COLLAPSE']    = 21,
+    ['CAST_FIZZLE'] = 19,
+    ['CAST_DISTRACTED'] = 20,
+    ['CAST_COLLAPSE'] = 21,
     ['CAST_OVERWRITTEN'] = 22,
 }
 
 Config.Constants.CastResultsIdToName = {}
-for k, v in pairs(Config.Constants.CastResults) do Config.Constants.CastResultsIdToName[v] = k end
+for k, v in pairs(Config.Constants.CastResults) do
+    Config.Constants.CastResultsIdToName[v] = k
+end
 
 Config.Constants.ExpansionNameToID = {
-    ['EXPANSION_LEVEL_CLASSIC'] = 0,  -- No Expansion
-    ['EXPANSION_LEVEL_ROK']     = 1,  -- The Ruins of Kunark
-    ['EXPANSION_LEVEL_SOV']     = 2,  -- The Scars of Velious
-    ['EXPANSION_LEVEL_SOL']     = 3,  -- The Shadows of Luclin
-    ['EXPANSION_LEVEL_POP']     = 4,  -- The Planes of Power
-    ['EXPANSION_LEVEL_LOY']     = 5,  -- The Legacy of Ykesha
-    ['EXPANSION_LEVEL_LDON']    = 6,  -- Lost Dungeons of Norrath
-    ['EXPANSION_LEVEL_GOD']     = 7,  -- Gates of Discord
-    ['EXPANSION_LEVEL_OOW']     = 8,  -- Omens of War
-    ['EXPANSION_LEVEL_DON']     = 9,  -- Dragons of Norrath
-    ['EXPANSION_LEVEL_DODH']    = 10, -- Depths of Darkhollow
-    ['EXPANSION_LEVEL_POR']     = 11, -- Prophecy of Ro
-    ['EXPANSION_LEVEL_TSS']     = 12, -- The Serpent's Spine
-    ['EXPANSION_LEVEL_TBS']     = 13, -- The Buried Sea
-    ['EXPANSION_LEVEL_SOF']     = 14, -- Secrets of Faydwer
-    ['EXPANSION_LEVEL_SOD']     = 15, -- Seeds of Destruction
-    ['EXPANSION_LEVEL_UF']      = 16, -- Underfoot
-    ['EXPANSION_LEVEL_HOT']     = 17, -- House of Thule
-    ['EXPANSION_LEVEL_VOA']     = 18, -- Veil of Alaris
-    ['EXPANSION_LEVEL_ROF']     = 19, -- Rain of Fear
-    ['EXPANSION_LEVEL_COTF']    = 20, -- Call of the Forsaken
-    ['EXPANSION_LEVEL_TDS']     = 21, -- The Darkened Sea
-    ['EXPANSION_LEVEL_TBM']     = 22, -- The Broken Mirror
-    ['EXPANSION_LEVEL_EOK']     = 23, -- Empires of Kunark
-    ['EXPANSION_LEVEL_ROS']     = 24, -- Ring of Scale
-    ['EXPANSION_LEVEL_TBL']     = 25, -- The Burning Lands
-    ['EXPANSION_LEVEL_TOV']     = 26, -- Torment of Velious
-    ['EXPANSION_LEVEL_COV']     = 27, -- Claws of Veeshan
-    ['EXPANSION_LEVEL_TOL']     = 28, -- Terror of Luclin
-    ['EXPANSION_LEVEL_NOS']     = 29, -- Night of Shadows
-    ['EXPANSION_LEVEL_LS']      = 30, -- Laurion's Song
-    ['EXPANSION_LEVEL_SOR']     = 31, -- Shattering of Ro
+    ['EXPANSION_LEVEL_CLASSIC'] = 0,
+    ['EXPANSION_LEVEL_ROK'] = 1,
+    ['EXPANSION_LEVEL_SOV'] = 2,
+    ['EXPANSION_LEVEL_SOL'] = 3,
+    ['EXPANSION_LEVEL_POP'] = 4,
+    ['EXPANSION_LEVEL_LOY'] = 5,
+    ['EXPANSION_LEVEL_LDON'] = 6,
+    ['EXPANSION_LEVEL_GOD'] = 7,
+    ['EXPANSION_LEVEL_OOW'] = 8,
+    ['EXPANSION_LEVEL_DON'] = 9,
+    ['EXPANSION_LEVEL_DODH'] = 10,
+    ['EXPANSION_LEVEL_POR'] = 11,
+    ['EXPANSION_LEVEL_TSS'] = 12,
+    ['EXPANSION_LEVEL_TBS'] = 13,
+    ['EXPANSION_LEVEL_SOF'] = 14,
+    ['EXPANSION_LEVEL_SOD'] = 15,
+    ['EXPANSION_LEVEL_UF'] = 16,
+    ['EXPANSION_LEVEL_HOT'] = 17,
+    ['EXPANSION_LEVEL_VOA'] = 18,
+    ['EXPANSION_LEVEL_ROF'] = 19,
+    ['EXPANSION_LEVEL_COTF'] = 20,
+    ['EXPANSION_LEVEL_TDS'] = 21,
+    ['EXPANSION_LEVEL_TBM'] = 22,
+    ['EXPANSION_LEVEL_EOK'] = 23,
+    ['EXPANSION_LEVEL_ROS'] = 24,
+    ['EXPANSION_LEVEL_TBL'] = 25,
+    ['EXPANSION_LEVEL_TOV'] = 26,
+    ['EXPANSION_LEVEL_COV'] = 27,
+    ['EXPANSION_LEVEL_TOL'] = 28,
+    ['EXPANSION_LEVEL_NOS'] = 29,
+    ['EXPANSION_LEVEL_LS'] = 30,
+    ['EXPANSION_LEVEL_SOR'] = 31,
 }
 
 Config.Constants.ExpansionIDToName = {}
-for k, v in pairs(Config.Constants.ExpansionNameToID) do Config.Constants.ExpansionIDToName[v] = k end
+for k, v in pairs(Config.Constants.ExpansionNameToID) do
+    Config.Constants.ExpansionIDToName[v] = k
+end
 
-Config.Constants.LogLevels         = {
+Config.Constants.LogLevels = {
     "Errors",
     "Warnings",
     "Info",
@@ -124,28 +128,30 @@ Config.Constants.LogLevels         = {
     "Super-Verbose",
 }
 
-Config.Constants.ConColors         = {
+Config.Constants.ConColors = {
     "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red",
 }
 Config.Constants.ConColorsNameToId = {}
-for i, v in ipairs(Config.Constants.ConColors) do Config.Constants.ConColorsNameToId[v:upper()] = i end
+for i, v in ipairs(Config.Constants.ConColors) do
+    Config.Constants.ConColorsNameToId[v:upper()] = i
+end
 
 -- Defaults
 Config.DefaultConfig = {
 
     -- [ CLICKIES ] --
-    ['UseClickies']          = {
+    ['UseClickies'] = {
         DisplayName = "Use Clickies",
-        Category    = "Clickies",
-        Index       = 0,
-        Tooltip     = "Use items during Downtime.",
-        Default     = true,
-        ConfigType  = "Normal",
-        FAQ         = "I have some clickie items that I want to use during downtime. How do I set them up?",
-        Answer      = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
+        Category = "Clickies",
+        Index = 0,
+        Tooltip = "Use items during Downtime.",
+        Default = true,
+        ConfigType = "Normal",
+        FAQ = "I have some clickie items that I want to use during downtime. How do I set them up?",
+        Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem1']          = {
+    ['ClickyItem1'] = {
         DisplayName = "Clicky Item 1",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -157,7 +163,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem2']          = {
+    ['ClickyItem2'] = {
         DisplayName = "Clicky Item 2",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -169,7 +175,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem3']          = {
+    ['ClickyItem3'] = {
         DisplayName = "Clicky Item 3",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -181,7 +187,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem4']          = {
+    ['ClickyItem4'] = {
         DisplayName = "Clicky Item 4",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -193,7 +199,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem5']          = {
+    ['ClickyItem5'] = {
         DisplayName = "Clicky Item 5",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -205,7 +211,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem6']          = {
+    ['ClickyItem6'] = {
         DisplayName = "Clicky Item 6",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -217,7 +223,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem7']          = {
+    ['ClickyItem7'] = {
         DisplayName = "Clicky Item 7",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -229,7 +235,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem8']          = {
+    ['ClickyItem8'] = {
         DisplayName = "Clicky Item 8",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -241,7 +247,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem9']          = {
+    ['ClickyItem9'] = {
         DisplayName = "Clicky Item 9",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -253,7 +259,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem10']         = {
+    ['ClickyItem10'] = {
         DisplayName = "Clicky Item 10",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -265,7 +271,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem11']         = {
+    ['ClickyItem11'] = {
         DisplayName = "Clicky Item 11",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -277,7 +283,7 @@ Config.DefaultConfig = {
         Answer = "You can set up to 12 clickie items in the Clickies section of the config.\n" ..
             "You can drag and drop them onto the ClickyItem# tags to add them.",
     },
-    ['ClickyItem12']         = {
+    ['ClickyItem12'] = {
         DisplayName = "Clicky Item 12",
         Category = "Clickies",
         Tooltip = "Clicky Item to use During Downtime",
@@ -291,13 +297,13 @@ Config.DefaultConfig = {
     },
 
     -- [ MED/MANA ] --
-    ['DoMed']                = {
+    ['DoMed'] = {
         DisplayName = "Do Meditate",
         Category = "Med/Mana",
         Index = 1,
         Tooltip = "Choose if/when to meditate.",
         Type = "Combo",
-        ComboOptions = { 'Off', 'Out of Combat', 'In Combat', },
+        ComboOptions = { 'Off', 'Out of Combat', 'In Combat' },
         Default = 2,
         Min = 1,
         Max = 3,
@@ -308,7 +314,7 @@ Config.DefaultConfig = {
             "'In Combat' Will Meditate in and out of Combat." ..
             "'Off' Will not Meditate.",
     },
-    ['HPMedPct']             = {
+    ['HPMedPct'] = {
         DisplayName = "Med HP %",
         Category = "Med/Mana",
         Index = 2,
@@ -320,7 +326,7 @@ Config.DefaultConfig = {
         FAQ = "I want to Regen health when I am low what do I need to do?",
         Answer = "You can set the [HPMedPct] option to the percent health you would like to sit and start to regenerate at.",
     },
-    ['ManaMedPct']           = {
+    ['ManaMedPct'] = {
         DisplayName = "Med Mana %",
         Category = "Med/Mana",
         Index = 4,
@@ -333,7 +339,7 @@ Config.DefaultConfig = {
         Answer = "Make sure [DoMed] is not set to 'Off'." ..
             "You can set the [ManaMedPct] option to the percent mana you would like to start meditating at.",
     },
-    ['EndMedPct']            = {
+    ['EndMedPct'] = {
         DisplayName = "Med Endurance %",
         Category = "Med/Mana",
         Index = 6,
@@ -346,7 +352,7 @@ Config.DefaultConfig = {
         Answer = "Make sure [DoMed] is not set to 'Off'." ..
             "You can set the [EndMedPct] option to the percent endurance you would like to start regenerating at.",
     },
-    ['ManaMedPctStop']       = {
+    ['ManaMedPctStop'] = {
         DisplayName = "Med Mana % Stop",
         Category = "Med/Mana",
         Index = 5,
@@ -357,9 +363,8 @@ Config.DefaultConfig = {
         ConfigType = "Advanced",
         FAQ = "Why am I only Meditating to 60% Mana?",
         Answer = "You can set the [ManaMedPctStop] option to the percent mana you would like to stop meditating at.",
-
     },
-    ['EndMedPctStop']        = {
+    ['EndMedPctStop'] = {
         DisplayName = "Med Endurance % Stop",
         Category = "Med/Mana",
         Index = 7,
@@ -371,7 +376,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I only Recovering to 60% Endurance?",
         Answer = "You can set the [EndMedPctStop] option to the percent endurance you would like to stop meditating at.",
     },
-    ['HPMedPctStop']         = {
+    ['HPMedPctStop'] = {
         DisplayName = "Med HP % Stop",
         Category = "Med/Mana",
         Index = 3,
@@ -383,7 +388,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I only Regenerating to 60% Health?",
         Answer = "You can set the [HPMedPctStop] option to the percent health you would like to stop meditating at.",
     },
-    ['AfterMedCombatDelay']  = {
+    ['AfterMedCombatDelay'] = {
         DisplayName = "After Combat Med Delay",
         Category = "Med/Mana",
         Index = 9,
@@ -395,7 +400,7 @@ Config.DefaultConfig = {
         FAQ = "I keep sitting after combat to med and getting attacked within seconds, how do I fix this?",
         Answer = "You can set the [AfterMedCombatDelay] option to the number of seconds you would like to wait after combat before sitting to med.",
     },
-    ['StandWhenDone']        = {
+    ['StandWhenDone'] = {
         DisplayName = "Stand When Done Medding",
         Category = "Med/Mana",
         Index = 8,
@@ -404,7 +409,7 @@ Config.DefaultConfig = {
         FAQ = "I don't want to stand up after medding, I prefer to stay seated until combat starts, how do I change this?",
         Answer = "You can set the [StandWhenDone] option to false to stay seated until combat starts.",
     },
-    ['DoModRod']             = {
+    ['DoModRod'] = {
         DisplayName = "Do Mod Rod",
         Category = "Med/Mana",
         Index = 10,
@@ -414,7 +419,7 @@ Config.DefaultConfig = {
         FAQ = "How do I automate using Mod Rods?",
         Answer = "You can set the [DoModRod] option to true to automatically use Mod Rods when your mana drops below the [ModRodManaPct] setting.",
     },
-    ['ModRodManaPct']        = {
+    ['ModRodManaPct'] = {
         DisplayName = "Mod Rod Mana %",
         Category = "Med/Mana",
         Index = 11,
@@ -426,7 +431,7 @@ Config.DefaultConfig = {
         FAQ = "How do I automate using Mod Rods?",
         Answer = "You can set the [ModRodManaPct] option to the percent mana you would like to start using Mod Rods at.",
     },
-    ['ClarityPotion']        = {
+    ['ClarityPotion'] = {
         DisplayName = "Clarity Potion",
         Category = "Med/Mana",
         Index = 12,
@@ -438,7 +443,7 @@ Config.DefaultConfig = {
     },
 
     -- [ PET / MERC] --
-    ['DoPet']                = {
+    ['DoPet'] = {
         DisplayName = "Do Pet",
         Category = "Pet/Merc",
         Index = 1,
@@ -448,7 +453,7 @@ Config.DefaultConfig = {
         FAQ = "How do I enable using pets?",
         Answer = "You can set the [DoPet] option to true to enable using pets.",
     },
-    ['PetEngagePct']         = {
+    ['PetEngagePct'] = {
         DisplayName = "Pet Engage HPs",
         Category = "Pet/Merc",
         Index = 2,
@@ -460,7 +465,7 @@ Config.DefaultConfig = {
         FAQ = "How do I change when my pet engages?",
         Answer = "You can set the [PetEngagePct] option to the percent health you would like your pet to engage at.",
     },
-    ['ShrinkPetItem']        = {
+    ['ShrinkPetItem'] = {
         DisplayName = "Shrink Pet Item",
         Category = "Pet/Merc",
         Index = 4,
@@ -471,7 +476,7 @@ Config.DefaultConfig = {
         FAQ = "How do I shrink my pet? I have a clicky item that does it.",
         Answer = "You can set the [ShrinkPetItem] option to the name of the item you would like to use to shrink your pet.",
     },
-    ['DoShrinkPet']          = {
+    ['DoShrinkPet'] = {
         DisplayName = "Do Pet Shrink",
         Category = "Pet/Merc",
         Index = 3,
@@ -481,7 +486,7 @@ Config.DefaultConfig = {
         FAQ = "How do I automatically shrink my pets?",
         Answer = "You can set the [DoShrinkPet] option to true to automatically shrink your pet.",
     },
-    ['DoMercenary']          = {
+    ['DoMercenary'] = {
         DisplayName = "Merc Control",
         Category = "Pet/Merc",
         Index = 5,
@@ -493,7 +498,7 @@ Config.DefaultConfig = {
     },
 
     -- [ ENGAGE ] --
-    ['SafeTargeting']        = {
+    ['SafeTargeting'] = {
         DisplayName = "Use Safe Targeting",
         Category = "Engage",
         Index = 8,
@@ -502,9 +507,8 @@ Config.DefaultConfig = {
         ConfigType = "Advanced",
         FAQ = "Why do I keep targeting mobs that are fighting other players?",
         Answer = "You can set the [SafeTargeting] option to true to avoid targeting mobs that are fighting other players.",
-
     },
-    ['AssistOutside']        = {
+    ['AssistOutside'] = {
         DisplayName = "Assist Outside of Group",
         Category = "Engage",
         Index = 13,
@@ -515,7 +519,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [AssistOutside] option to true to allow assisting characters outside of your group." ..
             "You can also add characters to the [OutsideAssistList] to allow you to assist them.",
     },
-    ['AssistRange']          = {
+    ['AssistRange'] = {
         DisplayName = "Assist Range",
         Category = "Engage",
         Index = 3,
@@ -527,7 +531,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I running to engage mobs that are not in camp?",
         Answer = "You can set the [AssistRange] option to the distance you would like to engage mobs at.",
     },
-    ['AutoAssistAt']         = {
+    ['AutoAssistAt'] = {
         DisplayName = "Auto Assist At",
         Category = "Engage",
         Index = 2,
@@ -539,7 +543,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not attacking the mob?",
         Answer = "You can set the [AutoAssistAt] option to the percent health you would like to start attacking at.",
     },
-    ['StickHow']             = {
+    ['StickHow'] = {
         DisplayName = "Stick How",
         Category = "Engage",
         Index = 6,
@@ -550,7 +554,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [StickHow] option to the custom /stick command you would like to use.\n" ..
             "See the MQ2Stick documentation for more information.",
     },
-    ['AllowMezBreak']        = {
+    ['AllowMezBreak'] = {
         DisplayName = "Allow Mez Break",
         Category = "Engage",
         Index = 10,
@@ -560,7 +564,7 @@ Config.DefaultConfig = {
         FAQ = "Why is my Tank not breaking Mez?\nWhy is X Char Breaking Mez all the time?",
         Answer = "Check the [AllowMezBreak] option, true will allow Mez Breaking.",
     },
-    ['DoAutoTarget']         = {
+    ['DoAutoTarget'] = {
         DisplayName = "Auto Target",
         Category = "Engage",
         Index = 7,
@@ -570,17 +574,17 @@ Config.DefaultConfig = {
         FAQ = "Why am I Always changing targets?",
         Answer = "You can set the [DoAutoTarget] option to false to stop automatically changing targets.",
     },
-    ['StayOnTarget']         = {
+    ['StayOnTarget'] = {
         DisplayName = "Stay On Target",
         Category = "Engage",
         Index = 9,
         Tooltip = "Stick to your target. Default: true; Tank Mode Defaults: false. false allows intelligent target swapping based on aggro/named/ etc.",
-        Default = (not Config.Constants.RGTank:contains(mq.TLO.Me.Class.ShortName())),
+        Default = not Config.Constants.RGTank:contains(mq.TLO.Me.Class.ShortName()),
         ConfigType = "Advanced",
         FAQ = "Why am I not changing targets when I am in Tank Mode?",
         Answer = "You can set the [StayOnTarget] option to false to allow intelligent target swapping based on aggro/named/ etc.",
     },
-    ['DoAutoEngage']         = {
+    ['DoAutoEngage'] = {
         DisplayName = "Auto Engage",
         Category = "Engage",
         Index = 1,
@@ -590,7 +594,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not attacking the mob?",
         Answer = "You can set the [DoAutoEngage] option to true to automatically engage targets.",
     },
-    ['DoMelee']              = {
+    ['DoMelee'] = {
         DisplayName = "Enable Melee Combat",
         Category = "Engage",
         Index = 4,
@@ -600,7 +604,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not attacking the mob?",
         Answer = "You can set the [DoMelee] option to true to enable melee combat.",
     },
-    ['AutoStandFD']          = {
+    ['AutoStandFD'] = {
         DisplayName = "Stand from FD in Combat",
         Category = "Engage",
         Index = 12,
@@ -610,7 +614,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not standing up from Feign Death?",
         Answer = "You can set the [AutoStandFD] option to true to automatically stand up from Feign Death if combat starts.",
     },
-    ['FaceTarget']           = {
+    ['FaceTarget'] = {
         DisplayName = "Face Target in Combat",
         Category = "Engage",
         Index = 5,
@@ -620,7 +624,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I getting warnings about not facing my target?",
         Answer = "You can set the [FaceTarget] option to true to periodically /face your target while in combat.",
     },
-    ['FollowMarkTarget']     = {
+    ['FollowMarkTarget'] = {
         DisplayName = "Follow Mark Target",
         Category = "Engage",
         Index = 15,
@@ -630,7 +634,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not following the Marked target?",
         Answer = "You can set the [FollowMarkTarget] option to true to automatically target the MA's Marked target.",
     },
-    ['OutsideAssistList']    = {
+    ['OutsideAssistList'] = {
         DisplayName = "List of Outsiders to Assist",
         Category = "Engage",
         Index = 14,
@@ -643,7 +647,7 @@ Config.DefaultConfig = {
     },
 
     -- [SPELLS/ABILS] --
-    ['ManaToNuke']           = {
+    ['ManaToNuke'] = {
         DisplayName = "Mana to Nuke",
         Category = "Spells/Abils",
         Index = 1,
@@ -655,7 +659,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Nukes?",
         Answer = "You can set the [ManaToNuke] option to the minimum mana to casting nukes at.",
     },
-    ['ManaToDot']            = {
+    ['ManaToDot'] = {
         DisplayName = "Mana to Dot",
         Category = "Spells/Abils",
         Index = 2,
@@ -667,7 +671,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Dots?",
         Answer = "You can set the [ManaToDot] option to the minimum mana to casting dots at.",
     },
-    ['ManaToDebuff']         = {
+    ['ManaToDebuff'] = {
         DisplayName = "Mana to Debuff",
         Category = "Spells/Abils",
         Index = 4,
@@ -679,7 +683,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Debuffs?",
         Answer = "You can set the [ManaToDebuff] option to the minimum mana to casting debuffs at.",
     },
-    ['HPStopDOT']            = {
+    ['HPStopDOT'] = {
         DisplayName = "Stop Dots (Trash):",
         Category = "Spells/Abils",
         Index = 2,
@@ -691,7 +695,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Dots?",
         Answer = "The target may be to low health, Adjust [HPStopDOT] option to the minimum health of the target to stop casting dots at.",
     },
-    ['NamedStopDOT']         = {
+    ['NamedStopDOT'] = {
         DisplayName = "Stop Dots (Named):",
         Category = "Spells/Abils",
         Index = 3,
@@ -703,7 +707,7 @@ Config.DefaultConfig = {
         FAQ = "Why do I keep dotting the named when it is below [HPStokDot]?",
         Answer = "Named Targets have their own setting for Stop Dot HP, Adjust [NamedStopDOT] option to the minimum health of the Named to stop casting dots at.",
     },
-    ['CastReadyDelayFact']   = {
+    ['CastReadyDelayFact'] = {
         DisplayName = "Cast Ready Delay Factor",
         Category = "Spells/Abils",
         Index = 8,
@@ -715,7 +719,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I getting spell not ready spam?",
         Answer = "Your spell may not be ready set the [CastReadyDelayFact] option to the number of milliseconds to wait before checking again.",
     },
-    ['SongClipDelayFact']    = {
+    ['SongClipDelayFact'] = {
         DisplayName = "Song Clip Delay Factor",
         Category = "Spells/Abils",
         Index = 9,
@@ -727,7 +731,7 @@ Config.DefaultConfig = {
         FAQ = "Why are my songs not landing before casting a new one?",
         Answer = "You can set the [SongClipDelayFact] option to the number of milliseconds to wait before casting a new song.",
     },
-    ['DebuffMinCon']         = {
+    ['DebuffMinCon'] = {
         DisplayName = "Debuff Min Con",
         Category = "Spells/Abils",
         Index = 5,
@@ -741,7 +745,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not debuffing the mob?",
         Answer = "You can set the [DebuffMinCon] option to the minimum con color to debuff.",
     },
-    ['DebuffNamedAlways']    = {
+    ['DebuffNamedAlways'] = {
         DisplayName = "Always Debuff Named",
         Category = "Spells/Abils",
         Index = 6,
@@ -761,7 +765,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting spells?",
         Answer = "You can set the [WaitOnGlobalCooldown] option to true to wait on the Global Cooldown before trying to cast more spells.",
     },
-    ['DoAlliance']           = {
+    ['DoAlliance'] = {
         DisplayName = "Do Alliance",
         Category = "Spells/Abils",
         Index = 10,
@@ -771,7 +775,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Alliance spells?",
         Answer = "You can set the [DoAlliance] option to true to automatically cast Alliance spells.",
     },
-    ['StandFailedFD']        = {
+    ['StandFailedFD'] = {
         DisplayName = "Stand on Failed FD",
         Category = "Spells/Abils",
         Index = 11,
@@ -783,7 +787,7 @@ Config.DefaultConfig = {
     },
 
     -- [ Tank/MA ] --
-    ['MovebackWhenTank']     = {
+    ['MovebackWhenTank'] = {
         DisplayName = "Moveback as Tank",
         Category = "Tank/MA",
         Index = 1,
@@ -793,7 +797,7 @@ Config.DefaultConfig = {
         FAQ = "I keep getting You can not see your target, messages while tanking. How do I fix this?",
         Answer = "You can set the [MovebackWhenTank] option to true to add 'moveback' to the stick command when tanking.",
     },
-    ['MovebackWhenBehind']   = {
+    ['MovebackWhenBehind'] = {
         DisplayName = "Moveback if Mob Behind",
         Category = "Tank/MA",
         Index = 2,
@@ -803,7 +807,7 @@ Config.DefaultConfig = {
         FAQ = "I keep getting Backstabbed, how do I fix this?",
         Answer = "You can set the [MovebackWhenBehind] option to true to move back if we detect an XTarget is behind you when tanking.",
     },
-    ['MovebackDistance']     = {
+    ['MovebackDistance'] = {
         DisplayName = "Units to Moveback",
         Category = "Tank/MA",
         Index = 3,
@@ -815,7 +819,7 @@ Config.DefaultConfig = {
         FAQ = "I backed up off the ledge, how do I fix this?",
         Answer = "You can set the [MovebackDistance] option to the number of units to move back when tanking.",
     },
-    ['ForceKillPet']         = {
+    ['ForceKillPet'] = {
         DisplayName = "Force Kill Pet",
         Category = "Tank/MA",
         Index = 4,
@@ -825,7 +829,7 @@ Config.DefaultConfig = {
         FAQ = "Someones pet is causing issues, how do I fix this?",
         Answer = "You can set the [ForceKillPet] option to true to force kill pcpet if on xtarget.",
     },
-    ['OnlyScanXT']           = {
+    ['OnlyScanXT'] = {
         DisplayName = "Only Scan XTargets",
         Category = "Tank/MA",
         Index = 5,
@@ -835,7 +839,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I targeting mobs that are not in camp?",
         Answer = "You can set the [OnlyScanXT] option to true to only use XTargets when looking for a target.",
     },
-    ['MAScanZRange']         = {
+    ['MAScanZRange'] = {
         DisplayName = "Main Assist Scan ZRange",
         Category = "Tank/MA",
         Index = 6,
@@ -849,7 +853,7 @@ Config.DefaultConfig = {
     },
 
     -- [ BUFFS ] --
-    ['DoBuffs']              = {
+    ['DoBuffs'] = {
         DisplayName = "Do Buffs",
         Category = "Buffs",
         Index = 1,
@@ -859,7 +863,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not buffing?",
         Answer = "You can set the [DoBuffs] option to true to do non-class specific buffs.",
     },
-    ['BuffWaitMoveTimer']    = {
+    ['BuffWaitMoveTimer'] = {
         DisplayName = "Buff Wait Timer",
         Category = "Buffs",
         Index = 2,
@@ -871,7 +875,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I trying to buff every time we stop moving?",
         Answer = "You can set the [BuffWaitMoveTimer] option to the number of seconds to wait after stopping movement before doing buffs.",
     },
-    ['DoSelfWard']           = {
+    ['DoSelfWard'] = {
         DisplayName = "Enable Wards",
         Category = "Buffs",
         Index = 8,
@@ -881,7 +885,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not casting Wards?",
         Answer = "You can set the [DoSelfWard] option to true to enable Ward Type Spells.",
     },
-    ['MountItem']            = {
+    ['MountItem'] = {
         DisplayName = "Mount Item",
         Category = "Buffs",
         Index = 5,
@@ -893,13 +897,13 @@ Config.DefaultConfig = {
         Answer = "You can set the [MountItem] option to the name of the item you would like to use to cast mount.\n" ..
             "Also set the [DoMount] option to 'For use as mount' to enable using mounts.",
     },
-    ['DoMount']              = {
+    ['DoMount'] = {
         DisplayName = "Summon Mount:",
         Category = "Buffs",
         Index = 4,
         Tooltip = "Choose how/when to use mounts.",
         Type = "Combo",
-        ComboOptions = { 'Never', 'For use as mount', 'For buff only', },
+        ComboOptions = { 'Never', 'For use as mount', 'For buff only' },
         Default = 1,
         Min = 1,
         Max = 3,
@@ -908,7 +912,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [MountItem] option to the name of the item you would like to use to cast mount.\n" ..
             "Also set the [DoMount] option to 'For use as mount' to enable using mounts.",
     },
-    ['ShrinkItem']           = {
+    ['ShrinkItem'] = {
         DisplayName = "Shrink Item",
         Category = "Buffs",
         Index = 7,
@@ -919,7 +923,7 @@ Config.DefaultConfig = {
         FAQ = "How do I automate using Shrink Items?",
         Answer = "You can set the [ShrinkItem] option to the name of the item you would like to use to shrink yourself.",
     },
-    ['DoShrink']             = {
+    ['DoShrink'] = {
         DisplayName = "Do Shrink",
         Category = "Buffs",
         Index = 6,
@@ -930,21 +934,19 @@ Config.DefaultConfig = {
         Answer = "You can set the [DoShrink] option to true to automatically shrink yourself." ..
             "You can also set the [ShrinkItem] option to the name of the item you would like to use to shrink yourself.",
     },
-    ['BuffRezables']         = {
+    ['BuffRezables'] = {
         DisplayName = "Buff Rezables",
         Category = "Buffs",
         Index = 3,
-        Tooltip =
-        "If a PC has a corpse near us, buff them even though they are likely to get rezed. (Note: If disabled, they may still be receiving group buffs aimed at those without corpses.)",
+        Tooltip = "If a PC has a corpse near us, buff them even though they are likely to get rezed. (Note: If disabled, they may still be receiving group buffs aimed at those without corpses.)",
         Default = false,
         ConfigType = "Advanced",
         FAQ = "Why am I buffing the people before they are rezzed?",
-        Answer =
-        "You can set the [BuffRezables] option to false to skip buffing the people who have corpses nearby, but note they may receive group buffs aimed at those without corpses.",
+        Answer = "You can set the [BuffRezables] option to false to skip buffing the people who have corpses nearby, but note they may receive group buffs aimed at those without corpses.",
     },
 
     -- [ HEAL/REZ] --
-    ['PriorityHealing']      = {
+    ['PriorityHealing'] = {
         DisplayName = "Priority Healing",
         Category = "Heal/Rez",
         Index = 10,
@@ -954,7 +956,7 @@ Config.DefaultConfig = {
         FAQ = "Why are my healers attacking the mob and not healing?",
         Answer = "You can set the [PriorityHealing] option to true to enforce healing over engaging in combat actions.",
     },
-    ['BreakInvis']           = {
+    ['BreakInvis'] = {
         DisplayName = "Break Invis",
         Category = "Heal/Rez",
         Index = 9,
@@ -964,7 +966,7 @@ Config.DefaultConfig = {
         FAQ = "I need to heal but I am invisible, how do I fix this?",
         Answer = "You can set the [BreakInvis] option to true to break invis to heal when out of combat only.",
     },
-    ['MainHealPoint']        = {
+    ['MainHealPoint'] = {
         DisplayName = "Main Heal Point",
         Category = "Heal/Rez",
         Index = 3,
@@ -976,7 +978,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not healing?",
         Answer = "You can set the [MainHealPoint] option to the percent health you would like to start healing at.",
     },
-    ['BigHealPoint']         = {
+    ['BigHealPoint'] = {
         DisplayName = "Big Heal Point",
         Category = "Heal/Rez",
         Index = 4,
@@ -988,7 +990,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not healing with my BIG HEAL?",
         Answer = "You can set the [BigHealPoint] option to the percent health you would like to start using the Big Heal Rotation at.",
     },
-    ['GroupHealPoint']       = {
+    ['GroupHealPoint'] = {
         DisplayName = "Group Heal Point",
         Category = "Heal/Rez",
         Index = 5,
@@ -1001,7 +1003,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [GroupHealPoint] option to the percent health you would like to start using the Group Heal Rotation at.\n" ..
             "You can also set the [GroupInjureCnt] option to the number of group members that must be under the above threshold.",
     },
-    ['PetHealPoint']         = {
+    ['PetHealPoint'] = {
         DisplayName = "Pet Heal Point",
         Category = "Heal/Rez",
         Index = 8,
@@ -1014,7 +1016,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [PetHealPoint] option to the percent health you would like to start using the Pet Heal Rotation at.\n" ..
             "You also need to set the [DoPetHeals] option to true to heal pets in your group.",
     },
-    ['GroupInjureCnt']       = {
+    ['GroupInjureCnt'] = {
         DisplayName = "Group Injured Count",
         Category = "Heal/Rez",
         Index = 6,
@@ -1026,7 +1028,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not using my Group heals?",
         Answer = "You can set the [GroupInjureCnt] option to the number of group members that must be under the [GroupHealPoint] threshold.",
     },
-    ['DoPetHeals']           = {
+    ['DoPetHeals'] = {
         DisplayName = "Do Pet Heals",
         Category = "Heal/Rez",
         Index = 7,
@@ -1036,7 +1038,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not healing pets?",
         Answer = "You can set the [DoPetHeals] option to true to heal pets in your group.",
     },
-    ['MaxHealPoint']         = {
+    ['MaxHealPoint'] = {
         DisplayName = "Healing Threshold",
         Category = "Heal/Rez",
         Index = 1,
@@ -1048,7 +1050,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not healing?",
         Answer = "You can set the [MaxHealPoint] option to the percent health you would like to start healing at.",
     },
-    ['LightHealPoint']       = {
+    ['LightHealPoint'] = {
         DisplayName = "Light Heal Point",
         Category = "Heal/Rez",
         Index = 2,
@@ -1060,7 +1062,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not healing with my LIGHT HEAL?",
         Answer = "You can set the [LightHealPoint] option to the percent health you would like to start using the Light Heal Rotation at.",
     },
-    ['CureInterval']         = {
+    ['CureInterval'] = {
         DisplayName = "Cure Check Interval",
         Category = "Heal/Rez",
         Index = 11,
@@ -1073,7 +1075,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [CureInterval] option to the number of seconds to wait between checking for cures." ..
             "Lowering this number will increase the frequency of cure checks.",
     },
-    ['RetryRezDelay']        = {
+    ['RetryRezDelay'] = {
         DisplayName = "Retry Rez Delay",
         Category = "Heal/Rez",
         Index = 12,
@@ -1085,7 +1087,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I trying to rez the same corpse over and over?",
         Answer = "You can set the [RetryRezDelay] option to the number of seconds to wait between attempting to rez a corpse.",
     },
-    ['DoBattleRez']          = {
+    ['DoBattleRez'] = {
         DisplayName = "Do Battle Rez",
         Category = "Heal/Rez",
         Index = 13,
@@ -1095,7 +1097,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not rezzing in combat?",
         Answer = "You can set the [DoBattleRez] option to true to use Rez while in combat.",
     },
-    ['InstantRelease']       = {
+    ['InstantRelease'] = {
         DisplayName = "Instant Release",
         Category = "Heal/Rez",
         Index = 14,
@@ -1107,7 +1109,7 @@ Config.DefaultConfig = {
     },
 
     -- [ BURNS ] --
-    ['BurnAuto']             = {
+    ['BurnAuto'] = {
         DisplayName = "Auto Burn",
         Category = "Burns",
         Index = 1,
@@ -1117,7 +1119,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not burning?",
         Answer = "You can set the [BurnAuto] option to true to automatically burn when the conditions are met.",
     },
-    ['BurnAlways']           = {
+    ['BurnAlways'] = {
         DisplayName = "Auto Burn Always",
         Category = "Burns",
         Index = 2,
@@ -1127,7 +1129,7 @@ Config.DefaultConfig = {
         FAQ = "How do I force Burns on every target?",
         Answer = "You can set the [BurnAlways] option to true to burn on any/every target.",
     },
-    ['BurnMobCount']         = {
+    ['BurnMobCount'] = {
         DisplayName = "Auto Burn Mob Count",
         Category = "Burns",
         Index = 4,
@@ -1139,7 +1141,7 @@ Config.DefaultConfig = {
         FAQ = "I only want to burn when there are a lot of mobs, how do I do this?",
         Answer = "You can set the [BurnMobCount] option to the number of haters before we start burning.",
     },
-    ['BurnNamed']            = {
+    ['BurnNamed'] = {
         DisplayName = "Auto Burn Named",
         Category = "Burns",
         Index = 5,
@@ -1151,7 +1153,7 @@ Config.DefaultConfig = {
     },
 
     -- [ UI ] --
-    ['DisplayManualTarget']  = {
+    ['DisplayManualTarget'] = {
         DisplayName = "Display Manual Target",
         Category = "UI",
         Tooltip = "If you have no auto target, enabling this will show information about your current manual target in the UI.",
@@ -1159,7 +1161,7 @@ Config.DefaultConfig = {
         FAQ = "When my auto target is empty how can I see information about my current manually set target?",
         Answer = "You can enabled [DisplayManualTarget] and it will show your manual target in the UI if there is no auto target.",
     },
-    ['BgOpacity']            = {
+    ['BgOpacity'] = {
         DisplayName = "Background Opacity",
         Category = "UI",
         Tooltip = "Opacity for the RGMercs UI",
@@ -1169,7 +1171,7 @@ Config.DefaultConfig = {
         FAQ = "How do I change the background opacity?",
         Answer = "You can set the [BgOpacity] option to the opacity for the RGMercs UI.",
     },
-    ['ShowAllOptionsMain']   = {
+    ['ShowAllOptionsMain'] = {
         DisplayName = "Show All Options on Main",
         Category = "UI",
         Tooltip = "Show all options on the main panel",
@@ -1177,7 +1179,7 @@ Config.DefaultConfig = {
         FAQ = "There are a lot of options on the main panel, how do I hide some of them?",
         Answer = "You can set the [ShowAllOptionsMain] option to false to hide some of the options on the main panel.",
     },
-    ['FrameEdgeRounding']    = {
+    ['FrameEdgeRounding'] = {
         DisplayName = "Frame Edge Rounding",
         Category = "UI",
         Tooltip = "Frame Edge Rounding for the RGMercs UI",
@@ -1187,7 +1189,7 @@ Config.DefaultConfig = {
         FAQ = "I like round corners on my UI, how do I change this?",
         Answer = "You can set the [FrameEdgeRounding] option to the frame edge rounding for the RGMercs UI.",
     },
-    ['ScrollBarRounding']    = {
+    ['ScrollBarRounding'] = {
         DisplayName = "Scroll Bar Rounding",
         Category = "UI",
         Tooltip = "Frame Edge Rounding for the RGMercs UI",
@@ -1197,7 +1199,7 @@ Config.DefaultConfig = {
         FAQ = "I like round ScrollBars on my UI, how do I change this?",
         Answer = "You can set the [ScrollBarRounding] option to the Scroll Bar rounding for the RGMercs UI.",
     },
-    ['ShowAdvancedOpts']     = {
+    ['ShowAdvancedOpts'] = {
         DisplayName = "Show Advanced Options",
         Category = "UI",
         Tooltip = "Show Advanced Options",
@@ -1207,7 +1209,7 @@ Config.DefaultConfig = {
         FAQ = "How do I see the Advanced Options?",
         Answer = "You can set the [ShowAdvancedOpts] option to true to show the Advanced Options.",
     },
-    ['EscapeMinimizes']      = {
+    ['EscapeMinimizes'] = {
         DisplayName = "Minimize on Escape",
         Category = "UI",
         Tooltip = "Minimizes the window if focused and Escape is pressed",
@@ -1219,7 +1221,7 @@ Config.DefaultConfig = {
     },
 
     -- [ Debug ] --
-    ['LogLevel']             = {
+    ['LogLevel'] = {
         DisplayName = "Log Level",
         Category = "Debug",
         Tooltip = "1 = Errors, 2 = Warnings, 3 = Info, 4 = Debug, 5 = Verbose",
@@ -1232,7 +1234,7 @@ Config.DefaultConfig = {
         Answer = "You can set the [LogLevel] option to the level of logs you would like to see.\n" ..
             "Each level shows more information than the previous.",
     },
-    ['LogToFile']            = {
+    ['LogToFile'] = {
         DisplayName = "Log To File",
         Category = "Debug",
         Tooltip = "Write all logs to the mqlog file.",
@@ -1244,7 +1246,7 @@ Config.DefaultConfig = {
     },
 
     -- [ ANNOUNCEMENTS ] --
-    ['AnnounceTarget']       = {
+    ['AnnounceTarget'] = {
         DisplayName = "Announce Target",
         Category = "Announcements",
         Tooltip = "Announces Target over DanNet in kissassist format, incase you are running a mixed set on your group.Config",
@@ -1253,7 +1255,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing the target?",
         Answer = "You can set the [AnnounceTarget] option to true to announce the target over DanNet in kissassist format.",
     },
-    ['AnnounceTargetGroup']  = {
+    ['AnnounceTargetGroup'] = {
         DisplayName = "Announce Target to Group",
         Category = "Announcements",
         Tooltip = "Announces Target over /gsay",
@@ -1262,7 +1264,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing the target to the group?",
         Answer = "You can set the [AnnounceTargetGroup] option to true to announce the target over /gsay.",
     },
-    ['MezAnnounce']          = {
+    ['MezAnnounce'] = {
         DisplayName = "Mez Announce",
         Category = "Announcements",
         Default = false,
@@ -1271,7 +1273,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing mez casts and breaks?",
         Answer = "You can set the [MezAnnounce] option to true to announce mez information.",
     },
-    ['MezAnnounceGroup']     = {
+    ['MezAnnounceGroup'] = {
         DisplayName = "Mez Announce to Group",
         Category = "Announcements",
         Default = false,
@@ -1280,7 +1282,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing mez casts and breaks to the group?",
         Answer = "You can set the [MezAnnounceGroup] option to true to announce mez information in group.",
     },
-    ['CharmAnnounce']        = {
+    ['CharmAnnounce'] = {
         DisplayName = "Charm Announce",
         Category = "Announcements",
         Default = false,
@@ -1289,7 +1291,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Charm casts?",
         Answer = "You can set the [CharmAnnounce] option to true to announce Charm casts.",
     },
-    ['CharmAnnounceGroup']   = {
+    ['CharmAnnounceGroup'] = {
         DisplayName = "Charm Announce to Group",
         Category = "Announcements",
         Default = false,
@@ -1298,7 +1300,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Charm casts to the group?",
         Answer = "You can set the [CharmAnnounceGroup] option to true to announce Charm casts in group.",
     },
-    ['HealAnnounce']         = {
+    ['HealAnnounce'] = {
         DisplayName = "Heal Announce",
         Category = "Announcements",
         Default = false,
@@ -1307,7 +1309,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Heal casts?",
         Answer = "You can set the [HealAnnounce] option to true to announce Heal casts.",
     },
-    ['HealAnnounceGroup']    = {
+    ['HealAnnounceGroup'] = {
         DisplayName = "Heal Announce to Group",
         Category = "Announcements",
         Default = false,
@@ -1316,7 +1318,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Heal casts to the group?",
         Answer = "You can set the [HealAnnounceGroup] option to true to announce Heal casts in group.",
     },
-    ['CureAnnounce']         = {
+    ['CureAnnounce'] = {
         DisplayName = "Cure Announce",
         Category = "Announcements",
         Default = false,
@@ -1325,7 +1327,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Cure casts?",
         Answer = "You can set the [CureAnnounce] option to true to announce Cure casts.",
     },
-    ['CureAnnounceGroup']    = {
+    ['CureAnnounceGroup'] = {
         DisplayName = "Cure Announce to Group",
         Category = "Announcements",
         Default = false,
@@ -1334,7 +1336,7 @@ Config.DefaultConfig = {
         FAQ = "Why am I not announcing Cure casts to the group?",
         Answer = "You can set the [CureAnnounceGroup] option to true to announce Cure casts in group.",
     },
-    ['PopOutForceTarget']    = {
+    ['PopOutForceTarget'] = {
         DisplayName = "Pop Out Force Target",
         Category = "UI",
         Tooltip = "Pop out the Force Target into it's own Window",
@@ -1350,14 +1352,22 @@ for k, v in pairs(Config.DefaultConfig) do
     if v.Type ~= "Custom" then
         Config.DefaultCategories:add(v.Category)
     end
-    Config.FAQ[k] = { Question = v.FAQ or 'None', Answer = v.Answer or 'None', Settings_Used = k, }
+    Config.FAQ[k] = {
+        Question = v.FAQ or 'None',
+        Answer = v.Answer or 'None',
+        Settings_Used = k,
+    }
 end
 
 Config.CommandHandlers = {}
 
 function Config:GetConfigFileName()
     return mq.configDir ..
-        '/rgmercs/PCConfigs/RGMerc_' .. self.Globals.CurServer .. "_" .. self.Globals.CurLoadedChar .. '.lua'
+        '/rgmercs/PCConfigs/RGMerc_' ..
+        self.Globals.CurServer ..
+        "_" ..
+        self.Globals.CurLoadedChar ..
+        '.lua'
 end
 
 function Config:SaveSettings(doBroadcast)
@@ -1371,28 +1381,37 @@ function Config:SaveSettings(doBroadcast)
 end
 
 function Config:LoadSettings()
-    self.Globals.CurLoadedChar  = mq.TLO.Me.DisplayName()
+    self.Globals.CurLoadedChar = mq.TLO.Me.DisplayName()
     self.Globals.CurLoadedClass = mq.TLO.Me.Class.ShortName()
-    self.Globals.CurServer      = mq.TLO.EverQuest.Server():gsub(" ", "")
-    RGMercsLogger.log_info(
-        "\ayLoading Main Settings for %s!",
-        self.Globals.CurLoadedChar)
+    self.Globals.CurServer = mq.TLO.EverQuest.Server():gsub(" ", "")
+
+    RGMercsLogger.log_info("\ayLoading Main Settings for %s!", self.Globals.CurLoadedChar)
 
     local needSave = false
-
     local config, err = loadfile(self:GetConfigFileName())
+
     if err or not config then
-        RGMercsLogger.log_error("\ayUnable to load global settings file(%s), creating a new one!",
-            self:GetConfigFileName())
+        RGMercsLogger.log_error(
+            "\ayUnable to load global settings file(%s), creating a new one!",
+            self:GetConfigFileName()
+        )
         self.settings = {}
         needSave = true
     else
-        self.settings = config()
+        local ok, loadedSettings = pcall(config)
+        if not ok or type(loadedSettings) ~= "table" then
+            RGMercsLogger.log_error(
+                "\ayUnable to execute global settings file(%s), creating a new one!",
+                self:GetConfigFileName()
+            )
+            self.settings = {}
+            needSave = true
+        else
+            self.settings = loadedSettings
+        end
     end
 
     local settingsChanged = false
-
-    -- Setup Defaults
     self.settings, settingsChanged = RGMercUtils.ResolveDefaults(Config.DefaultConfig, self.settings)
 
     if needSave or settingsChanged then
@@ -1415,7 +1434,7 @@ function Config:UpdateCommandHandlers()
         for setting, _ in pairs(moduleSettings or {}) do
             local handled, usageString = self:GetUsageText(setting or "", true, submoduleDefaults[moduleName] or {})
 
-            if handled then
+            if handled and submoduleDefaults[moduleName] and submoduleDefaults[moduleName][setting] then
                 self.CommandHandlers[setting:lower()] = {
                     name = setting,
                     usage = usageString,
@@ -1438,6 +1457,10 @@ function Config:GetUsageText(config, showUsageText, defaults)
     local usageString = showUsageText and string.format("/rgl set %s ", RGMercUtils.PadString(config, 25, false)) or ""
     local configData = defaults[config]
 
+    if not configData then
+        return false, usageString
+    end
+
     local rangeText = ""
     local defaultText = ""
     local currentText = ""
@@ -1448,21 +1471,23 @@ function Config:GetUsageText(config, showUsageText, defaults)
         currentText = string.format("[\a-gCurrent: %d\ax]", RGMercUtils.GetSetting(config))
         handledType = true
     elseif type(configData.Default) == 'boolean' then
-        rangeText = string.format("\aw<\a-yon\aw|\a-yoff\ax>")
-        ---@diagnostic disable-next-line: param-type-mismatch
+        rangeText = "\aw<\a-yon\aw|\a-yoff\ax>"
         defaultText = string.format("[\a-tDefault: %s\ax]", RGMercUtils.BoolToString(configData.Default))
         currentText = string.format("[\a-gCurrent: %s\ax]", RGMercUtils.BoolToString(RGMercUtils.GetSetting(config)))
         handledType = true
     elseif type(configData.Default) == 'string' then
-        rangeText = string.format("\aw<\"str\">")
+        rangeText = "\aw<\"str\">"
         defaultText = string.format("[\a-tDefault: \"%s\"\ax]", configData.Default)
         currentText = string.format("[\a-gCurrent: \"%s\"\ax]", RGMercUtils.GetSetting(config))
         handledType = true
     end
 
     usageString = usageString ..
-        string.format("%s %s %s", RGMercUtils.PadString(rangeText, 20, false),
-            RGMercUtils.PadString(currentText, 20, false), RGMercUtils.PadString(defaultText, 20, false)
+        string.format(
+            "%s %s %s",
+            RGMercUtils.PadString(rangeText, 20, false),
+            RGMercUtils.PadString(currentText, 20, false),
+            RGMercUtils.PadString(defaultText, 20, false)
         )
 
     return handledType, usageString
@@ -1477,16 +1502,22 @@ function Config:SettingsLoaded()
 end
 
 function Config:GetTimeSinceLastMove()
+    if not self.Globals.LastMove or not self.Globals.LastMove.TimeAtMove then
+        return math.huge
+    end
+
     return os.clock() - self.Globals.LastMove.TimeAtMove
 end
 
 function Config:GetCommandHandlers()
-    return { module = "Config", CommandHandlers = self.CommandHandlers, }
+    return {
+        module = "Config",
+        CommandHandlers = self.CommandHandlers,
+    }
 end
 
 function Config:GetFAQ()
-    return
-        self.FAQ or {}
+    return self.FAQ or {}
 end
 
 ---@param config string
@@ -1495,7 +1526,7 @@ end
 function Config:HandleBind(config, value)
     local handled = false
 
-    if not config or config:lower() == "show" or config:len() == 0 then
+    if not config or config:len() == 0 or config:lower() == "show" then
         self:UpdateCommandHandlers()
 
         local allModules = {}
@@ -1513,12 +1544,13 @@ function Config:HandleBind(config, value)
         table.sort(sortedKeys)
 
         local sortedCategories = {}
-        for c, d in pairs(self.CommandHandlers or {}) do
+        for _, d in pairs(self.CommandHandlers or {}) do
             sortedCategories[d.subModule] = sortedCategories[d.subModule] or {}
             if not RGMercUtils.TableContains(sortedCategories[d.subModule], d.category) then
                 table.insert(sortedCategories[d.subModule], d.category)
             end
         end
+
         for _, subModuleTable in pairs(sortedCategories) do
             table.sort(subModuleTable)
         end
@@ -1529,7 +1561,7 @@ function Config:HandleBind(config, value)
                 local printCategory = true
                 for _, k in ipairs(sortedKeys) do
                     local d = self.CommandHandlers[k]
-                    if d.subModule == subModuleName and d.category == c then
+                    if d and d.subModule == subModuleName and d.category == c then
                         if printHeader then
                             printf("\n\ag%s\aw Settings\n------------", subModuleName)
                             printHeader = false
@@ -1538,14 +1570,21 @@ function Config:HandleBind(config, value)
                             printf("\n\aoCategory: %s\aw", c)
                             printCategory = false
                         end
-                        printf("\am%-20s\aw - \atUsage: \ay%s\aw | %s", d.name,
-                            RGMercUtils.PadString(d.usage, 100, false), d.about)
+                        printf(
+                            "\am%-20s\aw - \atUsage: \ay%s\aw | %s",
+                            d.name,
+                            RGMercUtils.PadString(d.usage, 100, false),
+                            d.about
+                        )
                     end
                 end
             end
         end
+
         return true
     end
+
+    self:UpdateCommandHandlers()
 
     if self.CommandHandlers[config:lower()] ~= nil then
         RGMercUtils.SetSetting(config, value)

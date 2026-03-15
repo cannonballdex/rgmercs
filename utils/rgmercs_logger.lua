@@ -1,125 +1,155 @@
---- @type Mq
-local mq              = require('mq')
-local RGMercUtils     = require("utils.rgmercs_utils")
+---@type Mq
+local mq = require('mq')
+local RGMercUtils = require("utils.rgmercs_utils")
+local RGMercConfig = require("utils.rgmercs_config")
+local RGMercModules = require("utils.rgmercs_modules")
 
-local actions         = {}
+local RGMercsConsole = nil
+local actions = {}
+
 local logDir = mq.TLO.MacroQuest.Path("Logs")()
-local logFileOpened   = nil
-local logLeaderStart  = '\ar[\ax\agRGMercs'
-local logLeaderEnd    = '\ar]\ax\aw >>>'
+local logFileOpened = nil
+local logLeaderStart = '\ar[\ax\agRGMercs'
+local logLeaderEnd = '\ar]\ax\aw >>>'
 
---- @type number
+---@type number
 local currentLogLevel = 3
 local logToFileAlways = false
-local filters         = {}
+local filters = {}
 
-local logFileHandle   = nil
+local logFileHandle = nil
 
-function actions.get_log_level() return currentLogLevel end
+function actions.get_log_level()
+    return currentLogLevel
+end
 
-function actions.set_log_level(level) currentLogLevel = level end
+function actions.set_log_level(level)
+    currentLogLevel = level
+end
+
+function actions.set_console(console)
+    RGMercsConsole = console
+end
 
 function actions.set_log_to_file(logToFile)
-	if logToFileAlways ~= logToFile then
-		logToFileAlways = logToFile
-		if not logToFileAlways and logFileHandle then
-			logFileHandle:close()
-			logFileHandle = nil
-			logFileOpened = nil
-		end
-	end
+    if logToFileAlways ~= logToFile then
+        logToFileAlways = logToFile
+        if not logToFileAlways and logFileHandle then
+            logFileHandle:close()
+            logFileHandle = nil
+            logFileOpened = nil
+        end
+    end
 end
 
 function actions.set_log_filter(filter)
-	filters = RGMercUtils.split(filter:lower(), "|")
+    if not filter or filter == "" then
+        filters = {}
+        return
+    end
+
+    filters = RGMercUtils.split(filter:lower(), "|")
 end
 
-function actions.clear_log_filter() filters = {} end
+function actions.clear_log_filter()
+    filters = {}
+end
 
 local logLevels = {
-	['super_verbose'] = { level = 6, header = "\atSUPER\aw-\apVERBOSE\ax", },
-	['verbose']       = { level = 5, header = "\apVERBOSE\ax", },
-	['debug']         = { level = 4, header = "\amDEBUG  \ax", },
-	['info']          = { level = 3, header = "\aoINFO   \ax", },
-	['warn']          = { level = 2, header = "\ayWARN   \ax", },
-	['error']         = { level = 1, header = "\arERROR  \ax", },
+    ['super_verbose'] = { level = 6, header = "\atSUPER\aw-\apVERBOSE\ax" },
+    ['verbose'] = { level = 5, header = "\apVERBOSE\ax" },
+    ['debug'] = { level = 4, header = "\amDEBUG  \ax" },
+    ['info'] = { level = 3, header = "\aoINFO   \ax" },
+    ['warn'] = { level = 2, header = "\ayWARN   \ax" },
+    ['error'] = { level = 1, header = "\arERROR  \ax" },
 }
 
 local function openLogFile()
-	local newFileName = string.format("RGMercs_%s.log", mq.TLO.Me.Name())
-	local newFilePath = string.format("%s/%s", logDir, newFileName)
+    local newFileName = string.format("RGMercs_%s.log", mq.TLO.Me.Name())
+    local newFilePath = string.format("%s/%s", logDir, newFileName)
 
-	if logFileHandle and logFileOpened ~= newFilePath then
-		logFileHandle:close()
-		logFileHandle = nil
-		logFileOpened = nil
-	end
+    if logFileHandle and logFileOpened ~= newFilePath then
+        logFileHandle:close()
+        logFileHandle = nil
+        logFileOpened = nil
+    end
 
-	if not logFileHandle then
-		logFileHandle = io.open(newFilePath, "a")
-		logFileOpened = newFilePath
-		if not logFileHandle then
-			print("Could not open log file for writing.")
-		end
-	end
+    if not logFileHandle then
+        logFileHandle = io.open(newFilePath, "a")
+        logFileOpened = newFilePath
+        if not logFileHandle then
+            print("Could not open log file for writing.")
+        end
+    end
 end
 
 local function getCallStack()
-	local info = debug.getinfo(4, "Snl")
+    local info = debug.getinfo(4, "Snl")
 
-	local callerTracer = string.format("\ao%s\aw::\ao%s()\aw:\ao%-04d\ax",
-		info and info.short_src and info.short_src:match("[^\\^/]*.lua$") or "unknown_file", info and info.name or "unknown_func", info and info.currentline or 0)
-
-	return callerTracer
+    return string.format(
+        "\ao%s\aw::\ao%s()\aw:\ao%-04d\ax",
+        info and info.short_src and info.short_src:match("[^\\^/]*%.lua$") or "unknown_file",
+        info and info.name or "unknown_func",
+        info and info.currentline or 0
+    )
 end
 
 local function log(logLevel, output, ...)
-	if currentLogLevel < logLevels[logLevel].level then return end
+    if currentLogLevel < logLevels[logLevel].level then
+        return
+    end
 
-	local callerTracer = getCallStack()
+    local callerTracer = getCallStack()
 
-	if (... ~= nil) then output = string.format(output, ...) end
+    if ... ~= nil then
+        output = string.format(output, ...)
+    end
 
-	local now = string.format("%.03f", mq.gettime() / 1000)
+    local now = string.format("%.03f", mq.gettime() / 1000)
 
-	-- only log out warnings and errors
-	if logLevels[logLevel].level <= 2 or logToFileAlways then
-		local fileOutput = output:gsub("\a.", "")
-		local fileHeader = logLevels[logLevel].header:gsub("\a.", "")
-		local fileTracer = callerTracer:gsub("\a.", "")
+    if logLevels[logLevel].level <= 2 or logToFileAlways then
+        local fileOutput = output:gsub("\a.", "")
+        local fileHeader = logLevels[logLevel].header:gsub("\a.", "")
+        local fileTracer = callerTracer:gsub("\a.", "")
 
-		openLogFile()
-		if logFileHandle then
-			logFileHandle:write(string.format("[%s:%s(%s)] <%s> %s\n", mq.TLO.Me.Name(), fileHeader, fileTracer, now, fileOutput))
-			logFileHandle:flush() -- Ensure the output is immediately written to the file
-		end
-	end
+        openLogFile()
+        if logFileHandle then
+            logFileHandle:write(string.format("[%s:%s(%s)] <%s> %s\n", mq.TLO.Me.Name(), fileHeader, fileTracer, now, fileOutput))
+            logFileHandle:flush()
+        end
+    end
 
-	if #filters > 0 then
-		local found = false
-		local lowerOutput = output:lower()
-		for _, logFilter in ipairs(filters) do
-			if logFilter:len() > 0 and (callerTracer:find(logFilter) or lowerOutput:find(logFilter)) then found = true end
-		end
+    if #filters > 0 then
+        local found = false
+        local lowerOutput = output:lower()
 
-		if not found then return end
-	end
+        for _, logFilter in ipairs(filters) do
+            if logFilter:len() > 0 and (callerTracer:find(logFilter) or lowerOutput:find(logFilter)) then
+                found = true
+                break
+            end
+        end
 
-	if RGMercsConsole ~= nil then
-		local consoleText = string.format('[%s] %s', logLevels[logLevel].header, output)
-		RGMercsConsole:AppendText(consoleText)
-	end
+        if not found then
+            return
+        end
+    end
 
-	printf('%s\aw:%s \aw<\at%s\aw> \aw(%s\aw)%s \ax%s', logLeaderStart, logLevels[logLevel].header, now, callerTracer, logLeaderEnd, output)
+    if RGMercsConsole ~= nil then
+        local consoleText = string.format('[%s] %s', logLevels[logLevel].header, output)
+        RGMercsConsole:AppendText(consoleText)
+    end
+
+    printf('%s\aw:%s \aw<\at%s\aw> \aw(%s\aw)%s \ax%s', logLeaderStart, logLevels[logLevel].header, now, callerTracer, logLeaderEnd, output)
 end
 
 function actions.GenerateShortcuts()
-	for level, _ in pairs(logLevels) do
-		--- @diagnostic disable-next-line
-		actions["log_" .. level:lower()] = function(output, ...)
-			log(level, output, ...)
-		end
-	end
+    for level, _ in pairs(logLevels) do
+        local levelName = level
+        actions["log_" .. levelName:lower()] = function(output, ...)
+            log(levelName, output, ...)
+        end
+    end
 end
 
 actions.GenerateShortcuts()

@@ -1,59 +1,77 @@
-local mq          = require('mq')
+local mq = require('mq')
 local RGMercUtils = require("utils.rgmercs_utils")
+local RGMercsLogger = require("utils.rgmercs_logger")
 
-local ClassLoader = { _version = '0.1', _name = "ClassLoader", _author = 'Derple', }
+local ClassLoader = {
+    _version = '0.1',
+    _name = "ClassLoader",
+    _author = 'Derple',
+}
 
 ---@param class string # EQ Class ShortName
 function ClassLoader.load(class)
-    local baseClassConfig = require(string.format("class_configs.%s_class_config", class:lower()))
+    local className = assert(class, "ClassLoader.load: class is required"):lower()
+
+    local baseClassConfig = require(string.format("class_configs.%s_class_config", className))
     local overrideClassConfig = {}
     local customConfigLoaded = false
 
-    -- check for overrides
-    local custom_config_file = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.configDir, class:lower())
+    local customConfigFile = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.configDir, className)
 
-    if RGMercUtils.file_exists(custom_config_file) then
-        RGMercsLogger.log_info("Loading Custom Core Class Config: %s", custom_config_file)
-        local config, err = loadfile(custom_config_file)
-        if not config or err then
-            RGMercsLogger.log_error("Failed to Load Custom Core Class Config: %s", custom_config_file)
+    if RGMercUtils.file_exists(customConfigFile) then
+        RGMercsLogger.log_info("Loading Custom Core Class Config: %s", customConfigFile)
+
+        local chunk, loadErr = loadfile(customConfigFile)
+        if not chunk then
+            RGMercsLogger.log_error("Failed to load custom core class config: %s (%s)", customConfigFile, tostring(loadErr))
         else
-            overrideClassConfig = config()
-            customConfigLoaded = true
+            local ok, result = pcall(chunk)
+            if not ok then
+                RGMercsLogger.log_error("Failed to execute custom core class config: %s (%s)", customConfigFile, tostring(result))
+            elseif type(result) ~= "table" then
+                RGMercsLogger.log_error("Custom core class config did not return a table: %s", customConfigFile)
+            else
+                overrideClassConfig = result
+                customConfigLoaded = true
+            end
         end
     end
+
     local classConfig
-    if overrideClassConfig['FullConfig'] ~= nil then
-        if overrideClassConfig['FullConfig'] then
-            RGMercsLogger.log_info("\agFull Replacement Config Loaded")
-            classConfig = {}
-            classConfig = overrideClassConfig
-            classConfig.IsCustom = customConfigLoaded
-            return classConfig
-        end
+
+    if overrideClassConfig.FullConfig == true then
+        RGMercsLogger.log_info("\agFull Replacement Config Loaded")
+        classConfig = overrideClassConfig
     else
         classConfig = ClassLoader.mergeTables(baseClassConfig, overrideClassConfig)
     end
+
     classConfig.IsCustom = customConfigLoaded
     return classConfig
 end
 
 function ClassLoader.writeCustomConfig(class)
-    -- Define file paths
-    local base_config_file = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.luaDir, class:lower())
-    local custom_config_file = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.configDir, class:lower())
-    local backup_config_file = string.format("%s/rgmercs/class_configs/BACKUP/%s_class_config_%s.lua", mq.configDir, class:lower(), os.date("%Y%m%d_%H%M%S"))
+    local className = assert(class, "ClassLoader.writeCustomConfig: class is required"):lower()
 
-    -- Backup the custom config file if one exists
-    local fileCustom = io.open(custom_config_file, "r")
+    local baseConfigFile = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.luaDir, className)
+    local customConfigFile = string.format("%s/rgmercs/class_configs/%s_class_config.lua", mq.configDir, className)
+    local backupConfigFile = string.format(
+        "%s/rgmercs/class_configs/BACKUP/%s_class_config_%s.lua",
+        mq.configDir,
+        className,
+        os.date("%Y%m%d_%H%M%S")
+    )
+
+    local fileCustom = io.open(customConfigFile, "r")
     if fileCustom then
-        mq.pickle(backup_config_file, {}) -- build the path so we don't get an error
+        mq.pickle(backupConfigFile, {}) -- ensure backup path exists
+
         local content = fileCustom:read("*all")
         fileCustom:close()
 
-        local fileBackup, err = io.open(backup_config_file, "w")
+        local fileBackup, backupErr = io.open(backupConfigFile, "w")
         if not fileBackup then
-            RGMercsLogger.log_error("Failed to Backup Custom Core Class Config: %s %s", backup_config_file, err)
+            RGMercsLogger.log_error("Failed to backup custom core class config: %s (%s)", backupConfigFile, tostring(backupErr))
             return
         end
 
@@ -61,38 +79,40 @@ function ClassLoader.writeCustomConfig(class)
         fileBackup:close()
     end
 
-    -- Load the default config file content
-    local file = io.open(base_config_file, "r")
+    local file, openErr = io.open(baseConfigFile, "r")
     if not file then
-        RGMercsLogger.log_error("Failed to Load Base Class Config: %s", base_config_file)
+        RGMercsLogger.log_error("Failed to load base class config: %s (%s)", baseConfigFile, tostring(openErr))
         return
     end
 
     local content = file:read("*all")
     file:close()
 
-    -- Find the location of the _author line and insert FullConfig
-    local updated_content = content:gsub("(_author%s*=%s*[%S%s]-\n)", "%1    FullConfig = true,\n")
-
-    -- Write the updated content to the custom config file
-    mq.pickle(custom_config_file, {}) -- incase the path isn't made yet
-    local custom_file, err = io.open(custom_config_file, "w")
-    if not custom_file then
-        RGMercsLogger.log_error("Failed to Write Custom Core Class Config: %s Error:", custom_config_file)
+    local updatedContent, replacements = content:gsub("(_author%s*=%s*[%S%s]-\n)", "%1    FullConfig = true,\n")
+    if replacements == 0 then
+        RGMercsLogger.log_error("Failed to inject FullConfig into base class config: %s", baseConfigFile)
         return
     end
 
-    custom_file:write(updated_content)
-    custom_file:close()
+    mq.pickle(customConfigFile, {}) -- ensure custom path exists
 
-    RGMercsLogger.log_info("Custom Core Class Config Written: %s", custom_config_file)
+    local customFile, writeErr = io.open(customConfigFile, "w")
+    if not customFile then
+        RGMercsLogger.log_error("Failed to write custom core class config: %s (%s)", customConfigFile, tostring(writeErr))
+        return
+    end
+
+    customFile:write(updatedContent)
+    customFile:close()
+
+    RGMercsLogger.log_info("Custom Core Class Config Written: %s", customConfigFile)
 end
 
 function ClassLoader.mergeTables(tblA, tblB)
     for k, v in pairs(tblB) do
         if type(v) == "table" then
-            if type(tblA[k] or false) == "table" then
-                ClassLoader.mergeTables(tblA[k] or {}, tblB[k] or {})
+            if type(tblA[k]) == "table" then
+                ClassLoader.mergeTables(tblA[k], v)
             else
                 tblA[k] = v
             end
@@ -100,6 +120,7 @@ function ClassLoader.mergeTables(tblA, tblB)
             tblA[k] = v
         end
     end
+
     return tblA
 end
 

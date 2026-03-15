@@ -543,7 +543,7 @@ function Ui.RenderAAOverlay()
                         end
                     end,
                     function()
-                        for _, entry in ipairs(Ui.TempSettings.SortedAAOverlay) do
+                        for _, entry in ipairs(Ui.TempSettings.SortedAAOverlay or {}) do
                             ImGui.PushID(string.format("##aa_overlay_table_entry_%s", entry.TableIndex))
                             for _, colData in ipairs(tableColumns) do
                                 ImGui.TableNextColumn()
@@ -747,7 +747,7 @@ function Ui.RenderMercsStatus(showPopout)
                 end
 
                 Ui.MultilineTooltipWithColors({
-                    { text = "State: ",                                          color = Colors.White,       padAfter = 4, },
+                    { text = "State: ",                                       color = Colors.White,       padAfter = 4, },
                     {
                         text = data.Data.State or "None",
                         color = data.Data.State == "Paused" and Colors.MainButtonPausedColor or
@@ -755,22 +755,22 @@ function Ui.RenderMercsStatus(showPopout)
                             Colors.MainDowntimeColor,
                         sameLine = true,
                     },
-                    { text = "AutoTarget: ",                                     color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.AutoTarget or "None",                     color = Colors.LightRed,    sameLine = true, },
-                    { text = "Assist: ",                                         color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.Assist or "None",                         color = Colors.Cyan,        sameLine = true, },
-                    { text = "Chase: ",                                          color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.Chase or "None",                          color = Colors.Cyan,        sameLine = true, },
-                    { text = "Level: ",                                          color = Colors.White,       padAfter = 4, },
-                    { text = tostring(data.Data.Level) or "0",                   color = Colors.Yellow,      sameLine = true, },
-                    { text = "Exp: ",                                            color = Colors.White,       padAfter = 4, },
-                    { text = string.format("%0.2f%%", data.Data.PctExp) or "0%", color = Colors.LightYellow, sameLine = true, },
-                    { text = "Unspent AA: ",                                     color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.UnSpentAA or "None",                      color = Colors.Orange,      sameLine = true, },
-                    { text = "Spent AA: ",                                       color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.SpentAA or "None",                        color = Colors.Orange,      sameLine = true, },
-                    { text = "Total AA: ",                                       color = Colors.White,       padAfter = 4, },
-                    { text = data.Data.TotalAA or "None",                        color = Colors.Orange,      sameLine = true, },
+                    { text = "AutoTarget: ",                                  color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.AutoTarget or "None",                  color = Colors.LightRed,    sameLine = true, },
+                    { text = "Assist: ",                                      color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.Assist or "None",                      color = Colors.Cyan,        sameLine = true, },
+                    { text = "Chase: ",                                       color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.Chase or "None",                       color = Colors.Cyan,        sameLine = true, },
+                    { text = "Level: ",                                       color = Colors.White,       padAfter = 4, },
+                    { text = tostring(data.Data.Level) or "0",                color = Colors.Yellow,      sameLine = true, },
+                    { text = "Exp: ",                                         color = Colors.White,       padAfter = 4, },
+                    { text = string.format("%0.2f%%", data.Data.PctExp or 0), color = Colors.LightYellow, sameLine = true, },
+                    { text = "Unspent AA: ",                                  color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.UnSpentAA or "None",                   color = Colors.Orange,      sameLine = true, },
+                    { text = "Spent AA: ",                                    color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.SpentAA or "None",                     color = Colors.Orange,      sameLine = true, },
+                    { text = "Total AA: ",                                    color = Colors.White,       padAfter = 4, },
+                    { text = data.Data.TotalAA or "None",                     color = Colors.Orange,      sameLine = true, },
                 })
             end,
 
@@ -1225,6 +1225,24 @@ function Ui.RenderMercsStatus(showPopout)
                         ImGui.PopStyleColor()
                     end
                 end
+            end,
+        },
+        {
+            name = 'Buff Slots',
+            flags = bit32.bor(ImGuiTableColumnFlags.WidthFixed, ImGuiTableColumnFlags.DefaultHide),
+            width = 15.0,
+            sort = function(mercs, a, b)
+                local data_a = mercs[a]
+                local data_b = mercs[b]
+                return data_a.Data.OpenBuffSlots or 0, data_b.Data.OpenBuffSlots or 0
+            end,
+            render = function(peer, data)
+                ImGui.PushStyleColor(ImGuiCol.Text,
+                    data.Data.OpenBuffSlots >= math.floor(data.Data.MaxBuffSlots * .6) and Colors.ConditionPassColor or
+                    data.Data.OpenBuffSlots >= math.floor(data.Data.MaxBuffSlots * .3) and Colors.ConditionMidColor or
+                    Colors.ConditionFailColor)
+                ImGui.Text("%d", data.Data.OpenBuffSlots or 0)
+                ImGui.PopStyleColor()
             end,
         },
     }
@@ -1801,7 +1819,7 @@ function Ui.RenderRotationTable(name, rotationTable, resolvedActionMap, rotation
             end
             ImGui.TableNextColumn()
             local changed = false
-            enabledRotationEntries[entry.name], changed = Ui.RenderOptionToggle(string.format("tggl_%d", idx), "",
+            enabledRotationEntries[entry.name], changed = Ui.RenderOptionToggle(string.format("rot_%s_tggl_%d", name, idx), "",
                 enabledRotationEntries[entry.name] == nil and true or enabledRotationEntries[entry.name])
             if changed then enabledRotationEntriesChanged = true end
             ImGui.TableNextColumn()
@@ -2457,11 +2475,17 @@ function Ui.RenderAnimatedPercentage(id, barPct, height, colLow, colMid, colHigh
     for i = 1, 9 do
         local tx = minX + (barW * (i / 10))
         local reached = tx <= (minX + fillWidth)
-        local a = reached and 0.14 or 0.07
+
+        drawList:AddLine(
+            ImVec2(tx - 1, minY + 1),
+            ImVec2(tx - 1, maxY - 1),
+            IM_COL32(0, 0, 0, math.floor((reached and 0.15 or 0.3) * 255)),
+            1.0
+        )
         drawList:AddLine(
             ImVec2(tx, minY + 1),
             ImVec2(tx, maxY - 1),
-            IM_COL32(255, 255, 255, math.floor(a * 255)),
+            IM_COL32(255, 255, 255, math.floor((reached and 0.3 or 0.15) * 255)),
             1.0
         )
     end
@@ -2597,6 +2621,7 @@ end
 function Ui.MarqueeButton(text, height, width)
     -- Delta time and font scale
     local dt = Ui.GetDeltaTime() -- replace with your delta time function
+    ---@diagnostic disable-next-line: undefined-field
     local scale = ImGui.GetIO().FontGlobalScale
 
     local draw_list = ImGui.GetWindowDrawList()
@@ -3712,7 +3737,7 @@ function Ui.AnimatedButton(id, text, size, callbackFn)
     end
 
     -- Animate scale
-    local scale = ImAnim.TweenFloat(id, ImHashStr(id .. "scale"), target_scale, 0.15, ImAnim.EasePreset(IamEaseType.OutBack), IamPolicy.Crossfade, dt)
+    local scale = ImAnim.TweenFloat(ImHashStr(id), ImHashStr(id .. "scale"), target_scale, 0.15, ImAnim.EasePreset(IamEaseType.OutBack), IamPolicy.Crossfade, dt)
 
     -- Animate color
     ImGui.GetStyleColorVec4(ImGuiCol.Button)
@@ -3720,7 +3745,8 @@ function Ui.AnimatedButton(id, text, size, callbackFn)
     local hover_color = ImGui.GetStyleColorVec4(ImGuiCol.ButtonHovered)
     local press_color = ImGui.GetStyleColorVec4(ImGuiCol.ButtonActive)
     local target_color = pressed and press_color or (hovered and hover_color or base_color)
-    local color = ImAnim.TweenColor(id, ImHashStr(id .. "color_id"), target_color, 0.2, ImAnim.EasePreset(IamEaseType.OutCubic), IamPolicy.Crossfade, IamColorSpace.OKLAB, dt)
+    local color = ImAnim.TweenColor(ImHashStr(id), ImHashStr(id .. "color_id"), target_color, 0.2, ImAnim.EasePreset(IamEaseType.OutCubic), IamPolicy.Crossfade, IamColorSpace.OKLAB,
+        dt)
 
     -- Draw scaled button
     local center = ImVec2(btn_pos.x + size.x * 0.5, btn_pos.y + size.y * 0.5)

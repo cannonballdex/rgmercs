@@ -1,26 +1,37 @@
-local mq          = require('mq')
+local mq = require('mq')
 local RGMercUtils = require("utils.rgmercs_utils")
+local RGMercsLogger = require("utils.rgmercs_logger")
+local RGMercConfig = require("utils.rgmercs_config")
+local RGMercModules = require("utils.rgmercs_modules")
 
-local Bind        = { _version = '0.1a', _name = "RGMercsBinds", _author = 'Derple', }
+local Bind = {
+    _version = '0.1a',
+    _name = "RGMercsBinds",
+    _author = 'Derple',
+}
 
-Bind.MainHandler  = function(cmd, ...)
-    if not cmd or cmd:len() == 0 then cmd = "help" end
+Bind.MainHandler = function(cmd, ...)
+    if not cmd or cmd:len() == 0 then
+        cmd = "help"
+    end
 
-    if RGMercsBinds.Handlers[cmd] then
-        return RGMercsBinds.Handlers[cmd].handler(...)
+    if Bind.Handlers[cmd] then
+        return Bind.Handlers[cmd].handler(...)
     end
 
     local processed = false
     local results = RGMercModules:ExecAll("HandleBind", cmd, ...)
 
-    for _, r in pairs(results) do processed = processed or r end
+    for _, r in pairs(results) do
+        processed = processed or r
+    end
 
     if not processed then
         RGMercsLogger.log_warn("\ayWarning:\ay '\at%s\ay' is not a valid command", cmd)
     end
 end
 
-Bind.Handlers     = {
+Bind.Handlers = {
     ['set'] = {
         usage = "/rgl set [show | <setting> <value>]",
         about = "Show All Settings or Set a specific RGMercs setting",
@@ -75,15 +86,20 @@ Bind.Handlers     = {
         handler = function(targetId)
             RGMercUtils.ForceBurnTargetID = tonumber(targetId) or mq.TLO.Target.ID()
             local burnNowSpawn = mq.TLO.Spawn(RGMercUtils.ForceBurnTargetID)
-            RGMercsLogger.log_info("\aoForcing Burn Now: \at%s \aw(\am%d\aw)", burnNowSpawn and (burnNowSpawn() and burnNowSpawn.CleanName() or "None") or "None",
-                RGMercUtils.ForceBurnTargetID)
+            RGMercsLogger.log_info(
+                "\aoForcing Burn Now: \at%s \aw(\am%d\aw)",
+                burnNowSpawn and (burnNowSpawn() and burnNowSpawn.CleanName() or "None") or "None",
+                RGMercUtils.ForceBurnTargetID
+            )
         end,
     },
     ['addoa'] = {
         usage = "/rgl addoa <Name>",
         about = "Adds <Name> to your Outside Assist List, if no name is given, Target name is used",
         handler = function(name)
-            if not name then name = mq.TLO.Target.CleanName() end
+            if not name then
+                name = mq.TLO.Target.CleanName()
+            end
             if not name then
                 RGMercsLogger.log_error("/rgl addoa - no name given and no valid target exists!")
                 return
@@ -96,7 +112,9 @@ Bind.Handlers     = {
         usage = "/rgl deloa <Name>",
         about = "Deletes <Name> from your Outside Assist List, if no name is given, Target name is used",
         handler = function(name)
-            if not name then name = mq.TLO.Target.CleanName() end
+            if not name then
+                name = mq.TLO.Target.CleanName()
+            end
             if not name then
                 RGMercsLogger.log_error("/rgl deloa - no name given and no valid target exists!")
                 return
@@ -124,7 +142,7 @@ Bind.Handlers     = {
         usage = "/rgl qsay <text>",
         about = "All RGMercs will target your target and say your <text>",
         handler = function(...)
-            local allText = { ..., }
+            local allText = { ... }
             local text
             for _, t in ipairs(allText) do
                 text = (text and text .. " " or "") .. t
@@ -216,10 +234,15 @@ Bind.Handlers     = {
         usage = "/rgl circle <radius>",
         about = "Will cause all of your Group RGMercs form a circle around you of radius.",
         handler = function(radius)
-            if not radius then radius = 15 end
+            if not radius then
+                radius = 15
+            end
 
             local groupCount = mq.TLO.Group.Members()
-            if groupCount < 1 then return end
+            if groupCount < 1 then
+                return
+            end
+
             local multiplier = 90
 
             if groupCount == 2 then
@@ -259,11 +282,16 @@ Bind.Handlers     = {
     },
     ['help'] = {
         handler = function()
-            printf("RGMercs [%s/%s] by: %s running for %s (%s)", RGMercConfig._version, RGMercConfig._subVersion, RGMercConfig._author,
+            printf(
+                "RGMercs [%s/%s] by: %s running for %s (%s)",
+                RGMercConfig._version,
+                RGMercConfig._subVersion,
+                RGMercConfig._author,
                 RGMercConfig.Globals.CurLoadedChar,
-                RGMercConfig.Globals.CurLoadedClass)
+                RGMercConfig.Globals.CurLoadedClass
+            )
             printf("\n\agCore \awCommand Help\aw\n------------\n")
-            for c, d in pairs(RGMercsBinds.Handlers) do
+            for c, d in pairs(Bind.Handlers) do
                 if c ~= "help" then
                     printf("\am%-20s\aw - \atUsage: \ay%-30s\aw | %s", c, d.usage, d.about)
                 end

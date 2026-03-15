@@ -1,6 +1,17 @@
 --- RGMerc Utils Functions.
-local mq                       = require('mq')
-local Set                      = require('mq.set')
+local mq                        = require('mq')
+local Set                       = require('mq.set')
+local RGMercConfig              = require("utils.rgmercs_config")
+local RGMercModules             = require("utils.rgmercs_modules")
+local RGMercsLogger             = require("utils.rgmercs_logger")
+local RGMercNameds              = require('rgmercs_named')
+
+---@diagnostic disable-next-line: undefined-global
+local DanNet = DanNet
+
+---@diagnostic disable-next-line: undefined-global
+local RGMercIcons = RGMercIcons
+
 local animSpellGems            = mq.FindTextureAnimation('A_SpellGems')
 local ICON_SIZE                = 20
 
@@ -419,8 +430,11 @@ end
 --- @return boolean Returns true if the AA ability is ready, false otherwise.
 function RGMercUtils.PCAAReady(aaName)
     local spell = mq.TLO.Me.AltAbility(aaName).Spell
-    return RGMercUtils.AAReady(aaName) and mq.TLO.Me.CurrentMana() >= (spell.Mana() or 0) or
-        mq.TLO.Me.CurrentEndurance() >= (spell.EnduranceCost() or 0)
+    return RGMercUtils.AAReady(aaName) and
+        (
+            mq.TLO.Me.CurrentMana() >= (spell.Mana() or 0) and
+            mq.TLO.Me.CurrentEndurance() >= (spell.EnduranceCost() or 0)
+        )
 end
 
 --- Checks if an PC spell is ready to be cast on the target NPC.
@@ -854,7 +868,7 @@ function RGMercUtils.UseAA(aaName, targetId)
         return false
     end
 
-    if not mq.TLO.Me.AltAbilityReady(aaName) then
+    if not mq.TLO.Me.AltAbilityReady(aaName)() then
         RGMercsLogger.log_verbose("\ayUseAA(): Ability %s is not ready!", aaName)
         return false
     end
@@ -970,7 +984,7 @@ function RGMercUtils.UseItem(itemName, targetId)
 
     RGMercUtils.ActionPrep()
 
-    if not me.ItemReady(itemName) then
+    if not me.ItemReady(itemName)() then
         RGMercsLogger.log_debug("\awUseItem(\ag%s\aw): \arTried to use item - but it is not ready!", itemName)
         return false
     end
@@ -1112,7 +1126,7 @@ function RGMercUtils.UseDisc(discSpell, targetId)
 
             -- Is this even needed?
             if RGMercUtils.IsDisc(discSpell.RankName.Name()) then
-                mq.delay(20, function() return me.ActiveDisc.ID() end)
+                mq.delay(20, function() return (me.ActiveDisc.ID() or 0) > 0 end)
             end
 
             RGMercsLogger.log_debug("\aw Cast >>> \ag %s", discSpell.RankName.Name())
@@ -1831,24 +1845,37 @@ function RGMercUtils.MakeValidSetting(module, setting, value)
         defaultConfig = RGMercModules:ExecModule(module, "GetDefaultSettings")
     end
 
-    if type(defaultConfig[setting].Default) == 'number' then
+    if not defaultConfig or not defaultConfig[setting] then
+        RGMercsLogger.log_error("MakeValidSetting(): setting '%s' not found for module '%s'", tostring(setting), tostring(module))
+        return nil
+    end
+
+    local settingDef = defaultConfig[setting]
+
+    if type(settingDef.Default) == 'number' then
         value = tonumber(value)
-        if value > (defaultConfig[setting].Max or 999) or value < (defaultConfig[setting].Min or 0) then
+        if value == nil then
+            RGMercsLogger.log_info("\ayError: %s is not a valid numeric setting for %s.", tostring(value), setting)
+            local _, update = RGMercConfig:GetUsageText(setting, true, defaultConfig)
+            RGMercsLogger.log_info(update)
+            return nil
+        end
+
+        if value > (settingDef.Max or 999) or value < (settingDef.Min or 0) then
             RGMercsLogger.log_info("\ayError: %s is not a valid setting for %s.", value, setting)
-            local _, update = RGMercConfig:GetUsageText(setting, true, defaultConfig[setting])
+            local _, update = RGMercConfig:GetUsageText(setting, true, defaultConfig)
             RGMercsLogger.log_info(update)
             return nil
         end
 
         return value
-    elseif type(defaultConfig[setting].Default) == 'boolean' then
+    elseif type(settingDef.Default) == 'boolean' then
         local boolValue = false
         if value == true or value == "true" or value == "on" or (tonumber(value) or 0) >= 1 then
             boolValue = true
         end
-
         return boolValue
-    elseif type(defaultConfig[setting].Default) == 'string' then
+    elseif type(settingDef.Default) == 'string' then
         return value
     end
 
@@ -1873,9 +1900,6 @@ function RGMercUtils.MakeValidSettingName(setting)
     return "None", "None"
 end
 
----Sets a setting from either in global or a module setting table.
---- @param setting string: The name of the setting to be updated.
---- @param value any: The new value to assign to the setting.
 function RGMercUtils.SetSetting(setting, value)
     local defaultConfig = RGMercConfig.DefaultConfig
     local settingModuleName = "Core"
@@ -1884,25 +1908,50 @@ function RGMercUtils.SetSetting(setting, value)
     settingModuleName, setting = RGMercUtils.MakeValidSettingName(setting)
 
     if settingModuleName == "Core" then
-        local cleanValue = RGMercUtils.MakeValidSetting("Core", setting, value)
+        if not defaultConfig or not defaultConfig[setting] then
+            RGMercsLogger.log_error("SetSetting(): Core defaultConfig missing setting '%s'", tostring(setting))
+            return
+        end
+
         _, beforeUpdate = RGMercConfig:GetUsageText(setting, false, defaultConfig)
+
+        local cleanValue = RGMercUtils.MakeValidSetting("Core", setting, value)
         if cleanValue ~= nil then
             RGMercConfig:GetSettings()[setting] = cleanValue
             RGMercConfig:SaveSettings(false)
+        else
+            return
         end
     elseif settingModuleName ~= "None" then
         local settings = RGMercModules:ExecModule(settingModuleName, "GetSettings")
+        if not settings then
+            RGMercsLogger.log_error("SetSetting(): settings table missing for module '%s'", tostring(settingModuleName))
+            return
+        end
+
         if settings[setting] ~= nil then
             defaultConfig = RGMercModules:ExecModule(settingModuleName, "GetDefaultSettings")
+
+            if not defaultConfig or not defaultConfig[setting] then
+                RGMercsLogger.log_error("SetSetting(): defaultConfig missing setting '%s' for module '%s'", tostring(setting), tostring(settingModuleName))
+                return
+            end
+
             _, beforeUpdate = RGMercConfig:GetUsageText(setting, false, defaultConfig)
+
             local cleanValue = RGMercUtils.MakeValidSetting(settingModuleName, setting, value)
             if cleanValue ~= nil then
                 settings[setting] = cleanValue
                 RGMercModules:ExecModule(settingModuleName, "SaveSettings", false)
+            else
+                return
             end
+        else
+            RGMercsLogger.log_error("SetSetting(): setting '%s' not found in module '%s' settings table", tostring(setting), tostring(settingModuleName))
+            return
         end
     else
-        RGMercsLogger.log_error("Setting %s was not found!", setting)
+        RGMercsLogger.log_error("Setting %s was not found!", tostring(setting))
         return
     end
 
@@ -2301,7 +2350,7 @@ end
 --- @param target MQTarget|MQSpawn? The target from which to extract the clean name.
 --- @return string The clean name of the target.
 function RGMercUtils.GetTargetCleanName(target)
-    return (target and target.Name() or (mq.TLO.Target.CleanName() or ""))
+    return (target and target.CleanName() or (mq.TLO.Target.CleanName() or ""))
 end
 
 --- Retrieves the ID of the given target.
@@ -2363,53 +2412,36 @@ function RGMercUtils.GetGroupMainAssistName()
     return (mq.TLO.Group.MainAssist.CleanName() or "")
 end
 
---- Checks if a given mode is active.
---- @param mode string The mode to check.
---- @return boolean Returns true if the mode is active, false otherwise.
 function RGMercUtils.IsModeActive(mode)
-    return RGMercModules:ExecModule("Class", "IsModeActive", mode)
+    return RGMercModules:ExecModule("Class", "IsModeActive", mode) == true
 end
 
---- Checks if the character is currently tanking.
---- @return boolean True if the character is tanking, false otherwise.
 function RGMercUtils.IsTanking()
-    return RGMercModules:ExecModule("Class", "IsTanking")
+    return RGMercModules:ExecModule("Class", "IsTanking") == true
 end
 
---- Checks if the current character is performing a healing action.
---- @return boolean True if the character is healing, false otherwise.
 function RGMercUtils.IsHealing()
-    return RGMercModules:ExecModule("Class", "IsHealing")
+    return RGMercModules:ExecModule("Class", "IsHealing") == true
 end
 
---- Checks if the curing process is active.
---- @return boolean True if curing is active, false otherwise.
 function RGMercUtils.IsCuring()
-    return RGMercModules:ExecModule("Class", "IsCuring")
+    return RGMercModules:ExecModule("Class", "IsCuring") == true
 end
 
---- Checks if the character is currently mezzing.
---- @return boolean True if the character is mezzing, false otherwise.
 function RGMercUtils.IsMezzing()
-    return RGMercModules:ExecModule("Class", "IsMezzing") and RGMercUtils.GetSetting('MezOn')
+    return RGMercModules:ExecModule("Class", "IsMezzing") == true and RGMercUtils.GetSetting('MezOn') == true
 end
 
---- Checks if the character is currently charming.
---- @return boolean True if the character is charming, false otherwise.
 function RGMercUtils.IsCharming()
-    return RGMercModules:ExecModule("Class", "IsCharming")
+    return RGMercModules:ExecModule("Class", "IsCharming") == true
 end
 
---- Determines if the character can perform a mez (mesmerize) action.
---- @return boolean True if the character can mez, false otherwise.
 function RGMercUtils.CanMez()
-    return RGMercModules:ExecModule("Class", "CanMez")
+    return RGMercModules:ExecModule("Class", "CanMez") == true
 end
 
---- Checks if the character can charm.
---- @return boolean True if the character can charm, false otherwise.
 function RGMercUtils.CanCharm()
-    return RGMercModules:ExecModule("Class", "CanCharm")
+    return RGMercModules:ExecModule("Class", "CanCharm") == true
 end
 
 --- Checks if the burn condition is met for RGMercs.
@@ -2529,13 +2561,11 @@ function RGMercUtils.NavAroundCircle(target, radius)
     -- that we can navigate to, and is in LoS
 
     for steps = 1, 36 do
-        -- EQ's x coordinates have an opposite number line. Positive x values are to the left of 0,
-        -- negative values are to the right of 0, so we need to - our radius.
-        -- EQ's unit circle starts 0 degrees at the top of the unit circle instead of the right, so
-        -- the below still finds coordinates rotated counter-clockwise 90 degrees.
+        local try_degrees = (tmp_degrees + ((steps - 1) * 10)) % 360
+        local radians = math.rad(try_degrees)
 
-        tgt_x = spawn_x + (-1 * radius * math.cos(tmp_degrees))
-        tgt_y = spawn_y + (radius * math.sin(tmp_degrees))
+        tgt_x = spawn_x + (-1 * radius * math.cos(radians))
+        tgt_y = spawn_y + (radius * math.sin(radians))
 
         RGMercsLogger.log_debug("\aw%d\ax tmp_degrees \aw%d\ax tgt_x \aw%0.2f\ax tgt_y \aw%02.f\ax", steps, tmp_degrees,
             tgt_x, tgt_y)
@@ -2828,7 +2858,7 @@ end
 function RGMercUtils.DebuffSong(songSpell)
     if not songSpell or not songSpell() then return false end
     local me = mq.TLO.Me
-    local res = me.Gem(songSpell.Name()) and not RGMercUtils.TargetHasBuff(songSpell)
+    local res = me.Gem(songSpell.Name())() ~= nil and not RGMercUtils.TargetHasBuff(songSpell)
     RGMercsLogger.log_verbose("\ayBuffSong(%s) => memed(%s), targetHas(%s) --> result(%s)", songSpell.Name(),
         RGMercUtils.BoolToColorString(me.Gem(songSpell.Name())() ~= nil),
         RGMercUtils.BoolToColorString(RGMercUtils.TargetHasBuff(songSpell)), RGMercUtils.BoolToColorString(res))
@@ -2903,7 +2933,7 @@ end
 ---
 --- @return boolean True if successful
 function RGMercUtils.UseOrigin()
-    if mq.TLO.FindItem("=Drunkard's Stein").ID() or 0 > 0 and mq.TLO.Me.ItemReady("=Drunkard's Stein") then
+    if (mq.TLO.FindItem("=Drunkard's Stein").ID() or 0) > 0 and mq.TLO.Me.ItemReady("=Drunkard's Stein")() then
         RGMercsLogger.log_debug("\ag--\atFound a Drunkard's Stein, using that to get to PoK\ag--")
         RGMercUtils.UseItem("Drunkard's Stein", mq.TLO.Me.ID())
         return true
@@ -3191,7 +3221,7 @@ end
 --- @param spawn MQSpawn The spawn object to check.
 --- @return boolean True if the spawn is named, false otherwise.
 function RGMercUtils.IsNamed(spawn)
-    if not spawn() then return false end
+    if not spawn or not spawn() then return false end
     RGMercUtils.RefreshNamedCache()
 
     if RGMercUtils.NamedList[spawn.Name()] or RGMercUtils.NamedList[spawn.CleanName()] then return true end
@@ -3350,7 +3380,7 @@ function RGMercUtils.MATargetScan(radius, zradius)
                         return xtSpawn.ID() or 0
                     end
 
-                    if (xtSpawn.Body.Name() or "none"):lower() == "Giant" then
+                    if (xtSpawn.Body.Name() or "none"):lower() == "giant" then
                         return xtSpawn.ID() or 0
                     end
 
@@ -3533,7 +3563,7 @@ function RGMercUtils.FindTarget(validateFn)
                         assistTarget.CleanName() or "None", queryResult)
                 end
             else
-                local assistSpawn = RGMercConfig.Globals.GetMainAssistSpawn()
+                local assistSpawn = RGMercUtils.GetMainAssistSpawn()
                 if assistSpawn and assistSpawn() then
                     RGMercUtils.SetTarget(assistSpawn.ID(), true)
                     assistTarget = mq.TLO.Me.TargetOfTarget
@@ -4628,7 +4658,7 @@ function RGMercUtils.RenderForceTargetList(showPopout)
         RGMercConfig.Globals.ForceTargetID = 0
     end
 
-    if ImGui.BeginTable("XTargs", 5, ImGuiTableFlags.None + ImGuiTableFlags.Borders + ImGuiTableFlags.Resizable) then
+    if ImGui.BeginTable("XTargs", 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.Resizable)) then
         ImGui.PushStyleColor(ImGuiCol.Text, 1.0, 0.0, 1.0, 1)
         ImGui.TableSetupColumn('FT', (ImGuiTableColumnFlags.WidthFixed), 16.0)
         ImGui.TableSetupColumn('Name', (ImGuiTableColumnFlags.WidthFixed), ImGui.GetWindowWidth() - 300)

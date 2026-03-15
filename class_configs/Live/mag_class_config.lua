@@ -1,15 +1,15 @@
-local mq          = require('mq')
-local Config      = require('utils.config')
-local Globals     = require("utils.globals")
-local Core        = require("utils.core")
-local Targeting   = require("utils.targeting")
-local Casting     = require("utils.casting")
-local Comms       = require("utils.comms")
+local mq        = require('mq')
+local Config    = require('utils.config')
+local Globals   = require("utils.globals")
+local Core      = require("utils.core")
+local Targeting = require("utils.targeting")
+local Casting   = require("utils.casting")
+local Comms     = require("utils.comms")
 local ItemManager = require("utils.item_manager")
-local DanNet      = require('lib.dannet.helpers')
-local Logger      = require("utils.logger")
+local DanNet    = require('lib.dannet.helpers')
+local Logger    = require("utils.logger")
 
-_ClassConfig      = {
+_ClassConfig    = {
     _version              = "1.2 - Live",
     _author               = "Derple, Morisato, Algar",
     ['ModeChecks']        = {
@@ -311,7 +311,7 @@ _ClassConfig      = {
             "Lesser Shielding",
             "Minor Shielding",
         },
-        ['SkinDS'] = {
+        ['ShortDurDmgShield'] = {
             -- Use at the start of the DPS loop
             "Searing Skin XI",
             "Boiling Skin",
@@ -887,7 +887,7 @@ _ClassConfig      = {
         },
         { --Pet Buffs if we have one, timer because we don't need to constantly check this. Timer lowered for mage due to high volume of actions
             name = 'PetBuff',
-            timer = 10,
+            timer = 30,
             targetId = function(self) return mq.TLO.Me.Pet.ID() > 0 and { mq.TLO.Me.Pet.ID(), } or {} end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and mq.TLO.Me.Pet.ID() > 0 and Casting.OkayToPetBuff()
@@ -895,9 +895,10 @@ _ClassConfig      = {
         },
         {
             name = 'GroupBuff',
-            state = 1,
-            steps = 1,
-            targetId = function(self) return Casting.GetBuffableIDs() end,
+            timer = 60, -- only run every 60 seconds top.
+            targetId = function(self)
+                return Casting.GetBuffableGroupIDs()
+            end,
             cond = function(self, combat_state)
                 return combat_state == "Downtime" and Casting.OkayToBuff()
             end,
@@ -947,17 +948,7 @@ _ClassConfig      = {
             steps = 1,
             targetId = function(self) return Targeting.CheckForAutoTargetID() end,
             cond = function(self, combat_state)
-                return combat_state == "Combat"
-            end,
-        },
-        {
-            name = 'SkinDS',
-            state = 1,
-            steps = 1,
-            load_cond = function(self) return Config:GetSetting('DoSkinDS') and self:GetResolvedActionMapItem('SkinDS') end,
-            targetId = function(self) return { Core.GetMainAssistId(), } or {} end,
-            cond = function(self, combat_state)
-                return combat_state == "Combat"
+                return combat_state == "Combat" and mq.TLO.Me.SpellInCooldown()
             end,
         },
         {
@@ -1574,7 +1565,7 @@ end
                 end,
             },
             {
-                name = "SkinDS",
+                name = "ShortDurDmgShield",
                 type = "Spell",
                 cond = function(self, spell)
                     return Casting.PetBuffCheck(spell)
@@ -1902,16 +1893,6 @@ end
                 end,
             },
         },
-        ['SkinDS'] = {
-            {
-                name = "SkinDS",
-                type = "Spell",
-                cond = function(self, spell, target)
-                    if not Casting.CastReady(spell) then return false end
-                    return Casting.GroupBuffCheck(spell, target, false, true)
-                end,
-            },
-        },
     },
     ['Spells']            = {
         {
@@ -1949,7 +1930,6 @@ end
                 { name = "TwinCast", },
                 { name = "MaloDebuff",       cond = function(self) return Config:GetSetting('DoMalo') and not Casting.CanUseAA("Malaise") end, },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -1959,7 +1939,6 @@ end
                 { name = "GroupCotH", },
                 { name = "ManaRodSummon", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -1968,7 +1947,6 @@ end
             spells = {
                 { name = "FireOrbSummon", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -1979,7 +1957,6 @@ end
                 { name = "PetManaNuke", },
                 { name = "PetHealSpell", },
                 { name = "SingleCotH",       cond = function() return not Casting.CanUseAA('Call of the Hero') end, },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -1989,7 +1966,6 @@ end
             spells = {
                 { name = "GatherMana", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -1999,7 +1975,6 @@ end
             spells = {
                 { name = "EarthPetItemSummon", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",             cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -2009,7 +1984,6 @@ end
             spells = {
                 { name = "FirePetItemSummon", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",            cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -2019,7 +1993,6 @@ end
             spells = {
                 { name = "SelfManaRodSummon", },
                 { name = "PetHealSpell", },
-                { name = "SkinDS",            cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -2028,7 +2001,6 @@ end
             cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
             spells = {
                 { name = "PetHealSpell", },
-                { name = "SkinDS",           cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "LongDurDmgShield", },
             },
         },
@@ -2036,7 +2008,6 @@ end
             gem = 14,
             cond = function(self, gem) return mq.TLO.Me.NumGems() >= gem end,
             spells = {
-                { name = "SkinDS",       cond = function(self) return Config:GetSetting('DoSkinDS') end, },
                 { name = "PetHealSpell", },
             },
         },
@@ -2256,15 +2227,6 @@ end
             Min = 1,
             Max = 6,
             ConfigType = "Advanced",
-        },
-        ['DoSkinDS']       = {
-            DisplayName = "Use Skin DS",
-            Group = "Abilities",
-            Header = "Buffs",
-            Category = "Group",
-            Tooltip = "Use your short duration damage shield (Skin line) on the MA during combat.",
-            RequiresLoadoutChange = true,
-            Default = false,
         },
     },
     ['ClassFAQ']          = {

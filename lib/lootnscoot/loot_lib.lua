@@ -126,7 +126,6 @@ local Files            = require("utils.files")
 local Modules          = require("utils.modules")
 local SettingsFile     = mq.configDir .. '/LootNScoot_' .. eqServer .. '_' .. Config.Globals.CurLoadedChar .. '.ini'
 local LootFile         = mq.configDir .. '/Loot.ini'
-local imported         = true
 local lootDBUpdateFile = mq.configDir .. '/DB_Updated_' .. eqServer .. '.lua'
 -- Public default settings, also read in from Loot.ini [Settings] section
 local loot             = {
@@ -353,9 +352,10 @@ function loot.loadSettings()
     loot.GlobalItems = {}
     loot.NormalItemsClasses = {}
     loot.GlobalItemsClasses = {}
+
     local needDBUpdate = false
     local needSave = false
-    local tmpSettings = loot.load(SettingsFile, 'Settings')
+    local tmpSettings = loot.load(SettingsFile, 'Settings') or {}
 
     -- check if the DB structure needs updating
     if not Files.file_exists(lootDBUpdateFile) then
@@ -364,7 +364,7 @@ function loot.loadSettings()
         needSave = true
     else
         local tmp = dofile(lootDBUpdateFile)
-        if tmp.version < version then
+        if not tmp or (tmp.version or 0) < version then
             needDBUpdate = true
             tmpSettings.Version = version
             needSave = true
@@ -379,83 +379,89 @@ function loot.loadSettings()
         Logger.log_info("Loot Rules Database found, loading it now.")
     end
 
-    if not needDBUpdate then
-        -- Create the database and its table if it doesn't exist
-        local db = SQLite3.open(ItemsDB)
-        db:exec([[
-                CREATE TABLE IF NOT EXISTS Global_Rules (
-                    "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
-                    "item_rule" TEXT NOT NULL,
-                    "item_classes" TEXT
-                );
-                    CREATE TABLE IF NOT EXISTS Normal_Rules (
-                    "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
-                    "item_rule" TEXT NOT NULL,
-                    "item_classes" TEXT
-                );
-            ]])
-        db:close()
-    else -- DB needs to be updated
-        local db = SQLite3.open(ItemsDB)
-        db:exec([[
-                CREATE TABLE IF NOT EXISTS my_table_copy(
-                    "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
-                    "item_rule" TEXT NOT NULL,
-                    "item_classes" TEXT
-                );
-                INSERT INTO my_table_copy (item_name,item_rule,item_classes)
-                    SELECT item_name, item_rule, item_classes FROM Global_Rules;
-                DROP TABLE Global_Rules;
-                ALTER TABLE my_table_copy RENAME TO Global_Rules;
+    local db = SQLite3.open(ItemsDB)
 
-                CREATE TABLE IF NOT EXISTS my_table_copy(
-                    "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
-                    "item_rule" TEXT NOT NULL,
-                    "item_classes" TEXT
-                );
-                INSERT INTO my_table_copy (item_name,item_rule,item_classes)
-                    SELECT item_name, item_rule, item_classes FROM Global_Rules;
-                DROP TABLE Global_Rules;
-                ALTER TABLE my_table_copy RENAME TO Global_Rules;
-                );
-            ]])
-        db:close()
-        mq.pickle(lootDBUpdateFile, { version = 3, })
-        RGMercsLogger.log_info("DB Version less than %s, Updating it now.", version)
+    if not needDBUpdate then
+        -- Create the database tables if they don't exist
+        db:exec([[
+            CREATE TABLE IF NOT EXISTS Global_Rules (
+                "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
+                "item_rule" TEXT NOT NULL,
+                "item_classes" TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS Normal_Rules (
+                "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
+                "item_rule" TEXT NOT NULL,
+                "item_classes" TEXT
+            );
+        ]])
+    else
+        -- Rebuild Global_Rules
+        db:exec([[
+            DROP TABLE IF EXISTS my_table_copy;
+            CREATE TABLE my_table_copy (
+                "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
+                "item_rule" TEXT NOT NULL,
+                "item_classes" TEXT
+            );
+            INSERT INTO my_table_copy (item_name, item_rule, item_classes)
+                SELECT item_name, item_rule, item_classes FROM Global_Rules;
+            DROP TABLE Global_Rules;
+            ALTER TABLE my_table_copy RENAME TO Global_Rules;
+        ]])
+
+        -- Rebuild Normal_Rules
+        db:exec([[
+            DROP TABLE IF EXISTS my_table_copy;
+            CREATE TABLE my_table_copy (
+                "item_name" TEXT PRIMARY KEY NOT NULL UNIQUE,
+                "item_rule" TEXT NOT NULL,
+                "item_classes" TEXT
+            );
+            INSERT INTO my_table_copy (item_name, item_rule, item_classes)
+                SELECT item_name, item_rule, item_classes FROM Normal_Rules;
+            DROP TABLE Normal_Rules;
+            ALTER TABLE my_table_copy RENAME TO Normal_Rules;
+        ]])
+
+        mq.pickle(lootDBUpdateFile, { version = version })
+        Logger.log_info("DB Version less than %s, updating it now.", version)
         needDBUpdate = false
     end
 
     -- process the loaded data
-    local db = SQLite3.open(ItemsDB)
     local stmt = db:prepare("SELECT * FROM Global_Rules")
     for row in stmt:nrows() do
         loot.GlobalItems[row.item_name] = row.item_rule
         loot.GlobalItemsClasses[row.item_name] = row.item_classes ~= nil and row.item_classes or 'All'
     end
     stmt:finalize()
+
     stmt = db:prepare("SELECT * FROM Normal_Rules")
     for row in stmt:nrows() do
         loot.NormalItems[row.item_name] = row.item_rule
         loot.NormalItemsClasses[row.item_name] = row.item_classes ~= nil and row.item_classes or 'All'
     end
     stmt:finalize()
+
     db:close()
 
     -- process settings file
-
     for k, v in pairs(loot.Settings) do
         if tmpSettings[k] == nil then
-            tmpSettings[k] = loot.Settings[k]
+            tmpSettings[k] = v
             needSave = true
         end
     end
 
-    tmpCmd = loot.Settings.GroupChannel or 'dgae'
-    if tmpCmd == string.find(tmpCmd, 'dg') then
+    local tmpCmd = tmpSettings.GroupChannel or 'dgae'
+    if string.find(tmpCmd, 'dg', 1, true) == 1 then
         tmpCmd = '/' .. tmpCmd
-    elseif tmpCmd == string.find(tmpCmd, 'bc') then
+    elseif string.find(tmpCmd, 'bc', 1, true) == 1 then
         tmpCmd = '/' .. tmpCmd .. ' /'
     end
+
     shouldLootActions.Destroy = loot.Settings.DoDestroy
     shouldLootActions.Tribute = loot.Settings.TributeKeep
     loot.BuyItems = loot.load(SettingsFile, 'BuyItems')
@@ -1405,7 +1411,7 @@ function loot.bankItem(itemName, bag, slot)
     else
         Core.DoCmd('/shift /itemnotify in pack%s %s leftmouseup', bag, slot)
     end
-    mq.delay(100, function() return mq.TLO.Cursor() end)
+    mq.delay(1000, function() return mq.TLO.Cursor() == nil end)
     Core.DoCmd('/notify BigBankWnd BIGB_AutoButton leftmouseup')
     mq.delay(100, function() return not mq.TLO.Cursor() end)
 end
@@ -1416,7 +1422,7 @@ function loot.eventForage()
     if not loot.Settings.LootForage then return end
     Logger.log_debug('Enter eventForage')
     -- allow time for item to be on cursor incase message is faster or something?
-    mq.delay(1000, function() return mq.TLO.Cursor() end)
+    mq.delay(1000, function() return mq.TLO.Cursor() == nil end)
     -- there may be more than one item on cursor so go until its cleared
     while mq.TLO.Cursor() do
         local cursorItem = mq.TLO.Cursor
