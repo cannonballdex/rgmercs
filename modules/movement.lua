@@ -675,8 +675,15 @@ function Module:GiveTime(combat_state)
         end
 
         if Config.ShouldMount() then
-            Logger.log_debug("\ayMounting...")
-            Casting.UseItem(Config:GetSetting('MountItem'), mq.TLO.Me.ID())
+            if mq.TLO.Me.Moving() then
+                self:RunCmd('/stop')
+                mq.delay(1000, function() return not mq.TLO.Me.Moving() end)
+            end
+
+            if not mq.TLO.Me.Moving() then
+                Logger.log_debug("\ayMounting...")
+                Casting.UseItem(Config:GetSetting('MountItem'), mq.TLO.Me.ID())
+            end
         end
 
         if Config.ShouldDismount() then
