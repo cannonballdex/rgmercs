@@ -1239,6 +1239,9 @@ _ClassConfig    = {
 if tostring(mq.TLO.Me.Inventory('32').ID() or "") ~= '177689' then
     print('\ayYou need to place the Weapon Pack in the bottom right slot of your inventory')
     print('\aySorry for the mess about to be made of your inventory')
+    if mq.TLO.Lua.Script('cauldron').Status() == "RUNNING" then
+        mq.cmd('/lua pause cauldron')
+    end
     mq.delay(2000)
     mq.cmd('/itemnotify 32 leftmouseup')
     if mq.TLO.Window("QuantityWnd").Open() then
@@ -1257,6 +1260,10 @@ if tostring(mq.TLO.Me.Inventory('32').ID() or "") ~= '177689' then
             mq.delay(50) -- small delay between clicks
         end
         attempts = attempts + 1
+    end
+
+    if mq.TLO.Lua.Script('cauldron').Status() == "PAUSED" then
+        mq.cmd('/lua pause cauldron')
     end
 
     if (mq.TLO.Cursor.ID() or 0) > 0 then
