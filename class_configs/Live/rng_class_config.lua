@@ -1646,12 +1646,19 @@ local _ClassConfig = {
                 --- the distance of 200 could be further refined by checking actual distances based off range + ammo distance if desired.
                 local tooFar = useChaseDistance and targetDistance > chaseDistance or targetDistance > 75
 
-                Logger.log_verbose("Custom Ranger combatNav engaged. TargetDistance: %d, LOS:%s, ChaseDistance: %d, forceMove: %s, tooClose: %s, tooFar: %s", targetDistance,
-                    mq.TLO.Target.LineOfSight(), chaseDistance, Strings.BoolToColorString(forceMove), Strings.BoolToColorString(tooClose), Strings.BoolToColorString(tooFar))
+                local hasLineOfSight = mq.TLO.Target.LineOfSight()
+                local targetDistanceZ = mq.TLO.Target.DistanceZ() or 0
+                local badZ = math.abs(targetDistanceZ) > 20
+                local badDist = targetDistance < 5
 
-                if forceMove and mq.TLO.Target.LineOfSight() then
+                Logger.log_verbose("Custom Ranger combatNav engaged. TargetDistance: %d, DistZ: %d, LOS:%s, ChaseDistance: %d, forceMove: %s, tooClose: %s, tooFar: %s, badZ: %s, badDist: %s", targetDistance,
+                    targetDistanceZ, hasLineOfSight, chaseDistance, Strings.BoolToColorString(forceMove), Strings.BoolToColorString(tooClose), Strings.BoolToColorString(tooFar),
+                    Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist))
+
+                if forceMove then
                     Logger.log_warn(
-                        "Custom Ranger combatNav: \arWarning! \aw Mercs has detected a \"Can't See\" condition, but MQ is reporting line of sight. \ayManual intervention may be required.")
+                        "Custom Ranger combatNav: \arWarning! \awMercs detected a \"Can't See\" condition. LOS:%s Dist:%d DistZ:%d badZ:%s badDist:%s. \ayRepositioning without MQ lineofsight gating.",
+                        tostring(hasLineOfSight), targetDistance, targetDistanceZ, Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist))
                 end
                 if Config:GetSetting('NavCircle') then
                     if tooClose or tooFar or forceMove then
@@ -1666,7 +1673,7 @@ local _ClassConfig = {
                     Core.DoCmd('/squelch face fast')
                     Movement:DoStickCmd("10 moveback")
                 elseif tooFar or forceMove then
-                    Movement:DoNav(true, "id %d distance=%d lineofsight=on", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
+                    Movement:DoNav(true, "id %d distance=%d", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
                     Core.DoCmd('/squelch /face fast')
                 end
             end
