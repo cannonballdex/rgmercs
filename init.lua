@@ -36,18 +36,17 @@ end
 local Binds = require('utils.binds')
 require('utils.event_handlers')
 
-local Set         = require('mq.set')
-local Casting     = require("utils.casting")
-local ClassLoader = require('utils.classloader')
-local Combat      = require("utils.combat")
-local Comms       = require("utils.comms")
 local Core        = require("utils.core")
-local Events      = require("utils.events")
-local Globals     = require("utils.globals")
-local ItemManager = require("utils.item_manager")
-local Movement    = require("utils.movement")
+local ClassLoader = require('utils.classloader')
 local Targeting   = require("utils.targeting")
+local Combat      = require("utils.combat")
+local Casting     = require("utils.casting")
+local Events      = require("utils.events")
 local Ui          = require("utils.ui")
+local Comms       = require("utils.comms")
+local Movement    = require("utils.movement")
+local Set         = require('mq.set')
+local Globals     = require("utils.globals")
 
 -- Initialize class-based modules
 local Modules     = require("utils.modules")
@@ -70,12 +69,12 @@ local initPctComplete = 0
 local initMsg         = "Initializing RGMercs..."
 
 -- UI --
-local ConsoleUI       = require("ui.console")
-local HudUI           = require("ui.hud")
-local LoaderUI        = require("ui.loader")
-local OptionsUI       = require("ui.options")
 local SimpleUI        = require("ui.simple")
 local StandardUI      = require("ui.standard")
+local OptionsUI       = require("ui.options")
+local ConsoleUI       = require("ui.console")
+local LoaderUI        = require("ui.loader")
+local HudUI           = require("ui.hud")
 local TargetUI        = require("ui.target")
 
 local function Alive()
@@ -83,7 +82,7 @@ local function Alive()
 end
 
 local function GetTheme()
-    local classTheme = Config:GetSetting('DisableClassTheme') and {} or (Modules:ExecModule("Class", "GetTheme") or {})
+    local classTheme = Modules:ExecModule("Class", "GetTheme") or {}
     local userTheme = Config:GetSetting('UserTheme') or {}
 
     if #classTheme == 0 or (Config:GetSetting('UserThemeOverrideClassTheme') and #userTheme > 0) then
@@ -158,6 +157,7 @@ local function RGMercsGUI()
                 ImGui.End()
                 if not openFT then
                     Config:SetSetting('PopOutForceTarget', false)
+                    showFT = false
                 end
             end
             if Config:GetSetting('PopOutMercsStatus') then
@@ -170,6 +170,7 @@ local function RGMercsGUI()
                 ImGui.End()
                 if not openMS then
                     Config:SetSetting('PopOutMercsStatus', false)
+                    showMS = false
                 end
             end
             if Config:GetSetting('PopOutConsole') then
@@ -181,6 +182,7 @@ local function RGMercsGUI()
                 ImGui.End()
                 if not openConsole then
                     Config:SetSetting('PopOutConsole', false)
+                    showConsole = false
                 end
             end
 
@@ -194,7 +196,7 @@ local function RGMercsGUI()
                 HudUI:RenderToggleHud()
             end
 
-            local flashingWarning = Globals.PauseMain and Targeting.HasXTHaters() and Config:GetSetting('WarnCombatPaused')
+            local flashingWarning = Globals.PauseMain and Targeting.GetXTHaterCount(false) > 0 and Config:GetSetting('WarnCombatPaused')
 
             if flashingWarning then
                 if Globals.GetTimeSeconds() % 3 == 0 then
@@ -280,7 +282,7 @@ local function RGInit(...)
             end
             if v == "reset_to_default" then
                 Config.Db:deleteCharacter(Globals.CurServer, Globals.CurLoadedChar)
-                Logger.log_info("All settings for %s on %s wiped from DB - defaults will load on startup.", Globals.CurLoadedChar, Globals.CurServer)
+                Logger.log_info("All settings for %s on %s wiped from DB — defaults will load on startup.", Globals.CurLoadedChar, Globals.CurServer)
                 break
             end
         end
@@ -293,7 +295,7 @@ local function RGInit(...)
     if Config:GetSetting("RunSelfTestsOnStartup") then
         initPctComplete = 15
         initMsg = "Running Self Tests..."
-        Config.UnitTestsPass = require('tests.unit_tests').RunAll()
+        Config.UnitTestsPass = require('utils.unit_tests').RunAll()
     end
 
     initPctComplete = 20
@@ -376,45 +378,43 @@ local function RGInit(...)
 end
 
 local function Main()
-    Logger.log_super_verbose("Starting Main loop.")
+    Logger.log_verbose("Starting Main loop.")
 
     -- always do this and do it first
     Config:FlushDB()
     Config.Db:updateTelemetryGraphs()
 
-    Comms.HeartbeatWatchdog()
-    ItemManager.ServiceAutoInv()
-
-    if mq.TLO.Zone.ID() ~= Globals.CurZoneId or mq.TLO.Me.Instance() ~= Globals.CurInstanceId then
+    if mq.TLO.Zone.ID() ~= Globals.CurZoneId or mq.TLO.Me.Instance() ~= Globals.CurInstance then
         if notifyZoning then
             Modules:ExecAll("OnZone")
             notifyZoning = false
             Config.TempSettings.NoLevZone = false
             Globals.ForceCombatID = 0
             Globals.IgnoredTargetIDs = Set.new({})
-            Globals.CharmedPetIDs = Set.new({})
-            Globals.LooseCharms = {}
             Globals.LastCachedBuffUpdate = {}
             Globals.AutoTargetID = 0
-            Globals.ValidAutoTargetIDs = Set.new({})
             Globals.AutoTargetIsNamed = false
             Globals.AggroTargetID = 0
-            Globals.CombatNavTargetId = 0
             Globals.SetForcedTargetId(0)
-            Globals.ForceCharmID = 0
         end
         mq.delay(100)
         Globals.CurZoneId = mq.TLO.Zone.ID()
-        Globals.CurInstanceId = mq.TLO.Me.Instance()
-        Logger.log_super_verbose("Completed Main loop.")
+        Globals.CurInstance = mq.TLO.Me.Instance()
         return
     end
+
+    Core.UpdateBuffs()
 
     Events.DoEvents()
 
     Config:ValidatePeers()
 
     notifyZoning = true
+
+    if mq.TLO.Me.NumGems() ~= Casting.UseGem then
+        -- sometimes this can get out of sync.
+        Casting.UseGem = mq.TLO.Me.NumGems()
+    end
 
     if Globals.PauseMain then
         mq.delay(100)
@@ -428,32 +428,29 @@ local function Main()
         return
     end
 
-    if Combat.GetCombatState() == "Combat" then
+    if Targeting.GetXTHaterCount(false) > 0 then
         if Globals.CurrentState == "Downtime" and mq.TLO.Me.Sitting() then
             -- if switching into combat state stand up.
             mq.TLO.Me.Stand()
         end
 
         Globals.CurrentState = "Combat"
-        Globals.LastCombatTime = Globals.GetTimeMS()
         if Config:GetSetting('FaceTarget') and not Targeting.FacingTarget() and mq.TLO.Target.ID() ~= mq.TLO.Me.ID() and not mq.TLO.Me.Moving() then
             Core.DoCmd("/squelch /face fast")
         end
 
-        if Config:GetSetting('DoMed') ~= 1 then
+        if Config:GetSetting('DoMed') == 3 then
             Casting.AutoMed()
         end
     else
         if Globals.CurrentState ~= "Downtime" then
             Logger.log_debug("Switching to Downtime state.")
 
-            Targeting.PruneValidAutoTargets()
+            -- clear the cache during state transition.
+            Targeting.ClearSafeTargetCache()
             Targeting.ForceBurnTargetID = 0
             Globals.LastPulledID        = 0
-            Combat.PullStuckTime        = 0
-            Combat.StrangerWarnedIDs    = {}
             Globals.AutoTargetID        = 0
-            Globals.CombatNavTargetId   = 0
             Globals.IgnoredTargetIDs    = Set.new({})
             Globals.LastBurnCheck       = false
             Modules:ExecModule("Pull", "SetLastPullOrCombatEndedTimer")
@@ -461,14 +458,10 @@ local function Main()
 
         Globals.CurrentState = "Downtime"
 
-        Targeting.ClearStuckXTargets()
-
         if Config:GetSetting('DoMed') ~= 1 then
             Casting.AutoMed()
         end
     end
-
-    Targeting.PruneNoHateTargets()
 
     if mq.TLO.MacroQuest.GameState() ~= "INGAME" then return end
 
@@ -502,7 +495,7 @@ local function Main()
     else
         if Globals.CurrentState == "Combat" then
             local targetId = Targeting.GetTargetID()
-            local ignored = Targeting.IsDeniedTargetId(targetId)                                -- don't target something in our ignore list
+            local ignored = Globals.IgnoredTargetIDs:contains(targetId)                         -- don't target something in our ignore list
             local pullTarget = Config:GetSetting('DoPull') and targetId == Globals.LastPulledID -- don't clear your pull target while its traveling to you
             local assistHater = Core.IAmMA() and Targeting.IsSpawnXTHater(targetId)             -- don't clear a targeted hater as MA unless it is ignored
 
@@ -528,18 +521,27 @@ local function Main()
         if Config:GetSetting('DoMercenary') then
             local merc = mq.TLO.Me.Mercenary
 
-            if (merc.State() or ""):lower() == "active" then
+            if merc() and merc.ID() then
                 if Combat.MercEngage() then
-                    local stances = Globals.Constants.MercStanceGroups[merc.Class.ShortName():lower()]
+                    local class = merc.Class.ShortName():lower()
+                    local stanceGroups = {
+                        war = Globals.Constants.TankMercStances,
+                        clr = Globals.Constants.HealerMercStances,
+                        rog = Globals.Constants.MeleeMercStances,
+                        wiz = Globals.Constants.CasterMercStances,
+                    }
+                    local stances = stanceGroups[class]
                     if stances and merc.Stance() then
-                        local currentStance = merc.Stance():lower()
-                        local desiredStance = stances[Config:GetSetting("MercStance")] or stances[1]
-                        if currentStance ~= desiredStance:lower() and not Combat.MercOffersStance(desiredStance) then
-                            desiredStance = stances[1]
-                        end
-                        if currentStance ~= desiredStance:lower() then
-                            local stanceCommand = desiredStance:lower():gsub(" ", "")
-                            Core.DoCmd("/squelch /stance %s", stanceCommand)
+                        local desiredStance = stances[Config:GetSetting("MercStance")]
+                        if desiredStance then
+                            if merc.Stance():lower() ~= desiredStance then
+                                Core.DoCmd("/squelch /stance %s", desiredStance)
+                            end
+                        else
+                            local fallbackStance = stances[1]
+                            if merc.Stance():lower() ~= fallbackStance then
+                                Core.DoCmd("/squelch /stance %s", fallbackStance)
+                            end
                         end
                     end
                     Combat.MercAssist()
@@ -553,11 +555,13 @@ local function Main()
     end
 
     if Combat.ShouldDoCamp() then
-        local merc = mq.TLO.Me.Mercenary
-        if Config:GetSetting('DoMercenary') and Globals.CurrentState ~= "Combat" and (merc.State() or ""):lower() == "active"
-            and (merc.Class.ShortName() or "none"):lower() ~= "clr" and merc.Stance():lower() ~= "passive" then
+        if Config:GetSetting('DoMercenary') and mq.TLO.Me.Mercenary.ID() and (mq.TLO.Me.Mercenary.Class.ShortName() or "none"):lower() ~= "clr" and mq.TLO.Me.Mercenary.Stance():lower() ~= "passive" then
             Core.DoCmd("/squelch /stance passive")
         end
+    end
+
+    if Globals.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Anytime" or (Globals.Constants.ModRodUse[Config:GetSetting('ModRodUse')] == "Combat" and Globals.CurrentState == "Combat") then
+        Casting.ClickModRod()
     end
 
     if not Combat.ValidCombatTarget(Globals.AutoTargetID) then
@@ -581,20 +585,18 @@ local function Main()
     Modules:ExecAll("GiveTime")
 
     mq.doevents()
-    Logger.log_super_verbose("Completed Main loop.")
+    Logger.log_verbose("Completed Main loop.")
     mq.delay(10)
 end
 
 -- Global Messaging callback
 ---@diagnostic disable-next-line: unused-local
-local script_actor = Comms.Actors.register('RGMercs', function(message) -- luacheck: ignore 211
+local script_actor = Comms.Actors.register(function(message)
     local msg = message()
+    if msg.From == Comms.GetPeerName() then return end
+    if msg.Script ~= Comms.ScriptName then return end
 
-    if msg.Script ~= Comms.ScriptName then
-        return
-    end
-
-    Logger.log_super_verbose("\ayGot Event from(\am%s\ay) module(\at%s\ay) event(\at%s\ay)", msg.From,
+    Logger.log_verbose("\ayGot Event from(\am%s\ay) module(\at%s\ay) event(\at%s\ay)", msg.From,
         msg.Module,
         msg.Event)
 
@@ -618,11 +620,6 @@ local script_actor = Comms.Actors.register('RGMercs', function(message) -- luach
         return
     end
 
-    if msg.Event == "QueueAutoInv" then
-        ItemManager.QueueAutoInv(msg.Data and msg.Data.itemId)
-        return
-    end
-
     if msg.Module == "Config" then
         if msg.Event and Config[msg.Event] then
             Config[msg.Event](Config, msg.Data)
@@ -641,6 +638,40 @@ end)
 
 mq.bind("/rglua", Binds.MainHandler)
 
+local function RemoveNecroDrainBuffsOnExit()
+    if mq.TLO.MacroQuest.GameState() ~= "INGAME" then
+        return
+    end
+
+    if mq.TLO.Me.Class.ShortName() ~= "NEC" then
+        return
+    end
+
+    Logger.log_info("\ayRGMercs exiting: removing Necromancer HP-drain buffs.")
+
+    -- Remove HP-to-mana buffs without depending on a list of spell names.
+    -- Repeat in case more than one drain effect is active.
+    for _ = 1, 5 do
+        local drainBuff = mq.TLO.Me.FindBuff("detspa hp and spa mana")
+        local drainName = drainBuff()
+
+        if not drainName then
+            break
+        end
+
+        Logger.log_info("\ayRemoving HP-drain buff: \at%s", drainName)
+        drainBuff.Remove()
+        mq.delay(100)
+    end
+
+    -- Flesh buffs drain HP but do not necessarily restore mana. MacroQuest's
+    -- /removebuff command accepts a partial name, covering every Flesh to ... rank.
+    Core.DoCmd("/squelch /removebuff Flesh to")
+
+    -- Give EverQuest time to process the final removal before RGMercs exits.
+    mq.delay(250)
+end
+
 RGInit(...)
 
 while openGUI do
@@ -648,6 +679,8 @@ while openGUI do
     mq.doevents()
     mq.delay(10)
 end
+
+RemoveNecroDrainBuffsOnExit()
 
 Core.CheckPlugins(unloadedPlugins, true)
 
