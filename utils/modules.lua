@@ -15,13 +15,44 @@ Modules.ModuleOrder = {
     "Mez",
     "Travel",
     "Named",
+    "Map",
     "Perf",
     "Contributors",
     "FAQ",
+    "UserModules",
     "Debug",
 }
 
 Modules.ModuleList  = {}
+
+--- Name -> file path for the user modules currently loaded from mq.configDir.
+Modules.LoadedUserModules     = {}
+
+--- Name -> require path for the built-in modules a user module may replace.
+Modules.BuiltInModulePaths    = {
+    Class        = "modules.class",
+    Movement     = "modules.move",
+    Clickies     = "modules.clickies",
+    Pull         = "modules.pull",
+    Drag         = "modules.drag",
+    Charm        = "modules.charm",
+    Mez          = "modules.mez",
+    Travel       = "modules.travel",
+    Named        = "modules.named",
+    Map          = "modules.map",
+    Perf         = "modules.performance",
+    Contributors = "modules.contributors",
+    FAQ          = "modules.faq",
+    Debug        = "modules.debug",
+}
+
+--- Name -> message from the most recent failed load attempt.
+Modules.UserModuleLoadErrors  = {}
+
+--- Name -> smoothed GiveTime cost in milliseconds.
+Modules.UserModuleFrameTimes  = {}
+
+Modules.UserModuleSyncPending = false
 
 ---@return any
 function Modules:load(lootModule)
@@ -38,9 +69,11 @@ function Modules:load(lootModule)
         Mez          = require("modules.mez"):New(),
         Charm        = require("modules.charm"):New(),
         Named        = require("modules.named"):New(),
+        Map          = require("modules.map"):New(),
         Perf         = require("modules.performance"):New(),
         Contributors = require("modules.contributors"):New(),
         FAQ          = require("modules.faq"):New(),
+        UserModules  = require("modules.usermodules"):New(),
         Debug        = require("modules.debug"):New(),
         LootNScoot   = lootModule == "LootNScoot" and require("modules.lootnscoot"):New() or nil,
         SmartLoot    = lootModule == "SmartLoot" and require("modules.smartloot"):New() or nil,
@@ -61,12 +94,208 @@ function Modules:unloadModule(moduleName)
     end
 end
 
-function Modules:loadModule(moduleName, filePath)
+--- Loads (or reloads) a module from filePath, appends it to the
+--- execution order (or inserts at orderIndex when given), then calls its Init function.
+---@param moduleName string Name key to store the module under.
+---@param filePath string Require-style path to the module file.
+---@param orderIndex number? Position in the execution order; appends when nil.
+function Modules:loadModule(moduleName, filePath, orderIndex)
     self:unloadModule(moduleName)
     self.ModuleList[moduleName] = require(filePath):New()
-    table.insert(self.ModuleOrder, moduleName)
+    table.insert(self.ModuleOrder, math.min(orderIndex or (#self.ModuleOrder + 1), #self.ModuleOrder + 1), moduleName)
     Logger.log_info("Load %s", moduleName) -- temp debug text
     Modules:ExecModule(moduleName, "Init")
+end
+
+--- Loads a user module from an absolute file path, adds it to the execution
+--- order and initializes it, rolling back if the file errors. A module that
+--- declares _replaces under a built-in's name takes that module's place,
+--- inheriting its slot in the execution order.
+---@param moduleName string Declared _name of the module.
+---@param filePath string Absolute path to the user module file.
+---@return boolean success True when the module loaded and initialized.
+function Modules:loadUserModule(moduleName, filePath)
+    local Config = require("utils.config")
+
+    self:unloadUserModule(moduleName)
+
+    local chunk, loadError = loadfile(filePath)
+    if not chunk then
+        Logger.log_error("\arUser module \at%s\ar failed to load: %s", moduleName, loadError)
+        self.UserModuleLoadErrors[moduleName] = loadError
+        return false
+    end
+
+    local replacing = false
+    local orderIndex = nil
+
+    local success, initError = pcall(function()
+        local class = chunk()
+        if type(class) ~= "table" then
+            error("File did not return a module table.", 0)
+        end
+
+        if rawget(class, '_replaces') and self.BuiltInModulePaths[moduleName] then
+            replacing = true
+            for i, v in ipairs(self.ModuleOrder) do
+                if v == moduleName then
+                    orderIndex = i
+                    break
+                end
+            end
+            self:unloadModule(moduleName)
+            Config:ClearModuleSettings(moduleName)
+            Logger.log_info("\ayReplacing the built-in \at%s\ay module with \at%s\ay.", moduleName, filePath)
+        end
+
+        local instance = class:New()
+        if type(instance) ~= "table" then
+            error("New() did not return a module instance.", 0)
+        end
+
+        local claimedBy, claimedSetting = Config:FindConflictingSettingOwner(moduleName, instance.DefaultConfig)
+        if claimedBy then
+            error(string.format("setting '%s' is already owned by the %s module.", claimedSetting, claimedBy), 0)
+        end
+
+        self.ModuleList[moduleName] = instance
+        self.LoadedUserModules[moduleName] = filePath
+        self:ExecModule(moduleName, "Init")
+
+        table.insert(self.ModuleOrder, math.min(orderIndex or (#self.ModuleOrder + 1), #self.ModuleOrder + 1), moduleName)
+        Config:UpdateCommandHandlers()
+    end)
+
+    if not success then
+        Logger.log_error("\arUser module \at%s\ar failed to initialize: %s", moduleName, initError)
+        self:unloadUserModule(moduleName)
+        if replacing then
+            if not self.ModuleList[moduleName] then
+                self:loadModule(moduleName, self.BuiltInModulePaths[moduleName], orderIndex)
+                Config:UpdateCommandHandlers()
+            elseif orderIndex then
+                for i, v in ipairs(self.ModuleOrder) do
+                    if v == moduleName then
+                        table.remove(self.ModuleOrder, i)
+                        break
+                    end
+                end
+                table.insert(self.ModuleOrder, math.min(orderIndex, #self.ModuleOrder + 1), moduleName)
+            end
+        end
+        self.UserModuleLoadErrors[moduleName] = initError
+        return false
+    end
+
+    self.UserModuleLoadErrors[moduleName] = nil
+    Logger.log_info("\agLoaded user module \at%s", moduleName)
+    return true
+end
+
+--- Shuts down a loaded user module and drops its in-memory settings
+--- registration; persisted values are left in the database. A module that
+--- replaced a built-in has that built-in restored in its place.
+---@param moduleName string Declared _name of the module.
+function Modules:unloadUserModule(moduleName)
+    if not self.LoadedUserModules[moduleName] then return end
+
+    local Config = require("utils.config")
+
+    local orderIndex = nil
+    if self.BuiltInModulePaths[moduleName] then
+        for i, v in ipairs(self.ModuleOrder) do
+            if v == moduleName then
+                orderIndex = i
+                break
+            end
+        end
+    end
+
+    self:unloadModule(moduleName)
+    self.LoadedUserModules[moduleName] = nil
+    self.UserModuleLoadErrors[moduleName] = nil
+    self.UserModuleFrameTimes[moduleName] = nil
+
+    Config:ClearModuleSettings(moduleName)
+
+    if self.BuiltInModulePaths[moduleName] then
+        self:loadModule(moduleName, self.BuiltInModulePaths[moduleName], orderIndex)
+    end
+
+    Config:UpdateCommandHandlers()
+end
+
+--- Flags that the loaded user modules need reconciling against the saved list.
+--- Callers on the ImGui render thread must use this rather than syncing inline.
+function Modules:RequestUserModuleSync()
+    self.UserModuleSyncPending = true
+end
+
+--- Runs a pending sync. Called from the main loop, outside any ModuleOrder walk.
+function Modules:ProcessUserModuleSync()
+    if not self.UserModuleSyncPending then return end
+
+    self.UserModuleSyncPending = false
+    self:SyncUserModules()
+end
+
+--- Rescans the user modules folder and brings the loaded user modules in line
+--- with the saved list, unloading what is no longer enabled and loading what is.
+--- Safe to call repeatedly; already-loaded modules are left running.
+function Modules:SyncUserModules()
+    local Config = require("utils.config")
+    local Core = require("utils.core")
+
+    local scanned = Core.ScanUserModules()
+
+    local savedList = Config:GetSetting('UserModuleList') or {}
+    local wantLoaded = {}
+    local listChanged = false
+
+    if scanned then
+        for idx = #savedList, 1, -1 do
+            if not Core.FindUserModule(savedList[idx].name, savedList[idx].file) then
+                Logger.log_info("\ayForgetting user module \at%s\ay; its file is no longer in the modules folder.", savedList[idx].name)
+                table.remove(savedList, idx)
+                listChanged = true
+            end
+        end
+    end
+
+    for _, listEntry in ipairs(savedList) do
+        local manifestEntry = Core.FindUserModule(listEntry.name, listEntry.file)
+        if manifestEntry and manifestEntry.name and not manifestEntry.error and not manifestEntry.collisionWith then
+            if listEntry.name ~= manifestEntry.name or listEntry.file ~= manifestEntry.fileName then
+                listEntry.name = manifestEntry.name
+                listEntry.file = manifestEntry.fileName
+                listChanged = true
+            end
+
+            if listEntry.enabled then
+                wantLoaded[manifestEntry.name] = manifestEntry.filePath
+            end
+        end
+    end
+
+    local staleModules = {}
+    for moduleName, filePath in pairs(self.LoadedUserModules) do
+        if wantLoaded[moduleName] ~= filePath then
+            table.insert(staleModules, moduleName)
+        end
+    end
+    for _, moduleName in ipairs(staleModules) do
+        self:unloadUserModule(moduleName)
+    end
+
+    for _, listEntry in ipairs(savedList) do
+        if listEntry.enabled and wantLoaded[listEntry.name] and not self.LoadedUserModules[listEntry.name] then
+            self:loadUserModule(listEntry.name, wantLoaded[listEntry.name])
+        end
+    end
+
+    if listChanged then
+        Config:SetSetting('UserModuleList', savedList)
+    end
 end
 
 function Modules:GetModuleList()
@@ -110,8 +339,14 @@ function Modules:ExecAll(fn, ...)
             ret[name] = module[fn](module, ...)
 
             if fn == "GiveTime" then
+                local frameTime = (Globals.GetTimeSeconds() * 1000) - startTime
+
                 if self.ModuleList.Perf then
-                    self.ModuleList.Perf:OnFrameExec(name, (Globals.GetTimeSeconds() * 1000) - startTime)
+                    self.ModuleList.Perf:OnFrameExec(name, frameTime)
+                end
+
+                if self.LoadedUserModules[name] then
+                    self.UserModuleFrameTimes[name] = ((self.UserModuleFrameTimes[name] or frameTime) * 0.9) + (frameTime * 0.1)
                 end
             end
         end

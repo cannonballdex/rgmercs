@@ -2,6 +2,7 @@ local mq      = require('mq')
 local Config  = require('utils.config')
 local Globals = require('utils.globals')
 local Comms   = require("utils.comms")
+local Files   = require("utils.files")
 local Modules = require("utils.modules")
 local DanNet  = require('lib.dannet.helpers')
 local Logger  = require("utils.logger")
@@ -44,6 +45,126 @@ function Core.ScanConfigDirs()
             end
         end
     end
+end
+
+--- Rebuilds Globals.UserModuleManifest from every .lua file in <mq.configDir>/rgmercs/modules,
+--- loading each one far enough to read its declared _name/_version/_author/_about/_replaces
+--- without initializing it, and flags name collisions against built-in and already-loaded modules.
+--- Creates the folder (seeded with a hello_world.lua example) on first run.
+--- @return boolean scanned True when the manifest was rebuilt; false on a fresh/failed folder create.
+function Core.ScanUserModules()
+    Globals.UserModuleManifest = {}
+
+    local userModuleDir = string.format("%s/rgmercs/modules", mq.configDir)
+    if not LuaFS.attributes(userModuleDir) then
+        local created, mkdirError = Files.make_p(userModuleDir)
+        if not created then
+            Logger.log_error("\arFailed to create the user modules folder \at%s\ar: %s", userModuleDir, mkdirError)
+            return false
+        end
+
+        Files.copy_file(string.format("%s/extras/hello_world.lua", Globals.ScriptDir),
+            string.format("%s/hello_world.lua", userModuleDir))
+        return false
+    end
+
+    local fileNames = {}
+    for file in LuaFS.dir(userModuleDir) do
+        if file:match("%.lua$") then
+            table.insert(fileNames, file)
+        end
+    end
+    table.sort(fileNames)
+
+    for _, fileName in ipairs(fileNames) do
+        local entry = { fileName = fileName, filePath = string.format("%s/%s", userModuleDir, fileName), }
+        local chunk, loadError = loadfile(entry.filePath)
+
+        if not chunk then
+            entry.error = loadError
+        else
+            local success, module = pcall(chunk)
+            if not success then
+                entry.error = module
+            elseif type(module) ~= "table" then
+                entry.error = "File did not return a module table."
+            else
+                local declaredName = rawget(module, '_name')
+                if type(declaredName) ~= "string" or declaredName == "" then
+                    entry.error = "Module table is missing its own _name string."
+                else
+                    entry.name = declaredName
+                    entry.version = rawget(module, '_version')
+                    entry.author = rawget(module, '_author')
+                    entry.about = rawget(module, '_about')
+                    entry.replaces = rawget(module, '_replaces') == true
+                end
+            end
+        end
+
+        Logger.log_debug("Found user module file: %s (%s)", fileName, entry.error or entry.name)
+        table.insert(Globals.UserModuleManifest, entry)
+    end
+
+    local claimedNames = {}
+    for moduleName in pairs(Modules:GetModuleList()) do
+        if not Modules.LoadedUserModules[moduleName] then
+            claimedNames[moduleName:lower()] = "an RGMercs module"
+        end
+    end
+
+    for settingsNamespace in pairs(Config.moduleDefaultSettings) do
+        if not Modules.LoadedUserModules[settingsNamespace] then
+            claimedNames[settingsNamespace:lower()] = "an RGMercs module"
+        end
+    end
+
+    for _, lootModule in ipairs(Globals.Constants.LootModuleTypes) do
+        claimedNames[lootModule:lower()] = "an RGMercs module"
+    end
+
+    for _, entry in ipairs(Globals.UserModuleManifest) do
+        if entry.name and Modules.LoadedUserModules[entry.name] == entry.filePath then
+            claimedNames[entry.name:lower()] = entry.fileName
+        end
+    end
+
+    for _, entry in ipairs(Globals.UserModuleManifest) do
+        if entry.name then
+            local claimedBy = claimedNames[entry.name:lower()]
+            if claimedBy == "an RGMercs module" and entry.replaces and Modules.BuiltInModulePaths[entry.name] then
+                claimedNames[entry.name:lower()] = entry.fileName
+            elseif claimedBy and claimedBy ~= entry.fileName then
+                entry.collisionWith = claimedBy
+            else
+                claimedNames[entry.name:lower()] = entry.fileName
+            end
+        end
+    end
+
+    return true
+end
+
+--- Returns the manifest entry for a saved user module, matching the declared
+--- name first so a renamed file resolves, then the filename so a file whose
+--- name has become unreadable still resolves.
+--- @param moduleName string? Declared _name last seen for the module.
+--- @param fileName string? Filename last seen for the module.
+--- @return table? entry The matching manifest entry.
+function Core.FindUserModule(moduleName, fileName)
+    for _, entry in ipairs(Globals.UserModuleManifest) do
+        if entry.name and entry.name == moduleName and entry.fileName == fileName then return entry end
+    end
+
+    for _, entry in ipairs(Globals.UserModuleManifest) do
+        if entry.fileName == fileName then return entry end
+    end
+
+    for _, entry in ipairs(Globals.UserModuleManifest) do
+        if entry.name and entry.name == moduleName then return entry end
+    end
+
+    return nil
 end
 
 --- Safely calls a function and logs information.
