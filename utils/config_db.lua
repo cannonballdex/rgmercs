@@ -3,8 +3,7 @@ local ImGui      = require('ImGui')
 local ImPlot     = require('ImPlot')
 local ok, sqlite = pcall(require, 'lsqlite3')
 if not ok then
-    printf("\arDB: failed to load lsqlite3: %s", tostring(sqlite))
-    error(string.format("DB: failed to load lsqlite3: %s", tostring(sqlite)))
+    error("DB: failed to load lsqlite3: " .. tostring(sqlite))
 end
 local Logger              = require('utils.logger')
 local Files               = require('utils.files')
@@ -50,10 +49,12 @@ local SCHEMA              = [[
 ---@return any|nil  DB instance or nil on failure
 function DB.new(path, onUpdate)
     printf("Creating new DB Object with path: %s", path)
-    local dirOk, dirErr = Files.make_p_for_file(path)
-    if not dirOk then
-        Logger.log_error("\arDB: failed to create directory for %s: %s", path, tostring(dirErr))
-        return nil
+    -- Minimal fix: avoid Files.make_p_for_file(path) here.
+    -- In MQ Lua this helper can throw "cannot resume non-suspended coroutine"
+    -- during require-time DB initialization, before SQLite is even opened.
+    local dir = path:match("^(.*)[/\\][^/\\]+$")
+    if dir and dir ~= "" then
+        os.execute(string.format('mkdir "%s" 2>nul', dir))
     end
 
     local db = nil

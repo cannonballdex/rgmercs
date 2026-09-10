@@ -1,1 +1,4 @@
-return { version = 2660, }
+return {
+    version = 2661,
+    forkedFrom = "DerpleDude/rgmercs v163 (97ee513d, 2024-04-20)",
+}
