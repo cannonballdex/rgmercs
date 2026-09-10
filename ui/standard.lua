@@ -353,10 +353,13 @@ function StandardUI:RenderMainWindow(imgui_style, openGUI, flags)
                 end
                 local titlePos = ImGui.GetCursorPosVec()
                 ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * 1.05)
-                Ui.RenderText("RGMercs %s [Build: %s]",
+                Ui.RenderText("RGMercs %s [Forked: %s]",
                     Config._version,
                     CommitVersion.version or "None"
                 )
+                if CommitVersion.forkedFrom then
+                    Ui.Tooltip("Forked from " .. CommitVersion.forkedFrom)
+                end
                 ImGui.PopFont()
                 titlePos = ImVec2(titlePos.x, titlePos.y + ImGui.GetTextLineHeightWithSpacing())
                 ImGui.SetCursorPos(titlePos)
