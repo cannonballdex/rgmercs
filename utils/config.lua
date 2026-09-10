@@ -3081,7 +3081,10 @@ end
 --- @return any The value of the setting, or nil if the setting is not found and failOk is true.
 function Config:GetSettingDefaults(setting)
     if not Config.TempSettings.SettingToModuleCache[setting] then
-        Logger.log_error("Setting %s was not found in the module cache!", setting)
+        -- Expected, not exceptional: a setting can momentarily disappear from here between a
+        -- module unregistering it and a render pass that was already mid-flight noticing. Callers
+        -- already treat a nil return as normal (see the "defaults can go away" guard in options.lua).
+        Logger.log_debug("Setting %s was not found in the module cache!", setting)
         return nil
     end
     return self:GetModuleDefaultSettings(Config.TempSettings.SettingToModuleCache[setting])[setting]
@@ -3418,6 +3421,24 @@ function Config:RegisterModuleSettings(module, settings, defaultSettings, faq, f
     Logger.log_debug("\agModule %s - registered settings!", module)
 end
 
+--- Returns the module that already owns one of the given default settings, if any.
+--- Used before loading a user module to refuse it rather than let it silently
+--- collide with another module's setting keys.
+--- @param module string Name the caller intends to register settings under.
+--- @param defaultSettings table Candidate DefaultConfig table (setting -> definition).
+--- @return string|nil owner The conflicting module's name, or nil if none.
+--- @return string|nil setting The conflicting setting key, if owner is not nil.
+function Config:FindConflictingSettingOwner(module, defaultSettings)
+    for setting in pairs(defaultSettings or {}) do
+        local registeredName = Config.TempSettings.SettingsLowerToNameCache[setting:lower()]
+        local owner = registeredName and Config.TempSettings.SettingToModuleCache[registeredName]
+        if owner and owner ~= module then
+            return owner, setting
+        end
+    end
+    return nil
+end
+
 function Config:ClearModuleSettings(module)
     if not self.moduleDefaultSettings[module] then
         Logger.log_error("\arModule %s is not registered!", module)
@@ -3433,6 +3454,11 @@ function Config:ClearModuleSettings(module)
     self.moduleTempSettings[module] = nil
     self.moduleDefaultSettings[module] = nil
     self.moduleSettingCategories[module] = nil
+
+    -- Mirrors RegisterModuleSettings: tells OptionsUI its cached filtered
+    -- settings list is stale so it rebuilds instead of rendering the
+    -- now-removed settings this module just unregistered.
+    self.TempSettings.lastModuleRegisteredTime = Globals.GetTimeSeconds()
 
     Logger.log_debug("\agModule %s - removed all settings!", module)
 end
@@ -4042,6 +4068,13 @@ end
 
 function Config:FlushDB()
     self.Db:flushQueue()
+end
+
+--- Picks up settings written externally (e.g. by DB Management) by invalidating the
+--- DB cache and re-running the full settings load across Core and every loaded module.
+function Config:ReloadConfig()
+    self.Db:checkCache()
+    require('utils.classloader').reloadConfig()
 end
 
 function Config:UpdateDbTelemetry()

@@ -152,6 +152,7 @@ local _ClassConfig = {
             "Cadcane's Carapace",
             "Xetheg's Carapace",
             "Kanghammer's Carapace",
+            "Soul Carapace XV",
         },
         ['EndRegen'] = {
             --Timer 13, can't be used in combat

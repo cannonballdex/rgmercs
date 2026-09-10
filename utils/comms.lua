@@ -16,14 +16,36 @@ Comms.OutgoingToasts       = {}
 
 -- Putting this here for lack of a beter spot.
 --- @param peerName string? The character name string if not supplied then we use Me.DisplayName()
-function Comms.GetPeerName(peerName)
-    local server = mq.TLO.EverQuest.Server()
+--- @param peerServer string? The server name if not supplied then we use the local current server
+function Comms.GetPeerName(peerName, peerServer)
+    local server = peerServer or mq.TLO.EverQuest.Server()
     --upper first letter if it isnt (Live)
     if server:len() > 0 then
         server = server:sub(1, 1):upper() .. server:sub(2)
     end
 
     return string.format("%s (%s)", peerName and peerName or mq.TLO.Me.DisplayName(), server)
+end
+
+--- Returns true if the given char/server/class identifies the local current character.
+--- @param charName string The character name to test.
+--- @param server string The server name to test.
+--- @param class string The class short name to test.
+--- @return boolean
+function Comms.IsLocalCurrent(charName, server, class)
+    return charName == Globals.CurLoadedChar and server == Globals.CurServer and class == Globals.CurLoadedClass
+end
+
+--- Returns true if the given char/server/class is the local current character
+--- or a networked peer currently running RGMercs on that class.
+--- @param charName string The character name to test.
+--- @param server string The server name to test.
+--- @param class string The class short name to test.
+--- @return boolean
+function Comms.IsCharRunning(charName, server, class)
+    if Comms.IsLocalCurrent(charName, server, class) then return true end
+    local hb = Comms.GetPeerHeartbeat(Comms.GetPeerName(charName, server))
+    return hb and hb.Data and hb.Data.Class == class and true or false
 end
 
 function Comms.GetNameAndServerFromPeer(peer)
@@ -204,6 +226,23 @@ function Comms.GetPeers(includeSelf)
     end
 
     return Comms.Peers:toList() or {}
+end
+
+--- Returns RGMercs peers whose last heartbeat reports them in the local
+--- character's current zone (by short name), each as { name, key, data }
+--- where data is that peer's heartbeat payload.
+--- @param includeSelf boolean? Include the local character's own heartbeat entry.
+--- @return table[] zonePeers
+function Comms.GetZonePeers(includeSelf)
+    local zonePeers = {}
+    local myZone = mq.TLO.Zone.ShortName()
+    local selfPeer = Comms.GetPeerName()
+    for peer, heartbeat in pairs(Comms.PeersHeartbeats) do
+        if (includeSelf or peer ~= selfPeer) and heartbeat.Data and heartbeat.Data.ZoneShortName == myZone then
+            table.insert(zonePeers, { name = peer, key = peer, data = heartbeat.Data, })
+        end
+    end
+    return zonePeers
 end
 
 function Comms.UpdatePeerHeartbeat(peer, data)

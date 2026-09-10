@@ -302,6 +302,7 @@ local function RGInit(...)
     initMsg = "Initializing Modules..."
     -- complex objects are passed by reference so we can just use these without having to pass them back in for saving.
     Modules:ExecAll("Init")
+    Modules:SyncUserModules()
     Globals.SubmodulesLoaded = true
 
     initPctComplete = 30
@@ -375,6 +376,27 @@ local function RGInit(...)
     initMsg = "Done!"
 
     HudUI:LoadAllOptions()
+end
+
+-- Persist which merc stances are known-unsupported for the CURRENT
+-- mercenary, so this does not have to be relearned (wasting one real
+-- /stance attempt + warning) on every RGMercs restart -- external
+-- controllers (e.g. ldon.lua) relaunch RGMercs via /lua run rgmercs
+-- frequently, which used to wipe this in-memory-only table every time.
+local function mercStanceFile()
+    local name = mq.TLO.Me.CleanName() or "Unknown"
+    return string.format("%s/RGMercs_MercStance_%s.lua", mq.configDir, name)
+end
+
+local function LoadMercStanceUnsupported(mercName)
+    local ok, data = pcall(dofile, mercStanceFile())
+    if ok and type(data) == "table" and data.mercName == mercName and type(data.unsupported) == "table" then
+        Globals.MercStanceUnsupported = data.unsupported
+    end
+end
+
+local function SaveMercStanceUnsupported(mercName)
+    pcall(mq.pickle, mercStanceFile(), { mercName = mercName, unsupported = Globals.MercStanceUnsupported })
 end
 
 local function Main()
@@ -532,15 +554,50 @@ local function Main()
                     }
                     local stances = stanceGroups[class]
                     if stances and merc.Stance() then
-                        local desiredStance = stances[Config:GetSetting("MercStance")]
-                        if desiredStance then
-                            if merc.Stance():lower() ~= desiredStance then
+                        local mercName = merc.Name() or ""
+                        if Globals.MercStanceUnsupportedForName ~= mercName then
+                            Globals.MercStanceUnsupported = {}
+                            Globals.MercStanceUnsupportedForName = mercName
+                            LoadMercStanceUnsupported(mercName)
+                        end
+
+                        local currentStance = merc.Stance():lower()
+                        local desiredStance = stances[Config:GetSetting("MercStance")] or stances[1]
+
+                        -- Apprentice-tier mercs only support Balanced/Passive -- if we've already
+                        -- seen this stance get rejected, don't keep spamming it, just stick to Balanced.
+                        if Globals.MercStanceUnsupported[desiredStance] then
+                            desiredStance = "balanced"
+                        end
+
+                        if currentStance ~= desiredStance then
+                            local attempt = Globals.MercStanceAttempt
+                            if attempt.stance == desiredStance and (Globals.GetTimeSeconds() - attempt.time) >= 2 then
+                                -- We already asked for this stance and it didn't take -- likely unsupported at this merc's tier.
+                                Logger.log_warn(
+                                    "\ayNOTICE:\ax Mercenary stance '%s' did not apply (likely unavailable at this mercenary's tier), falling back to Balanced.",
+                                    desiredStance)
+                                Globals.MercStanceUnsupported[desiredStance] = true
+                                -- desiredStance is outside this class's known Apprentice set, so this
+                                -- merc is Apprentice-tier -- every OTHER stance outside that same set
+                                -- is known to fail too. Mark them all now instead of spending a
+                                -- separate wasted /stance attempt discovering each one individually.
+                                local apprenticeSet = Globals.Constants.ApprenticeMercStances[class]
+                                if apprenticeSet then
+                                    local allowed = {}
+                                    for _, s in ipairs(apprenticeSet) do allowed[s] = true end
+                                    if not allowed[desiredStance] then
+                                        for _, s in ipairs(stances) do
+                                            if not allowed[s] then
+                                                Globals.MercStanceUnsupported[s] = true
+                                            end
+                                        end
+                                    end
+                                end
+                                SaveMercStanceUnsupported(mercName)
+                            elseif (Globals.GetTimeSeconds() - attempt.time) >= 2 then
                                 Core.DoCmd("/squelch /stance %s", desiredStance)
-                            end
-                        else
-                            local fallbackStance = stances[1]
-                            if merc.Stance():lower() ~= fallbackStance then
-                                Core.DoCmd("/squelch /stance %s", fallbackStance)
+                                Globals.MercStanceAttempt = { stance = desiredStance, time = Globals.GetTimeSeconds() }
                             end
                         end
                     end
@@ -638,13 +695,50 @@ end)
 
 mq.bind("/rglua", Binds.MainHandler)
 
+local function RemoveNecroDrainBuffsOnExit()
+    if mq.TLO.MacroQuest.GameState() ~= "INGAME" then
+        return
+    end
+
+    if mq.TLO.Me.Class.ShortName() ~= "NEC" then
+        return
+    end
+
+    Logger.log_info("\ayRGMercs exiting: removing Necromancer HP-drain buffs.")
+
+    -- Remove HP-to-mana buffs without depending on a list of spell names.
+    -- Repeat in case more than one drain effect is active.
+    for _ = 1, 5 do
+        local drainBuff = mq.TLO.Me.FindBuff("detspa hp and spa mana")
+        local drainName = drainBuff()
+
+        if not drainName then
+            break
+        end
+
+        Logger.log_info("\ayRemoving HP-drain buff: \at%s", drainName)
+        drainBuff.Remove()
+        mq.delay(100)
+    end
+
+    -- Flesh buffs drain HP but do not necessarily restore mana. MacroQuest's
+    -- /removebuff command accepts a partial name, covering every Flesh to ... rank.
+    Core.DoCmd("/squelch /removebuff Flesh to")
+
+    -- Give EverQuest time to process the final removal before RGMercs exits.
+    mq.delay(250)
+end
+
 RGInit(...)
 
 while openGUI do
     Main()
+    Modules:ProcessUserModuleSync()
     mq.doevents()
     mq.delay(10)
 end
+
+RemoveNecroDrainBuffsOnExit()
 
 Core.CheckPlugins(unloadedPlugins, true)
 

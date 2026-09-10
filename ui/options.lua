@@ -7,6 +7,7 @@ local Ui                        = require('utils.ui')
 local Icons                     = require('mq.ICONS')
 local Modules                   = require('utils.modules')
 local Comms                     = require('utils.comms')
+local DBManagement              = require('utils.db_management')
 local Tables                    = require('utils.tables')
 local ImAnim                    = require('ImAnim')
 local Set                       = require("mq.Set")
@@ -119,6 +120,7 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
         IconImage = OptionsUI.LoadIcon("themeicon"),
         Headers = {
             { Name = 'Interface', Categories = { "Interface", "Main Panel", "ForceTarget Window", "Mercs Status Window", "Mercs Target Window", "Default Colors", }, },
+            { Name = 'Map',       Categories = { "Map", }, },
             {
                 Name = 'User Theme',
                 RenderCategories = {
@@ -231,6 +233,15 @@ function OptionsUI:SetSelectedGroup(group)
 end
 
 function OptionsUI:ApplySearchFilter()
+    -- Search can run before the options window's first render. In that case,
+    -- selectedCharacter is still empty and peer-aware lookups log an error for
+    -- every category. Fall back to the local character before those lookups.
+    local localPeer = Comms.GetPeerName()
+    if self.selectedCharacter == nil or self.selectedCharacter == "" or
+        (self.selectedCharacter ~= localPeer and not Comms.IsValidPeer(self.selectedCharacter)) then
+        self.selectedCharacter = localPeer
+    end
+
     self.FilteredGroups        = self.Groups
     self.FilteredSettingsByCat = {}
 
@@ -293,30 +304,35 @@ function OptionsUI:ApplySearchFilter()
                 local settingsForCategory = Config:PeerGetAllSettingsForCategory(self.selectedCharacter, category)
 
                 for _, settingName in ipairs(settingsForCategory or {}) do
-                    local settingDefaults         = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName)
-                    local settingDisplayNameLower = (settingDefaults.DisplayName or ""):lower()
-                    local settingTooltipLower     = (type(settingDefaults.Tooltip) == 'function' and settingDefaults.Tooltip() or (settingDefaults.Tooltip or "")):lower()
-                    local customSetting           = (settingDefaults.Type == "Custom")
-                    local showAdv                 = Config:GetSetting('ShowAdvancedOpts') or (settingDefaults.ConfigType == nil or settingDefaults.ConfigType:lower() == "normal")
+                    local settingDefaults = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName)
 
-                    if showAdv and not customSetting and (headerMatches or categoryMatches or settingName:lower():find(filter, 1, true) ~= nil or settingDisplayNameLower:find(filter, 1, true) ~= nil or
-                            settingTooltipLower:find(filter, 1, true) ~= nil) then
-                        self.FilteredSettingsByCat[category] = self.FilteredSettingsByCat[category] or {}
-                        table.insert(self.FilteredSettingsByCat[category], settingName)
+                    -- defaults can go away between the category listing and this lookup, e.g. a user
+                    -- module unregistering its settings the same tick this filter rebuild is running.
+                    if settingDefaults then
+                        local settingDisplayNameLower = (settingDefaults.DisplayName or ""):lower()
+                        local settingTooltipLower     = (type(settingDefaults.Tooltip) == 'function' and settingDefaults.Tooltip() or (settingDefaults.Tooltip or "")):lower()
+                        local customSetting           = (settingDefaults.Type == "Custom")
+                        local showAdv                 = Config:GetSetting('ShowAdvancedOpts') or (settingDefaults.ConfigType == nil or settingDefaults.ConfigType:lower() == "normal")
 
-                        -- set highlighting
-                        if Config:IsModuleHighlighted(Config:PeerGetModuleForSetting(self.selectedCharacter, settingName)) then
-                            newGroup.Highlighted = true
-                            self.HighlightedSettings:add(settingName)
-                            self.HighlightedCategories:add(category)
-                            highlightHeader = true
+                        if showAdv and not customSetting and (headerMatches or categoryMatches or settingName:lower():find(filter, 1, true) ~= nil or settingDisplayNameLower:find(filter, 1, true) ~= nil or
+                                settingTooltipLower:find(filter, 1, true) ~= nil) then
+                            self.FilteredSettingsByCat[category] = self.FilteredSettingsByCat[category] or {}
+                            table.insert(self.FilteredSettingsByCat[category], settingName)
+
+                            -- set highlighting
+                            if Config:IsModuleHighlighted(Config:PeerGetModuleForSetting(self.selectedCharacter, settingName)) then
+                                newGroup.Highlighted = true
+                                self.HighlightedSettings:add(settingName)
+                                self.HighlightedCategories:add(category)
+                                highlightHeader = true
+                            end
                         end
                     end
                 end
 
                 table.sort(self.FilteredSettingsByCat[category] or {}, function(k1, k2)
-                    local k1Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k1)
-                    local k2Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k2)
+                    local k1Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k1) or {}
+                    local k2Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k2) or {}
                     if (k1Defaults.Index ~= nil or k2Defaults.Index ~= nil) and (k1Defaults.Index ~= k2Defaults.Index) then
                         return (k1Defaults.Index or 999) < (k2Defaults.Index or 999)
                     end
@@ -745,6 +761,81 @@ function OptionsUI:RenderDBManagement()
         ImGui.EndTable()
     end
 
+    -- Reset / Delete act on the From character+class selected above.
+    local fromName, fromServer = self.dbChars[self.dbFromIdx]:match('^(.+) %((.+)%)$')
+    local noChars       = self.dbChars[self.dbFromIdx] == "(no characters in DB)"
+    local fromIsRunning = fromName and Comms.IsCharRunning(fromName, fromServer, self.dbFromClasses[self.dbFromClassIdx]) or false
+    local canReset       = not noChars
+    local canDelete      = not noChars and not fromIsRunning
+
+    ImGui.Spacing()
+    if not canReset then ImGui.BeginDisabled() end
+    if ImGui.Button(Icons.MD_RESTORE .. " Reset From to Defaults##dbreset") then
+        self.dbOpenResetPopup = true
+    end
+    if not canReset then ImGui.EndDisabled() end
+    ImGui.SameLine()
+    if not canDelete then ImGui.BeginDisabled() end
+    if ImGui.Button(Icons.FA_TRASH .. " Delete From from Database##dbdelete") then
+        self.dbOpenDeletePopup = true
+    end
+    if not canDelete then ImGui.EndDisabled() end
+    if fromIsRunning and not noChars and ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled) then
+        ImGui.SetTooltip("Cannot delete: target character is currently running RGMercs.")
+    end
+
+    if self.dbOpenResetPopup then
+        ImGui.OpenPopup("DBResetConfirm##DBMgmt"); self.dbOpenResetPopup = false
+    end
+    if self.dbOpenDeletePopup then
+        ImGui.OpenPopup("DBDeleteConfirm##DBMgmt"); self.dbOpenDeletePopup = false
+    end
+
+    ImGui.SetNextWindowSize(ImVec2(460, 0), ImGuiCond.Appearing)
+    if ImGui.BeginPopup("DBResetConfirm##DBMgmt") then
+        ImGui.PushTextWrapPos(440)
+        ImGui.TextWrapped("Reset the following settings to defaults?")
+        ImGui.Spacing()
+        ImGui.Text("Target: ")
+        ImGui.SameLine()
+        ImGui.TextColored(Globals.Constants.BasicColors.Yellow, "%s [%s]", self.dbChars[self.dbFromIdx], self.dbFromClasses[self.dbFromClassIdx])
+        ImGui.Text("Module: ")
+        ImGui.SameLine()
+        ImGui.TextColored(Globals.Constants.BasicColors.Yellow, "%s", moduleNames[self.dbModuleIdx])
+        ImGui.PopTextWrapPos()
+        ImGui.Spacing()
+        if ImGui.Button("Reset##dbresetconfirm") then
+            self:DBResetSettings(self.dbChars, self.dbFromIdx, self.dbFromClasses[self.dbFromClassIdx], moduleNames[self.dbModuleIdx])
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.SameLine()
+        if ImGui.Button("Cancel##dbresetcancel") then
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
+    end
+
+    ImGui.SetNextWindowSize(ImVec2(460, 0), ImGuiCond.Appearing)
+    if ImGui.BeginPopup("DBDeleteConfirm##DBMgmt") then
+        ImGui.PushTextWrapPos(440)
+        ImGui.TextWrapped("Delete the following from the database?")
+        ImGui.Spacing()
+        ImGui.Text("Target: ")
+        ImGui.SameLine()
+        ImGui.TextColored(Globals.Constants.BasicColors.Yellow, "%s [%s]", self.dbChars[self.dbFromIdx], self.dbFromClasses[self.dbFromClassIdx])
+        ImGui.PopTextWrapPos()
+        ImGui.Spacing()
+        if ImGui.Button("Delete##dbdeleteconfirm") then
+            self:DBDeleteSettings(self.dbChars, self.dbFromIdx, self.dbFromClasses[self.dbFromClassIdx])
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.SameLine()
+        if ImGui.Button("Cancel##dbdeletecancel") then
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
+    end
+
     ImGui.Spacing()
     if ImGui.Button(Icons.MD_REFRESH .. " Refresh Character List##dbrefresh") then
         self.dbChars       = nil
@@ -760,6 +851,42 @@ function OptionsUI:RenderDBManagement()
     Config.Db:renderTelemetry()
     ImGui.Spacing()
     Config.Db:renderTelemetryGraph()
+end
+
+function OptionsUI:AddDBToast(message, color)
+    table.insert(self.ToastStates, {
+        active  = true,
+        timer   = 0,
+        message = message,
+        color   = Ui.ImVec4ToColor(color),
+    })
+end
+
+function OptionsUI:DBResetSettings(charLabels, fromIdx, fromClass, moduleName)
+    local fromName, fromServer = charLabels[fromIdx]:match('^(.+) %((.+)%)$')
+    if not fromName then return end
+    local result = DBManagement.ResetSettings(fromName, fromServer, fromClass, moduleName)
+    if not result.ok then return end
+
+    if not Comms.IsCharRunning(fromName, fromServer, fromClass) then
+        self.dbChars       = nil
+        self.dbFromClasses = nil
+    end
+
+    self:AddDBToast(result.toastMessage, Globals.Constants.Colors.Green)
+end
+
+function OptionsUI:DBDeleteSettings(charLabels, fromIdx, fromClass)
+    local fromName, fromServer = charLabels[fromIdx]:match('^(.+) %((.+)%)$')
+    if not fromName then return end
+    local result = DBManagement.DeleteSettings(fromName, fromServer, fromClass)
+    if not result.ok then return end
+
+    -- invalidate cached pickers so the deleted char/class disappears from the list
+    self.dbChars       = nil
+    self.dbFromClasses = nil
+
+    self:AddDBToast(result.toastMessage, Globals.Constants.Colors.Green)
 end
 
 function OptionsUI:DBCopySettings(charLabels, fromIdx, fromClass, toIdx, toClass, moduleName)

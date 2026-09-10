@@ -22,11 +22,18 @@ Globals.LastPulledID                  = 0
 Globals.CurrentState                  = "None"
 Globals.IgnoredTargetIDs              = Set.new({})
 Globals.SubmodulesLoaded              = false
+Globals.UserModuleManifest            = {}
 Globals.PauseMain                     = false
 Globals.StopCast                      = false
 Globals.BackOffFlag                   = false
 Globals.InMedState                    = false
 Globals.LastPetCmd                    = 0
+Globals.MercStanceAttempt             = { stance = nil, time = 0 }
+Globals.MercStanceUnsupported         = {}
+-- Keyed by mercenary NAME, not spawn ID -- ID changes every resummon/zone
+-- even for the same named merc, but which stances it supports is a fixed
+-- property of that named merc (its tier does not change on resummon).
+Globals.MercStanceUnsupportedForName  = ""
 Globals.LastFaceTime                  = 0
 Globals.CurZoneId                     = mq.TLO.Zone.ID()
 Globals.CurInstance                   = mq.TLO.Me.Instance()
@@ -264,6 +271,20 @@ Globals.Constants.TankMercStances   = { "aggressive", "assist", }
 Globals.Constants.HealerMercStances = { "balanced", "reactive", "efficient", }
 Globals.Constants.MeleeMercStances  = { "balanced", "burn", }
 Globals.Constants.CasterMercStances = { "balanced", "burn", "burnae", }
+
+-- Apprentice-tier mercs only support a reduced stance subset per class;
+-- Journeyman gets the full class list above. There is no TLO member for
+-- mercenary tier (checked docs.macroquest.org/reference/data-types/datatype-mercenary/
+-- -- only AAPoints/Index/Name/Stance/State/StateID exist), so tier still has
+-- to be inferred from a real stance attempt failing -- but once ANY
+-- non-Apprentice stance fails for a class, every other stance outside this
+-- set is known to fail too and can be marked unsupported in that same pass
+-- instead of wasting a separate attempt discovering each one individually.
+-- Only the Healer set is confirmed; other classes are left unconstrained
+-- (nil) and keep the original one-stance-at-a-time trial/fallback.
+Globals.Constants.ApprenticeMercStances = {
+    clr = { "balanced", "passive", },
+}
 
 Globals.Constants.HPBarStyles       = { "Multi-Color", "Con-Color", }
 

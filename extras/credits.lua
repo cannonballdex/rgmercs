@@ -17,5 +17,7 @@ return {
         "gennro",
         "Nunno",
         "No_Songs_For_You",
+        "Algar",
+        "Derple"
     },
 }

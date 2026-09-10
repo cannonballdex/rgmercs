@@ -107,9 +107,95 @@ local function castWSU()
     return res
 end
 
+-- Strength of the X (from Shout / GroupStrength) uses Max-HP in slot 4 and blocks
+-- Protection of Pal'Lomen / Grove / Unity. Use Me.Buff only (FindBuff needs id/query syntax).
+local function hasStrengthLineBuff()
+    local maxSlots = mq.TLO.Me.MaxBuffSlots() or 42
+    for i = 1, maxSlots do
+        local buffName = mq.TLO.Me.Buff(i).Name()
+        if buffName and buffName:find("Strength of the", 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Shout of the X is a 1-tick combo that applies Cloak + Predator + Strength children.
+-- GroupBuffCheck on Shout always returns true (1-tick), so we must detect the permanent children.
+local function targetBuffNameHas(target, fragment)
+    if not (target and target()) or not fragment then return false end
+    if target.ID() == mq.TLO.Me.ID() then
+        local maxSlots = mq.TLO.Me.MaxBuffSlots() or 42
+        for i = 1, maxSlots do
+            local ok, n = pcall(function() return mq.TLO.Me.Buff(i).Name() end)
+            if ok and n and n:find(fragment, 1, true) then return true end
+        end
+        return false
+    end
+    -- Named buff lookup on the spawn (works when buff data is cached)
+    local ok, found = pcall(function()
+        local b = target.Buff(fragment)
+        return b and b() ~= nil
+    end)
+    if ok and found then return true end
+    -- Current target window only (Target.Buffs is not a valid TLO on all MQ builds)
+    if target.ID() == mq.TLO.Target.ID() then
+        local maxSlots = mq.TLO.Me.MaxBuffSlots() or 42
+        for i = 1, maxSlots do
+            local ok2, n = pcall(function() return mq.TLO.Target.Buff(i).Name() end)
+            if ok2 and n and n:find(fragment, 1, true) then return true end
+        end
+    end
+    return false
+end
+
+local function shoutComboAvailable()
+    local shout = Core.GetResolvedActionMapItem("ShoutBuff")
+    return shout ~= nil and shout() ~= nil
+end
+
+-- True when a prior Shout (or equivalent) already covered the permanent children.
+local function targetHasShoutChildren(target)
+    local hasCloak = targetBuffNameHas(target, "Cloak of Needlespikes")
+        or targetBuffNameHas(target, "Cloak of Underbrush")
+        or targetBuffNameHas(target, "Cloak of Bloodbarbs")
+    local hasPredator = targetBuffNameHas(target, "Shriek of the Predator")
+        or targetBuffNameHas(target, "Bay of the Predator")
+        or targetBuffNameHas(target, "Shout of the Predator")
+    local hasStrength = targetBuffNameHas(target, "Strength of the Fernstalker")
+        or targetBuffNameHas(target, "Strength of the Grovestalker")
+        or targetBuffNameHas(target, "Strength of the Dusksage Stalker")
+    -- All three jobs covered -> do not recast Shout
+    return hasCloak and hasPredator and hasStrength
+end
+
+-- BST Spiritual Valiancy / Paladin Brell conflict with Ranger Strength (Max-HP family).
+local function targetHasStrengthConflict(target)
+    if not (target and target()) then return false end
+    if target.ID() == mq.TLO.Me.ID() then
+        return Casting.IHaveBuff("Spiritual Valiancy")
+            or Casting.IHaveBuff("Brell's Unbreakable Palisade")
+            or Casting.IHaveBuff("Brell's Tellurian Rampart")
+    end
+    return targetBuffNameHas(target, "Spiritual Valiancy")
+        or targetBuffNameHas(target, "Brell's Unbreakable Palisade")
+        or targetBuffNameHas(target, "Brell's Tellurian")
+end
+
+-- Flight of Falcons and Spirit of Falcons are the same job; skip if either is present.
+local function targetHasAnyFalconBuff(target)
+    return targetBuffNameHas(target, "Flight of Falcons")
+        or targetBuffNameHas(target, "Spirit of Falcons")
+        or targetBuffNameHas(target, "Falcons")
+end
+
+-- Prevent repeated forced archery reposition calls from spamming nav when EQ/MQ LOS and merc visibility disagree.
+local RangerForceMoveCooldownMs = 3000
+local LastRangerForceMoveMs = -RangerForceMoveCooldownMs
+
 local _ClassConfig = {
-    _version              = "1.0 - Live",
-    _author               = "MrInfernal",
+    _version              = "1.5.2 - Live",
+    _author               = "Cannonballdex",
     ['CommandHandlers']   = {
         makeammo = {
             usage = "/rgl makeammo ##",
@@ -374,7 +460,10 @@ local _ClassConfig = {
             "Wildstalker's Unity",
         },
         ["Protectionbuff"] = {
+            -- Highest ranks first. Protection of Pal'Lomen (and Grove) conflict with
+            -- Strength of the Fernstalker/Grovestalker on Max-HP slot 4.
             "Protection of the Grove",
+            "Protection of Pal'Lomen",
             "Force of Nature",
             "Warder's Protection",
             "Protection of the Wild",
@@ -461,6 +550,8 @@ local _ClassConfig = {
         },
         ["GroupStrengthBuff"] = {
             "Strength of the Grovestalker",
+            "Strength of the Fernstalker",
+            "Strength of the Dusksage Stalker",
             "Nature's Precision",
             "Strength of Nature",
             "Strength of Tunare",
@@ -476,6 +567,8 @@ local _ClassConfig = {
             "Strength of the Arbor Stalker",
         },
         ["GroupPredatorBuff"] = {
+            "Shriek of the Predator",
+            "Bay of the Predator",
             "Call of the Predator XVI",
             "Mark of the Predator",
             "Call of the Predator",
@@ -750,6 +843,7 @@ local _ClassConfig = {
             "Natureskin",
         },
         ["MoveSpells"] = {
+            "Flight of Falcons",
             "Spirit of Falcons",
             "Spirit of Eagle",
             "Pack Shrew",
@@ -949,6 +1043,8 @@ local _ClassConfig = {
                 tooltip = Tooltips.UnityBuff,
                 active_cond = function(self, aaName) return Casting.TargetHasBuff(mq.TLO.Me.AltAbility(aaName).Spell, mq.TLO.Me) end,
                 cond = function(self, aaName)
+                    -- Unity casts Protection of Pal'Lomen internally; blocked by Strength line
+                    if hasStrengthLineBuff() then return false end
                     return castWSU() and not Casting.SelfBuffAACheck(aaName)
                 end,
             },
@@ -958,6 +1054,9 @@ local _ClassConfig = {
                 tooltip = Tooltips.Protectionbuff,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell)
+                    -- Avoid CastTracker spam: Strength of the Fernstalker/Grove line
+                    -- blocks Protection on Max-HP slot 4.
+                    if hasStrengthLineBuff() then return false end
                     return not castWSU() and Casting.SelfBuffCheck(spell)
                 end,
             },
@@ -1098,8 +1197,10 @@ local _ClassConfig = {
                 name = "Rathe",
                 type = "Spell",
                 tooltip = Tooltips.Rathe,
+                -- Shout combo already applies Cloak line; check at runtime (load_cond is too early)
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if shoutComboAvailable() then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1109,6 +1210,15 @@ local _ClassConfig = {
                 tooltip = Tooltips.GroupStrengthBuff,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if shoutComboAvailable() then return false end
+                    -- On self, prefer Protection line over Strength (same Max-HP slot).
+                    if target and target.ID() == mq.TLO.Me.ID() then
+                        if Casting.IHaveBuff("Protection of the Grove") or Casting.IHaveBuff("Protection of Pal'Lomen") then
+                            return false
+                        end
+                    end
+                    -- BST Valiancy / Paladin Brell conflict with Strength line
+                    if targetHasStrengthConflict(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1118,6 +1228,7 @@ local _ClassConfig = {
                 tooltip = Tooltips.GroupPredatorBuff,
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
+                    if shoutComboAvailable() then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1125,8 +1236,25 @@ local _ClassConfig = {
                 name = "ShoutBuff",
                 type = "Spell",
                 tooltip = Tooltips.ShoutBuff,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                -- Shout is 1-tick; GroupBuffCheck alone would recast every cycle.
+                -- Skip when permanent children (Cloak + Predator + Strength) are already up.
+                active_cond = function(self, spell)
+                    return targetBuffNameHas(mq.TLO.Me, "Cloak of Needlespikes")
+                        or targetBuffNameHas(mq.TLO.Me, "Shriek of the Predator")
+                        or targetBuffNameHas(mq.TLO.Me, "Strength of the Fernstalker")
+                end,
                 cond = function(self, spell, target)
+                    if targetHasShoutChildren(target) then return false end
+                    -- Strength child will fail on Valiancy/Brell targets; still allow if
+                    -- Cloak or Predator coverage is missing (children that can land).
+                    if targetHasStrengthConflict(target) then
+                        local needsCloak = not (targetBuffNameHas(target, "Cloak of Needlespikes")
+                            or targetBuffNameHas(target, "Cloak of Underbrush")
+                            or targetBuffNameHas(target, "Cloak of Bloodbarbs"))
+                        local needsPredator = not (targetBuffNameHas(target, "Shriek of the Predator")
+                            or targetBuffNameHas(target, "Bay of the Predator"))
+                        if not needsCloak and not needsPredator then return false end
+                    end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1147,6 +1275,8 @@ local _ClassConfig = {
                 active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
                 cond = function(self, spell, target)
                     if Config.TempSettings.NoLevZone then return false end
+                    -- Do not recast if Flight or Spirit of Falcons is already up
+                    if targetHasAnyFalconBuff(target) then return false end
                     return Casting.GroupBuffCheck(spell, target)
                 end,
             },
@@ -1655,13 +1785,29 @@ local _ClassConfig = {
                     targetDistanceZ, hasLineOfSight, chaseDistance, Strings.BoolToColorString(forceMove), Strings.BoolToColorString(tooClose), Strings.BoolToColorString(tooFar),
                     Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist))
 
+                local effectiveForceMove = false
+
                 if forceMove then
-                    Logger.log_warn(
-                        "Custom Ranger combatNav: \arWarning! \awMercs detected a \"Can't See\" condition. LOS:%s Dist:%d DistZ:%d badZ:%s badDist:%s. \ayRepositioning without MQ lineofsight gating.",
-                        tostring(hasLineOfSight), targetDistance, targetDistanceZ, Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist))
+                    local now = mq.gettime()
+                    local forceMoveElapsed = now - LastRangerForceMoveMs
+
+                    if forceMoveElapsed >= RangerForceMoveCooldownMs then
+                        effectiveForceMove = true
+                        LastRangerForceMoveMs = now
+
+                        Logger.log_warn(
+                            "Custom Ranger combatNav: \arWarning! \awMercs detected a \"Can't See\" condition. LOS:%s Dist:%d DistZ:%d badZ:%s badDist:%s. \ayRepositioning without MQ lineofsight gating.",
+                            tostring(hasLineOfSight), targetDistance, targetDistanceZ, Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist))
+                    else
+                        Logger.log_verbose(
+                            "Custom Ranger combatNav: forceMove suppressed by cooldown. LOS:%s Dist:%d DistZ:%d badZ:%s badDist:%s elapsed:%dms cooldown:%dms",
+                            tostring(hasLineOfSight), targetDistance, targetDistanceZ, Strings.BoolToColorString(badZ), Strings.BoolToColorString(badDist),
+                            forceMoveElapsed, RangerForceMoveCooldownMs)
+                    end
                 end
+
                 if Config:GetSetting('NavCircle') then
-                    if tooClose or tooFar or forceMove then
+                    if tooClose or tooFar or effectiveForceMove then
                         Movement:NavAroundCircle(mq.TLO.Target, Config:GetSetting('BowNavDistance'))
                     end
                 elseif tooClose then
@@ -1672,7 +1818,7 @@ local _ClassConfig = {
                     end
                     Core.DoCmd('/squelch face fast')
                     Movement:DoStickCmd("10 moveback")
-                elseif tooFar or forceMove then
+                elseif tooFar or effectiveForceMove then
                     Movement:DoNav(true, "id %d distance=%d", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))
                     Core.DoCmd('/squelch /face fast')
                 end
