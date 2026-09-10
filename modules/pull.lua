@@ -436,6 +436,27 @@ Module.DefaultConfig                   = {
         Tooltip = "Hunt Mode: Reset the starting location to your current location after every pull. In most cases, this will allow zone-wide roaming.",
         Default = false,
     },
+    ['AutoFireOnReturn']                       = {
+        DisplayName = "Autofire While At Camp",
+        Group = "Movement",
+        Header = "Pulling",
+        Category = "Distance",
+        Index = 8,
+        Tooltip = "If a bow/archery ranged weapon is equipped, fire on the pulled mob while it's still approaching " ..
+            "camp (beyond Autofire Min Distance and in line of sight). Turns off once the mob closes inside that distance or leaves line of sight.",
+        Default = false,
+    },
+    ['AutoFireMinDistance']                    = {
+        DisplayName = "Autofire Min Distance",
+        Group = "Movement",
+        Header = "Pulling",
+        Category = "Distance",
+        Index = 9,
+        Tooltip = "Minimum distance to the pulled mob before Autofire While Waiting at Camp kicks in.",
+        Default = 50,
+        Min = 10,
+        Max = 300,
+    },
     -- Puller Vitals
     ['PullHPPct']                              = {
         DisplayName = "Puller HP %",
@@ -2573,6 +2594,19 @@ function Module:GiveTime()
         -- wait for the mob to reach us.
         while mq.TLO.Target.ID() == self.TempSettings.PullID and Targeting.GetTargetDistance() > Config:GetSetting('AutoCampRadius') and maxPullWait > 0 do
             self:SetPullState(PullStates.PULL_WAITING_ON_MOB, self:GetPullStateTargetInfo())
+
+            if Config:GetSetting('AutoFireOnReturn') then
+                local rangedType = mq.TLO.Me.Inventory("ranged").Type()
+                local hasBow = rangedType == 'Archery' or rangedType == 'Bow'
+                local wantAutoFire = hasBow and Targeting.GetTargetDistance() > Config:GetSetting('AutoFireMinDistance') and mq.TLO.Target.LineOfSight()
+                if wantAutoFire and not mq.TLO.Me.AutoFire() then
+                    Core.DoCmd('/squelch face fast')
+                    Core.DoCmd('/autofire on')
+                elseif not wantAutoFire and mq.TLO.Me.AutoFire() then
+                    Core.DoCmd('/autofire off')
+                end
+            end
+
             mq.delay(100)
             if mq.TLO.Me.Pet.Combat() then
                 Core.DoCmd("/squelch /pet back off")
@@ -2591,6 +2625,10 @@ function Module:GiveTime()
             end
             mq.doevents()
             Events.DoEvents()
+        end
+
+        if Config:GetSetting('AutoFireOnReturn') and mq.TLO.Me.AutoFire() then
+            Core.DoCmd('/autofire off')
         end
     end
 
