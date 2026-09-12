@@ -1134,6 +1134,16 @@ local _ClassConfig = {
             --Note that in Tank Mode, defensive discs are preemptively cycled on named in the (non-emergency) Defenses rotation
             --Abilities should be placed in order of lowest to highest triggered HP thresholds
             --Side Note: I reserve Bargain for manual use while driving, the omission is intentional. I haven't quite thought about how I would automate it.
+            { --Mythic Glyph line: expendable AA, re-purchased automatically with AA points when consumed. Which glyph fires is chosen via GlyphType.
+                name = "MythicGlyph",
+                type = "CustomFunc",
+                cond = function(self, combat_state)
+                    return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                end,
+                custom_func = function(self)
+                    return Casting.UseMythicGlyph(Config:GetSetting('GlyphType'), mq.TLO.Me.ID(), Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                end,
+            },
             { --Note that on named we may already have a mantle/carapace running already, could make this remove other discs, but meh, Shield Flash still a thing.
                 name = "Deflection",
                 type = "Disc",
@@ -2594,6 +2604,35 @@ local _ClassConfig = {
             Index = 103,
             Tooltip = "The HP % before heavy defensive abilities like Shield Flash are triggered.\n Some non-essential rotations are skipped to help us focus on survival (See FAQ).",
             Default = 50,
+            Min = 1,
+            Max = 100,
+            ConfigType = "Advanced",
+        },
+        ['GlyphType']         = {
+            DisplayName = "Mythic Glyph",
+            Group = "Abilities",
+            Header = "Tanking",
+            Category = "Defenses",
+            Index = 104,
+            Tooltip = "Which Mythic Glyph AA (if any) to use automatically. Dragon Scales is a defensive ward (fires on low HP), " ..
+                "Arcane Secrets reduces spell mana costs (fires on low mana), Inspired Provocation boosts hate generation " ..
+                "(fires while in combat), Ultimate Power is a burn cooldown (fires during burns).",
+            Type = "Combo",
+            ComboOptions = Casting.MythicGlyphTypeOptions,
+            ComboOptionTooltips = Casting.MythicGlyphTypeTooltips,
+            Default = 2,
+            Min = 1,
+            Max = 5,
+            ConfigType = "Advanced",
+        },
+        ['GlyphManaThreshold'] = {
+            DisplayName = "Glyph Mana%",
+            Group = "Abilities",
+            Header = "Tanking",
+            Category = "Defenses",
+            Index = 105,
+            Tooltip = "Your Mana % before we activate Mythic Glyph of Arcane Secrets (only used when Mythic Glyph is set to Arcane Secrets).",
+            Default = 40,
             Min = 1,
             Max = 100,
             ConfigType = "Advanced",

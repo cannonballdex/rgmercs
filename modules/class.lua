@@ -1852,6 +1852,11 @@ function Module:SetRotationAAs()
     self.TempSettings.RotationAAs:add("Pet Discipline")
     self.TempSettings.RotationAAs:add("Beam of Slumber")
     self.TempSettings.RotationAAs:add("Dirge of the Sleepwalker")
+    -- Mythic Glyph line: used via CustomFunc (Casting.UseMythicGlyph), invisible to the type=="aa" scan above
+    self.TempSettings.RotationAAs:add("Mythic Glyph of Dragon Scales")
+    self.TempSettings.RotationAAs:add("Mythic Glyph of Arcane Secrets")
+    self.TempSettings.RotationAAs:add("Mythic Glyph of Inspired Provocation")
+    self.TempSettings.RotationAAs:add("Mythic Glyph of Ultimate Power")
 end
 
 function Module:GetRotationClickies()

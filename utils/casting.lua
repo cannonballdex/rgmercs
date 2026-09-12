@@ -2077,6 +2077,169 @@ function Casting.UseAA(aaName, targetId, bAllowDead, retryCount)
     return Globals.Constants.CastCompleted:contains(Casting.GetLastCastResultName()), Casting.IsGroupSpell(aaAbility.Spell.TargetType())
 end
 
+local ExpendableAARankNumerals = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", }
+
+--- Resolves an expendable AA's exact current queryable name. Some AAs (the
+--- Mythic Glyph line in particular) don't resolve via mq.TLO.Me.AltAbility
+--- from their bare base name the way most ranked AAs/spells do -- they need
+--- the exact name including the trailing rank numeral ("...VI"). Tries the
+--- bare name first, then bare name + " I" through " X".
+--- @param aaName string Base AA name, without rank.
+--- @return string|nil The exact name that resolves, or nil if none found.
+function Casting.ResolveExpendableAAName(aaName)
+    -- Each ranked name here ("...V", "...VI", etc.) is its own separate, single-tier AltAbility
+    -- entry, not one AA with a shared Rank() that tracks what you've bought -- so AltAbility()(),
+    -- AltAbilityReady(), and even Rank() (used by Casting.CanUseAA) all read truthy/non-zero for
+    -- ANY rank name that merely exists in the game's AA data, regardless of ownership. The only
+    -- field that actually reflects "you spent points on this specific one" is PointsSpent().
+    -- Search highest-to-lowest so we pick the strongest rank you actually own.
+    for i = #ExpendableAARankNumerals, 1, -1 do
+        local candidate = string.format("%s %s", aaName, ExpendableAARankNumerals[i])
+        local ability = mq.TLO.Me.AltAbility(candidate)
+        if ability() then
+            Logger.log_info(
+                "\atResolveExpendableAAName(): %s -- PointsSpent=%s Rank=%s MaxRank=%s CanTrain=%s AARankRequired=%s Cost=%s",
+                candidate, tostring(ability.PointsSpent()), tostring(ability.Rank()), tostring(ability.MaxRank()),
+                tostring(ability.CanTrain()), tostring(ability.AARankRequired()), tostring(ability.Cost()))
+        end
+        if (ability.PointsSpent() or 0) > 0 then return candidate end
+    end
+    if (mq.TLO.Me.AltAbility(aaName).PointsSpent() or 0) > 0 then return aaName end
+    return nil
+end
+
+--- Activates an expendable AA (like the Mythic Glyph line) that gets fully
+--- consumed on use. Re-purchasing it is handled outside RGMercs (e.g. MQ2AASpend) --
+--- this just skips activation on any tick where it isn't currently ready.
+--- @param aaName string The base name of the expendable AA (without rank).
+--- @param targetId number|nil The target to use it on (defaults to current target).
+--- @param isRecoveredFn (fun(): boolean)|nil Called only while this AA is marked fired; once it
+---   returns true the AA is allowed to fire again. Without this, a rotation calling this every
+---   tick while its trigger condition stays true can chain-fire through every rank you happen to
+---   independently own (they resolve as separate AAs) instead of just one.
+--- @return boolean True if the AA was activated this call.
+function Casting.UseExpendableAA(aaName, targetId, isRecoveredFn)
+    Casting.ExpendableAAFiredState = Casting.ExpendableAAFiredState or {}
+    local state = Casting.ExpendableAAFiredState[aaName]
+    if not state then
+        state = { fired = false, }
+        Casting.ExpendableAAFiredState[aaName] = state
+    end
+
+    if state.fired then
+        if isRecoveredFn and isRecoveredFn() then
+            state.fired = false
+        else
+            return false
+        end
+    end
+
+    local resolvedName = Casting.ResolveExpendableAAName(aaName)
+    if not resolvedName then
+        Logger.log_warn("\arUseExpendableAA(): You dont have the AA: %s!", aaName)
+        return false
+    end
+
+    if not mq.TLO.Me.AltAbilityReady(resolvedName) then
+        Logger.log_info("\ayUseExpendableAA(): %s is not ready (likely consumed, awaiting re-purchase).", resolvedName)
+        return false
+    end
+
+    Logger.log_info("\agUseExpendableAA(): %s is ready - activating.", resolvedName)
+    Casting.UseAA(resolvedName, targetId)
+
+    -- UseAA's own return value isn't trustworthy here: for a 0-cast-time AA like this,
+    -- it just reports whatever Casting.GetLastCastResultName() happens to hold from the
+    -- last thing that actually had a cast time (a disc, a spell, anything) -- not whether
+    -- THIS activation worked. Confirm directly by re-checking readiness a moment later --
+    -- but the AltAbilityReady TLO can lag behind the real client state for longer than
+    -- 500ms, so poll for up to 3s instead of trusting a single snapshot.
+    mq.delay(3000, function() return not mq.TLO.Me.AltAbilityReady(resolvedName) end)
+    local consumed = not mq.TLO.Me.AltAbilityReady(resolvedName)
+
+    Logger.log_info("\a%sUseExpendableAA(): %s activation %s.", consumed and "g" or "r", resolvedName,
+        consumed and "confirmed (no longer ready)" or "did NOT take effect (still ready)")
+
+    if consumed then state.fired = true end
+    return consumed
+end
+
+--- Selectable Mythic Glyph types, in GlyphType Combo-setting order (that setting stores a
+--- 1-based index into this list, index 1 = "None"). Each is its own independently-owned
+--- expendable AA with a very different purpose, so they are NOT interchangeable defensive
+--- panic buttons:
+---   Dragon Scales          - defensive ward, an actual panic button. Trigger: low HP.
+---   Arcane Secrets         - 10min spell mana-cost reduction (casters). Trigger: low mana.
+---   Inspired Provocation   - 10min +25% hate from spells/abilities (tanks). Trigger: in combat.
+---   Ultimate Power         - 2min melee/crit/heal-crit burn cooldown. Trigger: burn window.
+Casting.MythicGlyphTypeOptions = { "None", "Dragon Scales", "Arcane Secrets", "Inspired Provocation", "Ultimate Power", }
+
+--- Per-option hover text for the GlyphType Combo setting, parallel to Casting.MythicGlyphTypeOptions.
+Casting.MythicGlyphTypeTooltips = {
+    "Don't use any Mythic Glyph automatically.",
+    "Defensive ward - an emergency panic button. Activates when your HP drops to or below Glyph HP%.",
+    "Reduces spell mana costs for 10 minutes. Activates when your Mana drops to or below Glyph Mana%.",
+    "Boosts hate generation from spells/abilities by 25% for 10 minutes (tanks). Activates while you're in combat.",
+    "2-minute melee/crit/heal-crit burn cooldown. Activates during a burn window.",
+}
+
+local MythicGlyphAANames = {
+    ["Dragon Scales"] = "Mythic Glyph of Dragon Scales",
+    ["Arcane Secrets"] = "Mythic Glyph of Arcane Secrets",
+    ["Inspired Provocation"] = "Mythic Glyph of Inspired Provocation",
+    ["Ultimate Power"] = "Mythic Glyph of Ultimate Power",
+}
+
+--- Whether the selected Mythic Glyph's own trigger condition is currently met. See
+--- Casting.MythicGlyphTypeOptions for what each glyph does and why the trigger differs.
+--- @param glyphTypeIdx number|nil Index into Casting.MythicGlyphTypeOptions (the GlyphType setting's value).
+--- @param combat_state string The current combat state ("Combat"/"Downtime").
+--- @param hpThreshold number|nil HP% threshold for the Dragon Scales trigger.
+--- @param manaThreshold number|nil Mana% threshold for the Arcane Secrets trigger.
+--- @return boolean
+function Casting.MythicGlyphShouldFire(glyphTypeIdx, combat_state, hpThreshold, manaThreshold)
+    local glyphType = Casting.MythicGlyphTypeOptions[glyphTypeIdx or 1]
+
+    if glyphType == "Dragon Scales" then
+        return combat_state == "Combat" and mq.TLO.Me.PctHPs() <= (hpThreshold or 35)
+    elseif glyphType == "Arcane Secrets" then
+        return mq.TLO.Me.PctMana() <= (manaThreshold or 40)
+    elseif glyphType == "Inspired Provocation" then
+        return combat_state == "Combat"
+    elseif glyphType == "Ultimate Power" then
+        return Casting.BurnCheck()
+    end
+    return false
+end
+
+--- Activates the currently-selected Mythic Glyph, if any. Gates re-firing on the same
+--- signal its own trigger uses (HP recovering, mana recovering, leaving combat, or the
+--- burn window ending) so it doesn't burn through every owned rank in one sustained
+--- trigger window -- see Casting.UseExpendableAA.
+--- @param glyphTypeIdx number|nil Index into Casting.MythicGlyphTypeOptions (the GlyphType setting's value).
+--- @param targetId number|nil
+--- @param hpThreshold number|nil HP% recovery point for Dragon Scales.
+--- @param manaThreshold number|nil Mana% recovery point for Arcane Secrets.
+--- @return boolean True if the glyph was activated this call.
+function Casting.UseMythicGlyph(glyphTypeIdx, targetId, hpThreshold, manaThreshold)
+    local glyphType = Casting.MythicGlyphTypeOptions[glyphTypeIdx or 1]
+    local aaName = MythicGlyphAANames[glyphType]
+    if not aaName then return false end
+
+    local isRecoveredFn = nil
+    if glyphType == "Dragon Scales" then
+        isRecoveredFn = function() return mq.TLO.Me.PctHPs() >= (hpThreshold or 35) end
+    elseif glyphType == "Arcane Secrets" then
+        isRecoveredFn = function() return mq.TLO.Me.PctMana() >= (manaThreshold or 40) end
+    elseif glyphType == "Inspired Provocation" then
+        isRecoveredFn = function() return Combat.GetCachedCombatState() ~= "Combat" end
+    elseif glyphType == "Ultimate Power" then
+        isRecoveredFn = function() return not Casting.BurnCheck() end
+    end
+
+    return Casting.UseExpendableAA(aaName, targetId, isRecoveredFn)
+end
+
 --- Uses the specified ability.
 --- @param abilityName string The name of the ability to use.
 function Casting.UseAbility(abilityName)

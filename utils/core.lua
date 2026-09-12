@@ -516,7 +516,19 @@ end
 
 function Core.AAUsedInRotation(aaName)
     local rotationAAs = Modules:ExecModule("Class", "GetRotationAAs")
-    return rotationAAs:contains(aaName)
+    if rotationAAs:contains(aaName) then return true end
+
+    -- Ranked abilities (e.g. the Mythic Glyph line) show with a trailing rank
+    -- numeral in the AA window ("Mythic Glyph of Dragon Scales VI"), but are
+    -- registered here by their base name -- fall back to a prefix match so
+    -- this keeps working as the rank changes.
+    for _, registered in ipairs(rotationAAs:toList()) do
+        if aaName:sub(1, #registered) == registered then
+            return true
+        end
+    end
+
+    return false
 end
 
 function Core.GetLastCombatModeChangeTime(aaName)

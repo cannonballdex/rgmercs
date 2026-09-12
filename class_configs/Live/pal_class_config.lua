@@ -1203,6 +1203,16 @@ local _ClassConfig = {
             },
         },
         ['EmergencyDefenses'] = {
+            { --Mythic Glyph line: expendable AA, re-purchased automatically with AA points when consumed. Which glyph fires is chosen via GlyphType.
+                name = "MythicGlyph",
+                type = "CustomFunc",
+                cond = function(self, combat_state)
+                    return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                end,
+                custom_func = function(self)
+                    return Casting.UseMythicGlyph(Config:GetSetting('GlyphType'), mq.TLO.Me.ID(), Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                end,
+            },
             {
                 name = "Armor of Experience",
                 type = "AA",
@@ -2000,6 +2010,35 @@ local _ClassConfig = {
             Category = "Defenses",
             Index = 103,
             Tooltip = "The HP % before all but essential rotations are cut in favor of emergency or defensive abilities.",
+            Default = 40,
+            Min = 1,
+            Max = 100,
+            ConfigType = "Advanced",
+        },
+        ['GlyphType']         = {
+            DisplayName = "Mythic Glyph",
+            Group = "Abilities",
+            Header = "Tanking",
+            Category = "Defenses",
+            Index = 104,
+            Tooltip = "Which Mythic Glyph AA (if any) to use automatically. Dragon Scales is a defensive ward (fires on low HP), " ..
+                "Arcane Secrets reduces spell mana costs (fires on low mana), Inspired Provocation boosts hate generation " ..
+                "(fires while in combat), Ultimate Power is a burn cooldown (fires during burns).",
+            Type = "Combo",
+            ComboOptions = Casting.MythicGlyphTypeOptions,
+            ComboOptionTooltips = Casting.MythicGlyphTypeTooltips,
+            Default = 2,
+            Min = 1,
+            Max = 5,
+            ConfigType = "Advanced",
+        },
+        ['GlyphManaThreshold'] = {
+            DisplayName = "Glyph Mana%",
+            Group = "Abilities",
+            Header = "Tanking",
+            Category = "Defenses",
+            Index = 105,
+            Tooltip = "Your Mana % before we activate Mythic Glyph of Arcane Secrets (only used when Mythic Glyph is set to Arcane Secrets).",
             Default = 40,
             Min = 1,
             Max = 100,

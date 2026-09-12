@@ -2667,7 +2667,8 @@ function Ui.RenderOptionNumber(id, text, cur, min, max, step)
     return input, changed
 end
 
-function Ui.SearchableCombo(id, curIdx, options, hideText)
+--- @param itemTooltips string[]|nil Optional, parallel to `options` - hover text shown for each row.
+function Ui.SearchableCombo(id, curIdx, options, hideText, itemTooltips)
     local pressed = false
 
     if ImGui.BeginCombo("##combo_box" .. id, curIdx .. " : " .. (options[curIdx] or "None")) then
@@ -2691,6 +2692,9 @@ function Ui.SearchableCombo(id, curIdx, options, hideText)
                         Ui.ComboFilterText[id] = ""
                         ImGui.CloseCurrentPopup()
                     end
+                end
+                if itemTooltips and itemTooltips[i] and itemTooltips[i] ~= "" then
+                    Ui.Tooltip(itemTooltips[i])
                 end
             end
         end
@@ -2763,9 +2767,10 @@ function Ui.RenderOption(type, setting, id, requiresLoadoutChange, ...)
         ---@type string[]
         local comboOptions = args[1]
         local hideText = args[2]
+        local itemTooltips = args[4]
         ImGui.SetNextItemWidth(-1)
         --setting, pressed = ImGui.Combo("", setting, comboOptions)
-        setting, pressed = Ui.SearchableCombo(id, setting, comboOptions, hideText)
+        setting, pressed = Ui.SearchableCombo(id, setting, comboOptions, hideText, itemTooltips)
         ImGui.PopID()
         new_loadout = ((pressed or false) and (requiresLoadoutChange))
         any_pressed = any_pressed or (pressed or false)

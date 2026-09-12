@@ -620,7 +620,8 @@ function OptionsUI:RenderCategorySettings(category)
                                 setting,
                                 id,
                                 settingDefaults.RequiresLoadoutChange or false,
-                                settingDefaults.ComboOptions or settingDefaults.Min, settingDefaults.Max, settingDefaults.Step or 1)
+                                settingDefaults.ComboOptions or settingDefaults.Min, settingDefaults.Max, settingDefaults.Step or 1,
+                                settingDefaults.ComboOptionTooltips)
                             new_loadout = new_loadout or loadout_change
                             any_pressed = any_pressed or pressed
 

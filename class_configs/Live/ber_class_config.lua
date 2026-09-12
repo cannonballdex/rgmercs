@@ -317,6 +317,16 @@ return {
                     Casting.OkayToBuff() and Casting.AmIBuffable()
             end,
         },
+        { --Mythic Glyph line: which glyph fires (and its trigger) is chosen via GlyphType
+            name = 'EmergencyGlyph',
+            state = 1,
+            steps = 1,
+            doFullRotation = true,
+            targetId = function(self) return { mq.TLO.Me.ID(), } end,
+            cond = function(self, combat_state)
+                return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('GlyphHPThreshold'), Config:GetSetting('GlyphManaThreshold'))
+            end,
+        },
         { --Keep things from running
             name = 'Snare',
             state = 1,
@@ -496,6 +506,18 @@ return {
                 type = "Disc",
                 cond = function(self, discSpell)
                     return Casting.SelfBuffCheck(discSpell)
+                end,
+            },
+        },
+        ['EmergencyGlyph'] = {
+            { --Mythic Glyph line: expendable AA, re-purchased automatically with AA points when consumed. Which glyph fires is chosen via GlyphType.
+                name = "MythicGlyph",
+                type = "CustomFunc",
+                cond = function(self, combat_state)
+                    return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('GlyphHPThreshold'), Config:GetSetting('GlyphManaThreshold'))
+                end,
+                custom_func = function(self)
+                    return Casting.UseMythicGlyph(Config:GetSetting('GlyphType'), mq.TLO.Me.ID(), Config:GetSetting('GlyphHPThreshold'), Config:GetSetting('GlyphManaThreshold'))
                 end,
             },
         },
@@ -870,6 +892,47 @@ return {
             Category = "Class Config Clickies",
             Tooltip = "Enable using your epic clicky",
             Default = true,
+        },
+        ['GlyphType'] = {
+            DisplayName = "Mythic Glyph",
+            Group = "Abilities",
+            Header = "Utility",
+            Category = "Emergency",
+            Index = 100,
+            Tooltip = "Which Mythic Glyph AA (if any) to use automatically. Dragon Scales is a defensive ward (fires on low HP), " ..
+                "Arcane Secrets reduces spell mana costs (fires on low mana), Inspired Provocation boosts hate generation " ..
+                "(fires while in combat), Ultimate Power is a burn cooldown (fires during burns).",
+            Type = "Combo",
+            ComboOptions = Casting.MythicGlyphTypeOptions,
+            ComboOptionTooltips = Casting.MythicGlyphTypeTooltips,
+            Default = 2,
+            Min = 1,
+            Max = 5,
+            ConfigType = "Advanced",
+        },
+        ['GlyphHPThreshold'] = {
+            DisplayName = "Glyph HP%",
+            Group = "Abilities",
+            Header = "Utility",
+            Category = "Emergency",
+            Index = 101,
+            Tooltip = "Your HP % before we activate Mythic Glyph of Dragon Scales as an emergency panic button.",
+            Default = 35,
+            Min = 1,
+            Max = 100,
+            ConfigType = "Advanced",
+        },
+        ['GlyphManaThreshold'] = {
+            DisplayName = "Glyph Mana%",
+            Group = "Abilities",
+            Header = "Utility",
+            Category = "Emergency",
+            Index = 102,
+            Tooltip = "Your Mana % before we activate Mythic Glyph of Arcane Secrets (only used when Mythic Glyph is set to Arcane Secrets).",
+            Default = 40,
+            Min = 1,
+            Max = 100,
+            ConfigType = "Advanced",
         },
         ['DoOpener']        = {
             DisplayName = "Use Openers",
