@@ -2160,7 +2160,9 @@ end
                 end,
                 post_activate = function(self, aaName, success)
                     if success then
-                        Core.SafeCallFunc("Autoinventory", ClassHelpers(self).HandleItemSummon, self, aaName, "personal")
+                        -- "group" (not "personal"): target can be any group caster, and the
+                        -- summoned item lands on THEIR cursor, not necessarily ours.
+                        Core.SafeCallFunc("Autoinventory", ClassHelpers(self).HandleItemSummon, self, aaName, "group")
                     end
                 end,
             },
@@ -2180,7 +2182,9 @@ end
                 end,
                 post_activate = function(self, spell, success)
                     if success then
-                        Core.SafeCallFunc("Autoinventory", ClassHelpers(self).HandleItemSummon, self, spell, "personal")
+                        -- "group" (not "personal"): target can be any group caster, and the
+                        -- summoned item lands on THEIR cursor, not necessarily ours.
+                        Core.SafeCallFunc("Autoinventory", ClassHelpers(self).HandleItemSummon, self, spell, "group")
                     end
                 end,
             },

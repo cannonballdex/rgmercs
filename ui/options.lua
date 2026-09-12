@@ -304,10 +304,10 @@ function OptionsUI:ApplySearchFilter()
                 local settingsForCategory = Config:PeerGetAllSettingsForCategory(self.selectedCharacter, category)
 
                 for _, settingName in ipairs(settingsForCategory or {}) do
-                    local settingDefaults = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName)
-
                     -- defaults can go away between the category listing and this lookup, e.g. a user
-                    -- module unregistering its settings the same tick this filter rebuild is running.
+                    -- module unregistering its settings the same tick this filter rebuild is running --
+                    -- failOk=true since that's expected here, not a typo'd setting name.
+                    local settingDefaults = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName, true)
                     if settingDefaults then
                         local settingDisplayNameLower = (settingDefaults.DisplayName or ""):lower()
                         local settingTooltipLower     = (type(settingDefaults.Tooltip) == 'function' and settingDefaults.Tooltip() or (settingDefaults.Tooltip or "")):lower()
@@ -331,8 +331,8 @@ function OptionsUI:ApplySearchFilter()
                 end
 
                 table.sort(self.FilteredSettingsByCat[category] or {}, function(k1, k2)
-                    local k1Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k1) or {}
-                    local k2Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k2) or {}
+                    local k1Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k1, true) or {}
+                    local k2Defaults = Config:PeerGetSettingDefaults(self.selectedCharacter, k2, true) or {}
                     if (k1Defaults.Index ~= nil or k2Defaults.Index ~= nil) and (k1Defaults.Index ~= k2Defaults.Index) then
                         return (k1Defaults.Index or 999) < (k2Defaults.Index or 999)
                     end
@@ -517,9 +517,9 @@ function OptionsUI:RenderCategorySettings(category)
 
             --ImGui.TableNextRow(ImGuiTableRowFlags.None, 40.0)
             for idx, settingName in ipairs(settingsForCategory or {}) do
-                local settingDefaults = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName)
-
-                -- defaults can go away when a different class config is loaded in.
+                -- defaults can go away when a different class config is loaded in --
+                -- failOk=true since that's expected here, not a typo'd setting name.
+                local settingDefaults = Config:PeerGetSettingDefaults(self.selectedCharacter, settingName, true)
                 if settingDefaults then
                     local setting        = Config:PeerGetSetting(self.selectedCharacter, settingName)
                     local id             = settingName -- important! the color configs use this to look up defaults.

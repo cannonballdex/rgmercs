@@ -3078,13 +3078,16 @@ end
 
 --- Retrieves a specified setting default info.
 --- @param setting string The name of the setting to retrieve.
+--- @param failOk boolean? If true, the function will not raise an error if the setting is not found.
+---   Pass this for lookups that can legitimately race a module unregistering its settings (e.g. a
+---   render pass already mid-flight when that happens) -- a genuine typo'd setting name should
+---   still be reported, so this defaults to false.
 --- @return any The value of the setting, or nil if the setting is not found and failOk is true.
-function Config:GetSettingDefaults(setting)
+function Config:GetSettingDefaults(setting, failOk)
     if not Config.TempSettings.SettingToModuleCache[setting] then
-        -- Expected, not exceptional: a setting can momentarily disappear from here between a
-        -- module unregistering it and a render pass that was already mid-flight noticing. Callers
-        -- already treat a nil return as normal (see the "defaults can go away" guard in options.lua).
-        Logger.log_debug("Setting %s was not found in the module cache!", setting)
+        if not failOk then
+            Logger.log_error("Setting %s was not found in the module cache!", setting)
+        end
         return nil
     end
     return self:GetModuleDefaultSettings(Config.TempSettings.SettingToModuleCache[setting])[setting]
@@ -3093,10 +3096,11 @@ end
 --- Retrieves a specified setting default info for a peer.
 --- @param peer string The name of the peer to retrieve the setting for.
 --- @param setting string The name of the setting to retrieve.
+--- @param failOk boolean? If true, the function will not raise an error if the setting is not found.
 --- @return any The value of the setting, or nil if the setting is not found and failOk is true.
-function Config:PeerGetSettingDefaults(peer, setting)
+function Config:PeerGetSettingDefaults(peer, setting, failOk)
     if peer == nil or peer == Comms.GetPeerName() then
-        return self:GetSettingDefaults(setting)
+        return self:GetSettingDefaults(setting, failOk)
     end
 
     if self.currentPeer ~= peer then

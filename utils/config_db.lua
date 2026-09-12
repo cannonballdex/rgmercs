@@ -1,6 +1,7 @@
 local mq         = require('mq')
 local ImGui      = require('ImGui')
 local ImPlot     = require('ImPlot')
+local lfs        = require('lfs')
 local ok, sqlite = pcall(require, 'lsqlite3')
 if not ok then
     error("DB: failed to load lsqlite3: " .. tostring(sqlite))
@@ -54,7 +55,15 @@ function DB.new(path, onUpdate)
     -- during require-time DB initialization, before SQLite is even opened.
     local dir = path:match("^(.*)[/\\][^/\\]+$")
     if dir and dir ~= "" then
-        os.execute(string.format('mkdir "%s" 2>nul', dir))
+        local attr = lfs.attributes(dir)
+        if not attr or attr.mode ~= "directory" then
+            os.execute(string.format('mkdir "%s" 2>nul', dir))
+            attr = lfs.attributes(dir)
+            if not attr or attr.mode ~= "directory" then
+                Logger.log_error("\arDB: failed to create directory %s for database %s", dir, path)
+                return nil
+            end
+        end
     end
 
     local db = nil

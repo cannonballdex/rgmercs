@@ -519,10 +519,10 @@ local _ClassConfig = {
                 name = "MythicGlyph",
                 type = "CustomFunc",
                 cond = function(self, combat_state)
-                    return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                    return Casting.MythicGlyphShouldFire(Config:GetSetting('GlyphType'), combat_state, Config:GetSetting('GlyphHPThreshold'), Config:GetSetting('GlyphManaThreshold'))
                 end,
                 custom_func = function(self)
-                    return Casting.UseMythicGlyph(Config:GetSetting('GlyphType'), mq.TLO.Me.ID(), Config:GetSetting('EmergencyStart'), Config:GetSetting('GlyphManaThreshold'))
+                    return Casting.UseMythicGlyph(Config:GetSetting('GlyphType'), mq.TLO.Me.ID(), Config:GetSetting('GlyphHPThreshold'), Config:GetSetting('GlyphManaThreshold'))
                 end,
             },
             {
@@ -937,12 +937,24 @@ local _ClassConfig = {
             Max = 5,
             ConfigType = "Advanced",
         },
+        ['GlyphHPThreshold']    = {
+            DisplayName = "Glyph HP%",
+            Group = "Abilities",
+            Header = "Tanking",
+            Category = "Defenses",
+            Index = 104,
+            Tooltip = "Your HP % before we activate Mythic Glyph of Dragon Scales as an emergency panic button.",
+            Default = 35,
+            Min = 1,
+            Max = 100,
+            ConfigType = "Advanced",
+        },
         ['GlyphManaThreshold'] = {
             DisplayName = "Glyph Mana%",
             Group = "Abilities",
             Header = "Tanking",
             Category = "Defenses",
-            Index = 104,
+            Index = 105,
             Tooltip = "Your Mana % before we activate Mythic Glyph of Arcane Secrets (only used when Mythic Glyph is set to Arcane Secrets).",
             Default = 40,
             Min = 1,

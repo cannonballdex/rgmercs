@@ -2127,11 +2127,27 @@ function Casting.UseExpendableAA(aaName, targetId, isRecoveredFn)
     end
 
     if state.fired then
-        if isRecoveredFn and isRecoveredFn() then
-            state.fired = false
-        else
-            return false
+        -- Confirm a previous activation without blocking: the AltAbilityReady TLO can lag
+        -- behind the real client state for a while, so this only checks once at least 3s of
+        -- real time has passed since activation, on whichever later tick happens to land
+        -- after that -- never by waiting in place, since this runs on every combat tick of a
+        -- single-threaded script and a blocking wait here would stall everything else.
+        if state.pendingConfirmName and (Globals.GetTimeSeconds() - state.pendingConfirmSince) >= 3 then
+            local pendingName = state.pendingConfirmName
+            local consumed = not mq.TLO.Me.AltAbilityReady(pendingName)
+            state.pendingConfirmName = nil
+
+            Logger.log_info("\a%sUseExpendableAA(): %s activation %s.", consumed and "g" or "r", pendingName,
+                consumed and "confirmed (no longer ready)" or "did NOT take effect (still ready) -- will retry")
+
+            if not consumed then state.fired = false end
         end
+
+        if state.fired and isRecoveredFn and isRecoveredFn() then
+            state.fired = false
+        end
+
+        if state.fired then return false end
     end
 
     local resolvedName = Casting.ResolveExpendableAAName(aaName)
@@ -2151,17 +2167,13 @@ function Casting.UseExpendableAA(aaName, targetId, isRecoveredFn)
     -- UseAA's own return value isn't trustworthy here: for a 0-cast-time AA like this,
     -- it just reports whatever Casting.GetLastCastResultName() happens to hold from the
     -- last thing that actually had a cast time (a disc, a spell, anything) -- not whether
-    -- THIS activation worked. Confirm directly by re-checking readiness a moment later --
-    -- but the AltAbilityReady TLO can lag behind the real client state for longer than
-    -- 500ms, so poll for up to 3s instead of trusting a single snapshot.
-    mq.delay(3000, function() return not mq.TLO.Me.AltAbilityReady(resolvedName) end)
-    local consumed = not mq.TLO.Me.AltAbilityReady(resolvedName)
-
-    Logger.log_info("\a%sUseExpendableAA(): %s activation %s.", consumed and "g" or "r", resolvedName,
-        consumed and "confirmed (no longer ready)" or "did NOT take effect (still ready)")
-
-    if consumed then state.fired = true end
-    return consumed
+    -- THIS activation worked. Rather than blocking here to confirm, optimistically mark it
+    -- fired now (we did issue the activation) and confirm on a later tick above; if it turns
+    -- out not to have taken effect, state.fired is cleared there so this retries.
+    state.fired = true
+    state.pendingConfirmName = resolvedName
+    state.pendingConfirmSince = Globals.GetTimeSeconds()
+    return true
 end
 
 --- Selectable Mythic Glyph types, in GlyphType Combo-setting order (that setting stores a
