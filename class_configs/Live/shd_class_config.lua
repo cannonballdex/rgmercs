@@ -141,18 +141,18 @@ local _ClassConfig = {
         },
         ['Carapace'] = {
             -- Added to mantle because we won't use carapace until it becomes Timer 11
-            -- "Soul Carapace", -- Level 73, Timer 5
-            -- "Umbral Carapace",
-            -- "Malarian Carapace", -- much worse than Malarian Mantle and shares a timer
-            "Gorgon Carapace", -- Level 88, Timer 11 from here on
-            "Sholothian Carapace",
-            "Grelleth's Carapace",
-            "Vizat's Carapace",
-            "Tylix's Carapace",
-            "Cadcane's Carapace",
-            "Xetheg's Carapace",
-            "Kanghammer's Carapace",
-            "Soul Carapace XV",
+            "Soul Carapace XV",      -- Level 128
+            "Kanghammer's Carapace", -- Level 123
+            "Xetheg's Carapace",     -- Level 118
+            "Cadcane's Carapace",    -- Level 113
+            "Tylix's Carapace",      -- Level 108
+            "Vizat's Carapace",      -- Level 103
+            "Grelleth's Carapace",   -- Level 98
+            "Sholothian Carapace",   -- Level 93
+            "Gorgon Carapace",       -- Level 88, Timer 11 from here on
+            -- "Malarian Carapace",  -- Level 83, much worse than Malarian Mantle and shares a timer
+            -- "Umbral Carapace",    -- Level 78
+            -- "Soul Carapace",      -- Level 73, Timer 5
         },
         ['EndRegen'] = {
             --Timer 13, can't be used in combat
