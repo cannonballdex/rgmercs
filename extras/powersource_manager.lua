@@ -235,6 +235,21 @@ function Module:EquipReplacement()
     return equipped
 end
 
+--- If no Power Source Item is configured, adopts whatever's currently equipped as the
+--- configured item. Self-heals from the setting ever being empty (a fresh install, a
+--- lost/never-saved value, etc.) without needing the user to re-drop it manually.
+function Module:LearnEquippedItemIfUnset()
+    if Config:GetSetting('PSMItemName') ~= "" then return end
+
+    local slot = mq.TLO.Me.Inventory('powersource')
+    local name = slot() ~= nil and slot.Name() or nil
+    if not name then return end
+
+    Config:SetSetting('PSMItemName', name)
+    self.lastAction = string.format("Learned Power Source from equipped item: %s", name)
+    Logger.log_info("\agPowerSourceManager: \ayNo Power Source Item was configured - learned it from your currently equipped item: \at%s", name)
+end
+
 --- Runs one full destroy-then-replace pass, ignoring the check interval.
 function Module:CheckPowerSource()
     if Config:GetSetting('PSMDestroyDepleted') then
@@ -248,6 +263,8 @@ end
 
 function Module:GiveTime()
     if not Config:GetSetting('PSMEnabled') then return end
+
+    self:LearnEquippedItemIfUnset()
 
     local now = Globals.GetTimeSeconds()
     local interval = Config:GetSetting('PSMCheckIntervalSec') or 5
