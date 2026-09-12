@@ -511,8 +511,8 @@ function OptionsUI:RenderCategorySettings(category)
     if ImGui.BeginChild("catchild_" .. category, ImVec2(0, 0), bit32.bor(ImGuiChildFlags.AlwaysAutoResize, ImGuiChildFlags.AutoResizeY), ImGuiWindowFlags.None) then
         if ImGui.BeginTable("Options_" .. (category), 2 * numCols, ImGuiTableFlags.Borders) then
             for _ = 1, numCols do
-                ImGui.TableSetupColumn('Option', (ImGuiTableColumnFlags.WidthFixed), 180.0)
-                ImGui.TableSetupColumn('Set', (ImGuiTableColumnFlags.WidthFixed), 130.0)
+                ImGui.TableSetupColumn('Option', (ImGuiTableColumnFlags.WidthStretch), 3.0)
+                ImGui.TableSetupColumn('Set', (ImGuiTableColumnFlags.WidthStretch), 1.0)
             end
 
             --ImGui.TableNextRow(ImGuiTableRowFlags.None, 40.0)
