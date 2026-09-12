@@ -85,6 +85,13 @@ Module.DefaultConfig = {
         Min = 0,
         Max = 20,
     },
+    ['DiscordShowTab'] = {
+        DisplayName = "Show DiscordNotifier Tab",
+        Category = Module._name,
+        Index = 6,
+        Tooltip = "Add a DiscordNotifier tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 local function EscapeJson(text)
@@ -170,7 +177,7 @@ function Module:GiveTime()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('DiscordShowTab') and true or false
 end
 
 function Module:Render()

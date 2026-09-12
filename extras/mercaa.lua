@@ -42,6 +42,7 @@ local imgui = require('ImGui')
 local ImGui = imgui
 local Base = require("modules.base")
 local Combat = require("utils.combat")
+local Config = require('utils.config')
 
 local Module = {
     _version = '1.0',
@@ -70,6 +71,13 @@ Module.DefaultConfig = {
         DisplayName = Module._name .. " Popped",
         Type = "Custom",
         Default = false,
+    },
+    ['MercAAShowTab'] = {
+        DisplayName = "Show MercAA Tab",
+        Category = Module._name,
+        Index = 1,
+        Tooltip = "Add a MercAA tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
     },
 }
 
@@ -2035,7 +2043,7 @@ function Module:GiveTime()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('MercAAShowTab') and true or false
 end
 
 function Module:Render()

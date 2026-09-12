@@ -61,6 +61,13 @@ Module.DefaultConfig   = {
         Answer = "Yes. A module can override the same hooks RGMercs uses - zoning, death, combat and target changes. " ..
             "Greet On Zone is the example.",
     },
+    ['HelloWorldShowTab'] = {
+        DisplayName = "Show HelloWorld Tab",
+        Category = Module._name,
+        Index = 2,
+        Tooltip = "Add a HelloWorld tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 function Module:New()
@@ -79,7 +86,7 @@ function Module:OnZone()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('HelloWorldShowTab') and true or false
 end
 
 function Module:Render()

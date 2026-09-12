@@ -13,6 +13,7 @@ local mq       = require('mq')
 local ImGui    = require('ImGui')
 local Icons    = require('mq.ICONS')
 local Base     = require("modules.base")
+local Config   = require('utils.config')
 local Logger   = require("utils.logger")
 
 local Module   = {
@@ -39,6 +40,13 @@ Module.DefaultConfig = {
         DisplayName = Module._name .. " Popped",
         Type = "Custom",
         Default = false,
+    },
+    ['SessionStatsShowTab'] = {
+        DisplayName = "Show SessionStats Tab",
+        Category = Module._name,
+        Index = 1,
+        Tooltip = "Add a SessionStats tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
     },
 }
 
@@ -115,7 +123,7 @@ function Module:Shutdown()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('SessionStatsShowTab') and true or false
 end
 
 function Module:Render()

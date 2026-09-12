@@ -58,6 +58,13 @@ Module.DefaultConfig = {
         Tooltip = "Also announce the warning to your group, not just your own log.",
         Default = false,
     },
+    ['InvWarnShowTab'] = {
+        DisplayName = "Show InventoryWarning Tab",
+        Category = Module._name,
+        Index = 3,
+        Tooltip = "Add an InventoryWarning tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 function Module:New()
@@ -70,7 +77,7 @@ function Module:Init()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('InvWarnShowTab') and true or false
 end
 
 function Module:GiveTime()

@@ -52,6 +52,13 @@ Module.DefaultConfig = {
         Min = 1,
         Max = 1440,
     },
+    ['NamedTimerShowTab'] = {
+        DisplayName = "Show NamedTimer Tab",
+        Category = Module._name,
+        Index = 2,
+        Tooltip = "Add a NamedTimer tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 Module.CommandHandlers = {
@@ -130,7 +137,7 @@ function Module:GiveTime()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('NamedTimerShowTab') and true or false
 end
 
 function Module:Render()

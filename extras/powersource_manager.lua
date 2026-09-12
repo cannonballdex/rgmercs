@@ -120,6 +120,13 @@ Module.DefaultConfig = {
         Min = 1,
         Max = 60,
     },
+    ['PSMShowTab'] = {
+        DisplayName = "Show PowerSourceManager Tab",
+        Category = Module._name,
+        Index = 6,
+        Tooltip = "Add a PowerSourceManager tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 Module.CommandHandlers = {
@@ -148,7 +155,7 @@ function Module:Init()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('PSMShowTab') and true or false
 end
 
 --- Picks up whatever is in the Power Source slot right now and puts it on the cursor.

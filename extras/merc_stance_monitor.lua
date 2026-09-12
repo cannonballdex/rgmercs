@@ -14,6 +14,7 @@ local mq       = require('mq')
 local ImGui    = require('ImGui')
 local Icons    = require('mq.ICONS')
 local Base     = require("modules.base")
+local Config   = require('utils.config')
 local Globals  = require("utils.globals")
 local Logger   = require("utils.logger")
 local Ui       = require("utils.ui")
@@ -47,6 +48,13 @@ Module.DefaultConfig = {
         Type = "Custom",
         Default = false,
     },
+    ['MercStanceMonitorShowTab'] = {
+        DisplayName = "Show MercStanceMonitor Tab",
+        Category = Module._name,
+        Index = 1,
+        Tooltip = "Add a MercStanceMonitor tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 function Module:New()
@@ -54,7 +62,7 @@ function Module:New()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('MercStanceMonitorShowTab') and true or false
 end
 
 --- Deletes the on-disk memory file for the given merc name, if any.

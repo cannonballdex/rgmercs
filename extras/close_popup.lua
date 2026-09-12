@@ -61,6 +61,13 @@ Module.DefaultConfig = {
         Min = 0,
         Max = 30,
     },
+    ['CPShowTab'] = {
+        DisplayName = "Show ClosePopup Tab",
+        Category = Module._name,
+        Index = 3,
+        Tooltip = "Add a ClosePopup tab to the main window. Turn off if you don't need the status display and just want it running quietly.",
+        Default = true,
+    },
 }
 
 local function PopupOpen()
@@ -78,7 +85,7 @@ function Module:Init()
 end
 
 function Module:ShouldRender()
-    return true
+    return Config:GetSetting('CPShowTab') and true or false
 end
 
 function Module:GiveTime()
