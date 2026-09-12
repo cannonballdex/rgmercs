@@ -73,7 +73,7 @@ Module.DefaultConfig = {
     },
     ['ZoneInfoShowUnderAuthor'] = {
         DisplayName = "Show Under Author(s)",
-        Category = "Display",
+        Category = Module._name,
         Index = 1,
         Tooltip = "Draw the zone/peer count line under Author(s) in the main window. Turn off for a slimmer " ..
             "main window if you'd rather only use the ZoneInfo tab.",
@@ -81,28 +81,28 @@ Module.DefaultConfig = {
     },
     ['ZoneInfoShowPCTable'] = {
         DisplayName = "Show PC Table",
-        Category = "Display",
+        Category = Module._name,
         Index = 2,
         Tooltip = "Expandable table of every PC in the zone under the count row.",
         Default = true,
     },
     ['ZoneInfoShowPeerList'] = {
         DisplayName = "Show Peer List",
-        Category = "Display",
+        Category = Module._name,
         Index = 3,
         Tooltip = "Expandable list of DanNet / RGMercs peers in this zone.",
         Default = true,
     },
     ['ZoneInfoShowTab'] = {
         DisplayName = "Show ZoneInfo Tab",
-        Category = "Display",
+        Category = Module._name,
         Index = 4,
         Tooltip = "Also add a ZoneInfo tab (independent of Show Under Author(s)).",
         Default = false,
     },
     ['ZoneInfoScanMs'] = {
         DisplayName = "Scan Interval (ms)",
-        Category = "Display",
+        Category = Module._name,
         Index = 5,
         Tooltip = "How often to refresh spawn and peer snapshots.",
         Default = 500,

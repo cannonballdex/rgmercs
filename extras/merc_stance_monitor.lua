@@ -27,6 +27,9 @@ local Module   = {
 Module.__index = Module
 setmetatable(Module, { __index = Base, })
 
+-- Base:HandleBind indexes this unconditionally, so it must exist even empty.
+Module.CommandHandlers = {}
+
 Module.FAQ = {
     {
         Question = "Why does this show 'unsupported' stances?",

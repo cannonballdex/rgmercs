@@ -24,6 +24,9 @@ local Module   = {
 Module.__index = Module
 setmetatable(Module, { __index = Base, })
 
+-- Base:HandleBind indexes this unconditionally, so it must exist even empty.
+Module.CommandHandlers = {}
+
 Module.FAQ = {
     {
         Question = "Why did I only get warned once?",
@@ -41,7 +44,7 @@ Module.DefaultConfig = {
     },
     ['InvWarnThreshold'] = {
         DisplayName = "Warn At Free Slots",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 1,
         Tooltip = "Warn once your free inventory slots drop to or below this number.",
         Default = 3,
@@ -50,7 +53,7 @@ Module.DefaultConfig = {
     },
     ['InvWarnToGroup'] = {
         DisplayName = "Announce To Group",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 2,
         Tooltip = "Also announce the warning to your group, not just your own log.",
         Default = false,

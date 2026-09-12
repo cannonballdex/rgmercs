@@ -45,7 +45,7 @@ Module.DefaultConfig = {
     },
     ['NamedTimerRespawnMinutes'] = {
         DisplayName = "Assumed Respawn Minutes",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 1,
         Tooltip = "Default respawn window (in minutes) used for the ETA, since RGMercs has no real per-mob respawn data.",
         Default = 30,

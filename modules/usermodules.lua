@@ -182,7 +182,7 @@ function Module:Render()
         Ui.RenderText("Loaded")
         ImGui.TableNextColumn()
         Ui.RenderColoredText(loadedCount > 0 and Globals.Constants.Colors.ConditionPassColor or Globals.Constants.Colors.ConditionDisabledColor,
-            "%d of %d", loadedCount, #moduleList)
+            "%d of %d", loadedCount, #Globals.UserModuleManifest)
         ImGui.EndTable()
     end
 

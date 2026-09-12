@@ -53,7 +53,7 @@ Module.DefaultConfig   = {
     },
     ['HelloWorldGreetOnZone'] = {
         DisplayName = "Greet On Zone",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 1,
         Tooltip = "Say hello in your log after every zone.",
         Default = false,

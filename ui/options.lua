@@ -40,7 +40,7 @@ OptionsUI.Groups                = { --- Add a default of the same name for any k
             { Name = 'Loot(Emu)',       Categories = { "Looting Script", "LNS", "SmartLoot", }, },
             { Name = 'Mercs Internals', Categories = { "Internals", }, },
             { Name = 'Misc',            Categories = { "Misc", }, },                                                -- ??? profit
-            { Name = 'Uncategorized',   Categories = { "Uncategorized", },                      CatchAll = true, }, -- settings from custom configs that don't have proper group/header
+            { Name = 'User Modules',    Categories = { "Uncategorized", },                      CatchAll = true, }, -- settings from custom configs that don't have proper group/header
         },
     },
     {

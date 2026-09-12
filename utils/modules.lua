@@ -302,8 +302,15 @@ function Modules:GetModuleList()
     return self.ModuleList
 end
 
+--- Returns a snapshot of the module order, not the live table, so a caller
+--- iterating it (e.g. rendering tabs) is immune to a concurrent load/unload
+--- splicing self.ModuleOrder mid-iteration.
 function Modules:GetModuleOrderedNames()
-    return self.ModuleOrder
+    local snapshot = {}
+    for i, name in ipairs(self.ModuleOrder) do
+        snapshot[i] = name
+    end
+    return snapshot
 end
 
 ---@param m string

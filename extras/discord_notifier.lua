@@ -30,6 +30,9 @@ local Module   = {
 Module.__index = Module
 setmetatable(Module, { __index = Base, })
 
+-- Base:HandleBind indexes this unconditionally, so it must exist even empty.
+Module.CommandHandlers = {}
+
 Module.FAQ = {
     {
         Question = "How do I get a webhook URL?",
@@ -47,35 +50,35 @@ Module.DefaultConfig = {
     },
     ['DiscordWebhookUrl'] = {
         DisplayName = "Discord Webhook URL",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 1,
         Tooltip = "Paste a Discord channel webhook URL here. Leave blank to disable posting entirely.",
         Default = "",
     },
     ['DiscordNotifyNamed'] = {
         DisplayName = "Notify on Named Kill",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 2,
         Tooltip = "Post when you kill a mob flagged as Named.",
         Default = true,
     },
     ['DiscordNotifyDeath'] = {
         DisplayName = "Notify on Death",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 3,
         Tooltip = "Post when you die.",
         Default = true,
     },
     ['DiscordNotifyLowInv'] = {
         DisplayName = "Notify on Low Inventory",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 4,
         Tooltip = "Post once when your free inventory slots drop to or below the threshold below.",
         Default = false,
     },
     ['DiscordLowInvThreshold'] = {
         DisplayName = "Low Inventory Threshold",
-        Category = "Uncategorized",
+        Category = Module._name,
         Index = 5,
         Tooltip = "Free inventory slots at or below this triggers the low-inventory notice (once, until it recovers above it).",
         Default = 2,
