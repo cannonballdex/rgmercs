@@ -249,6 +249,30 @@ function StandardUI:RenderAutoTargetInfo(assistSpawn)
     return pctHPs, burning
 end
 
+function StandardUI:RenderSelfInfo()
+    local me = mq.TLO.Me
+    local pctHPs = me.PctHPs() or 0
+
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, ImVec2(0, 0))
+    Ui.RenderText("%s (%s) [", me.CleanName() or "", me.ID() or 0)
+
+    ImGui.PushStyleColor(ImGuiCol.Text, Globals.Constants.Colors.BrightWhite)
+    ImGui.SameLine()
+    Ui.RenderText("%d %s", me.Level() or 0, me.Class.ShortName() or "N/A")
+    ImGui.PopStyleColor(1)
+
+    ImGui.SameLine()
+    Ui.RenderText("] HP: %d%% ", pctHPs)
+    ImGui.PopStyleVar(1)
+
+    return pctHPs
+end
+
+function StandardUI:RenderSelf()
+    local pctHPs = self:RenderSelfInfo()
+    Ui.RenderFancyHPBar("##SelfHPBar", pctHPs, 25, false, 1.0)
+end
+
 function StandardUI:RenderForceBurnButton()
     local assistSpawn = Targeting.GetAutoTarget()
     if not assistSpawn() or assistSpawn.ID() == 0 then
@@ -385,6 +409,8 @@ function StandardUI:RenderMainWindow(imgui_style, openGUI, flags)
                 if Ui.RenderAnimatedPercentage("##mercsmainbutton", 100, 25, 0, pauseColor, pauseColor, pauseLabel, 1.0) then
                     Globals.PauseMain = not Globals.PauseMain
                 end
+
+                self:RenderSelf()
 
                 self:RenderTarget()
             end
