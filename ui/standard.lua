@@ -375,29 +375,16 @@ function StandardUI:RenderMainWindow(imgui_style, openGUI, flags)
 
                 self:RenderWindowControls()
 
-                if not Globals.PauseMain then
-                    ImGui.PushStyleColor(ImGuiCol.Button, Globals.Constants.Colors.MainButtonUnpausedColor)
-                    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Ui.ImVec4ToColor(Globals.Constants.Colors.MainButtonUnpausedColor))
-                else
-                    ImGui.PushStyleColor(ImGuiCol.Button, Globals.Constants.Colors.MainButtonPausedColor)
-                    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Ui.ImVec4ToColor(Globals.Constants.Colors.MainButtonPausedColor))
-                end
-
                 local pauseLabel = Globals.PauseMain and "PAUSED" or "Running"
                 if Globals.BackOffFlag then
                     pauseLabel = pauseLabel .. " [Backoff]"
                 end
-
-                local availableWidth = ImGui.GetContentRegionAvailVec().x
-
-                ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * 1.25)
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (availableWidth * .05) / 2)
-                if Ui.AnimatedButton("##mercsmainbutton", pauseLabel, ImVec2(availableWidth * .95, 40)) then
+                -- Same size/style as the AutoTarget HP bar below (RenderFancyHPBar's 25/1.0),
+                -- just a solid color instead of a low/high HP gradient.
+                local pauseColor = Globals.PauseMain and Globals.Constants.Colors.MainButtonPausedColor or Globals.Constants.Colors.MainButtonUnpausedColor
+                if Ui.RenderAnimatedPercentage("##mercsmainbutton", 100, 25, 0, pauseColor, pauseColor, pauseLabel, 1.0) then
                     Globals.PauseMain = not Globals.PauseMain
                 end
-                ImGui.PopFont()
-
-                ImGui.PopStyleColor(2)
 
                 self:RenderTarget()
             end
