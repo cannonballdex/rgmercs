@@ -684,10 +684,6 @@ function Module:GiveTime()
 
     self:CheckStuck()
 
-    if not self:InCampZone() and Config:GetSetting("ReturnToCamp") then
-        Config:SetSetting("ReturnToCamp", false)
-    end
-
     local combat_state = Combat.GetCachedCombatState()
 
     if combat_state == "Downtime" then
