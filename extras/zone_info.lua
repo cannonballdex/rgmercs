@@ -362,7 +362,10 @@ function Module:RenderPeerList()
         for _, peer in ipairs(self.rgZonePeers or {}) do
             local data = peer.data or {}
             local name = peer.name or peer.key or "?"
-            seen[name:lower()] = true
+            -- Dedup against DanNet's plain character names, not the "Name (Server)" heartbeat
+            -- key format -- otherwise this never matches and every RGMercs peer (self included)
+            -- gets relisted under DanNet below with no HP.
+            seen[(data.Name or name):lower()] = true
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
             if ImGui.Selectable(name .. "##rg" .. name) then
