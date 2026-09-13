@@ -776,6 +776,29 @@ Config.DefaultConfig                                     = {
         Tooltip = "If the Tank Aggro Scan is enabled and the current Auto Target is forced, stay on that target without switching to an Aggro Target.",
         Default = true,
     },
+    ['PeerAggroScan']              = {
+        DisplayName = "Peer Aggro Scan",
+        Group = "Combat",
+        Header = "Targeting",
+        Category = "Tank Target Selection",
+        Index = 3,
+        Tooltip = "When Tank Aggro Scan finds nothing on your own XTargets, also check nearby RGMercs peers (grouped or not, e.g. DanNet-linked alts) " ..
+            "for anyone in Combat state within Peer Aggro Scan Radius, and pick up whatever they're fighting as your Aggro Target.",
+        Default = true,
+        ConfigType = "Advanced",
+    },
+    ['PeerAggroScanRadius']        = {
+        DisplayName = "Peer Aggro Scan Radius",
+        Group = "Combat",
+        Header = "Targeting",
+        Category = "Tank Target Selection",
+        Index = 4,
+        Tooltip = "How close (in-zone) a peer in Combat needs to be to you before Peer Aggro Scan will pick up what they're fighting.",
+        Default = 200,
+        Min = 1,
+        Max = 2500,
+        ConfigType = "Advanced",
+    },
 
     -- Assisting
     ['DoAutoEngage']               = {

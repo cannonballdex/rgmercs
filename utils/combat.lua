@@ -445,7 +445,50 @@ function Combat.TankAggroScan()
             end
         end
     end
+
+    -- Our own XTargets only surface things hating our /group. A DanNet-linked peer who isn't
+    -- formally grouped with us can be fighting something we'd never otherwise see, so fall back
+    -- to checking nearby peer heartbeats for anyone in Combat and pick up what they're fighting.
+    if Config:GetSetting('PeerAggroScan') then
+        local peerTargetId = Combat.FindPeerAggroTargetId()
+        if peerTargetId > 0 then
+            Globals.AggroTargetID = peerTargetId
+            return
+        end
+    end
+
     Logger.log_verbose("TankAggroScan: No Aggro Target found.")
+end
+
+--- Checks nearby RGMercs peer heartbeats (grouped or not) for anyone in Combat state within
+--- Peer Aggro Scan Radius, and returns whatever mob they're currently fighting.
+--- @return number Spawn id of a peer's current target, or 0 if none found.
+function Combat.FindPeerAggroTargetId()
+    local me = mq.TLO.Me
+    local myZone = mq.TLO.Zone.ShortName()
+    local radius = Config:GetSetting('PeerAggroScanRadius')
+
+    for peer, heartbeat in pairs(Comms.GetAllPeerHeartbeats(false)) do
+        local data = heartbeat.Data
+        if data and data.State == "Combat" and data.ZoneShortName == myZone then
+            local peerDistance = Math.GetDistance(me.Y(), me.X(), data.Y or 0, data.X or 0)
+            if peerDistance <= radius then
+                local targetId = data.AutoTargetID or data.TargetID or 0
+                -- Mezzed isn't a member of a generic Spawn reference (only Target/Me expose it),
+                -- so use the same animation-based check TankAggroScan's own XTarget loop uses.
+                local targetSpawn = targetId > 0 and mq.TLO.Spawn(targetId) or nil
+                local isMezzed = targetSpawn and targetSpawn() and not Globals.Constants.RGNotMezzedAnims:contains(targetSpawn.Animation())
+                    and not Config:GetSetting('AllowMezBreak')
+
+                if targetId > 0 and not isMezzed and targetId ~= Globals.AutoTargetID and Combat.OkToEngagePreValidateId(targetId) then
+                    Logger.log_verbose("FindPeerAggroTargetId: Peer %s (Distance %d) is fighting id %d -- picking it up.", peer, peerDistance, targetId)
+                    return targetId
+                end
+            end
+        end
+    end
+
+    return 0
 end
 
 --- Returns the current target ID of the group or raid main assist.
@@ -502,7 +545,7 @@ function Combat.FindBestAutoTarget(validateFn)
             end
         else
             local targetValid = (Targeting.TargetIsType("npc", target) or Targeting.TargetIsType("npcpet", target))
-                and target.Mezzed.ID() == nil and target.Charmed.ID() == nil
+                and (target.Mezzed.ID() == nil or Config:GetSetting('AllowMezBreak')) and target.Charmed.ID() == nil
                 and Targeting.GetTargetDistance(target) < Config:GetSetting('AssistRange')
                 and Targeting.GetTargetDistanceZ(target) < 20
                 and Targeting.GetTargetAggressive(target)

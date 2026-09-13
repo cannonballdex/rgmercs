@@ -305,7 +305,11 @@ local _ClassConfig = {
             targetId = function(self) return Targeting.CheckForAggroTargetID() end,
             cond = function(self, combat_state)
                 if mq.TLO.Me.PctHPs() <= Config:GetSetting('EmergencyLockout') then return false end
-                return combat_state == "Combat"
+                -- TankAggroScan (which populates AggroTargetID with an unmezzed, low-aggro hater)
+                -- runs every tick regardless of our own combat_state, so a valid AggroTargetID is
+                -- reason enough to act even if combat_state hasn't flipped to "Combat" yet -- e.g.
+                -- a loose add is attacking someone else and hasn't built hate on us specifically.
+                return combat_state == "Combat" or (Globals.AggroTargetID or 0) > 0
             end,
         },
         { --Actions that establish or maintain hatred
