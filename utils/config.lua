@@ -2221,6 +2221,19 @@ Config.DefaultConfig                                     = {
             Config.CacheCustomColors()
         end,
     },
+    ['HPMidColor']                       = {
+        DisplayName = "HP Mid",
+        Group = "General",
+        Header = "Interface",
+        Category = "Default Colors",
+        Index = 14,
+        Tooltip = "Color used to display HP values around the midpoint, between HP High and HP Low.",
+        Default = Tables.ImVec4ToTable(Globals.Constants.DefaultColors.HPMidColor),
+        Type = "Color",
+        OnChange = function(_, _)
+            Config.CacheCustomColors()
+        end,
+    },
     ['HPLowColor']                       = {
         DisplayName = "HP Low",
         Group = "General",

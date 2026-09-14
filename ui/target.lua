@@ -158,7 +158,8 @@ function TargetUI:RenderContent()
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (availX - totWidth) / 2)
         end
         if ImGui.BeginChild("##TargetToTBlock", ImVec2(totWidth, 0), ImGuiChildFlags.AutoResizeY, ImGuiWindowFlags.NoBackground) then
-            Ui.RenderAnimatedPercentage(totBarId, totPctHPs, totHeight, 0, Globals.Constants.Colors.HPLowColor, Globals.Constants.Colors.HPHighColor, totBarLabel, 1.0)
+            Ui.RenderAnimatedPercentage(totBarId, totPctHPs, totHeight, 0, Globals.Constants.Colors.HPLowColor, Globals.Constants.Colors.HPHighColor, totBarLabel, 1.0, nil,
+                Globals.Constants.Colors.HPMidColor)
         end
         ImGui.EndChild()
     end

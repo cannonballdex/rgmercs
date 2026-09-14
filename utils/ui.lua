@@ -2432,7 +2432,7 @@ function Ui.GetDeltaTime()
     return dt
 end
 
-function Ui.RenderAnimatedPercentage(id, barPct, height, width, colLow, colHigh, label, borderThickness, milestoneTicks)
+function Ui.RenderAnimatedPercentage(id, barPct, height, width, colLow, colHigh, label, borderThickness, milestoneTicks, colMidOverride)
     local targetPct = Math.Clamp(tonumber(barPct) or 0, 0, 100) / 100.0
     local dt = Ui.GetDeltaTime()
     local drawList = ImGui.GetWindowDrawList()
@@ -2505,11 +2505,21 @@ function Ui.RenderAnimatedPercentage(id, barPct, height, width, colLow, colHigh,
     )
 
     if fillWidth > 0 then
-        local colMid = ImAnim.GetBlendedColor(colLow, colHigh, animState.smoothPct, IamColorSpace.OKLAB)
-        local edge = ImAnim.GetBlendedColor(colLow, colMid, animState.smoothPct / 0.5, IamColorSpace.OKLAB)
+        local edge
+        if colMidOverride then
+            -- Genuine 3-stop gradient: colLow at 0%, colMidOverride at 50%, colHigh at 100%.
+            if animState.smoothPct <= 0.5 then
+                edge = ImAnim.GetBlendedColor(colLow, colMidOverride, animState.smoothPct / 0.5, IamColorSpace.OKLAB)
+            else
+                edge = ImAnim.GetBlendedColor(colMidOverride, colHigh, (animState.smoothPct - 0.5) / 0.5, IamColorSpace.OKLAB)
+            end
+        else
+            local colMid = ImAnim.GetBlendedColor(colLow, colHigh, animState.smoothPct, IamColorSpace.OKLAB)
+            edge = ImAnim.GetBlendedColor(colLow, colMid, animState.smoothPct / 0.5, IamColorSpace.OKLAB)
 
-        if animState.smoothPct >= 0.5 then
-            edge = ImAnim.GetBlendedColor(colMid, colHigh, (animState.smoothPct - 0.5) / 0.5, IamColorSpace.OKLAB)
+            if animState.smoothPct >= 0.5 then
+                edge = ImAnim.GetBlendedColor(colMid, colHigh, (animState.smoothPct - 0.5) / 0.5, IamColorSpace.OKLAB)
+            end
         end
 
         local topLeft = ImGui.GetColorU32(colLow)
@@ -2598,14 +2608,17 @@ function Ui.RenderAnimatedPercentage(id, barPct, height, width, colLow, colHigh,
 end
 
 -- Draw a horizontal gradient HP bar using ImDrawList:AddRectFilledMultiColor.
-function Ui.RenderFancyHPBar(id, hpPct, height, burning, borderThickness, milestoneTicks, hpLowOverride, hpHighOverride)
+function Ui.RenderFancyHPBar(id, hpPct, height, burning, borderThickness, milestoneTicks, hpLowOverride, hpHighOverride, hpMidOverride)
     local now = Globals.GetTimeSeconds()
     local drawList = ImGui.GetWindowDrawList()
 
     local hpLow = hpLowOverride or Globals.Constants.Colors.HPLowColor
     local hpHigh = hpHighOverride or Globals.Constants.Colors.HPHighColor
+    -- A caller forcing low==high (e.g. a single flat con-color) wants a solid bar, not a
+    -- 3-stop gradient, so only default in the mid color when the caller isn't already flattening it.
+    local hpMid = hpMidOverride or (hpLowOverride and hpHighOverride and hpLowOverride == hpHighOverride and hpLow) or Globals.Constants.Colors.HPMidColor
 
-    local clicked = Ui.RenderAnimatedPercentage(id, hpPct, height, 0, hpLow, hpHigh, nil, borderThickness, milestoneTicks)
+    local clicked = Ui.RenderAnimatedPercentage(id, hpPct, height, 0, hpLow, hpHigh, nil, borderThickness, milestoneTicks, hpMid)
 
     local minX, minY = ImGui.GetItemRectMin()
     local maxX, maxY = ImGui.GetItemRectMax()
