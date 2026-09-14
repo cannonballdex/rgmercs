@@ -2118,7 +2118,12 @@ function Module:GiveTime()
 
     if not shouldPull then
         Module:StopNavAfterFailedMovingCheck()
-        if not mq.TLO.Navigation.Active() and combat_state == "Downtime" then
+        -- combat_state is a stale snapshot from the top of this tick, not a live read -- a
+        -- freshly-pulled mob that hasn't registered as an XTarget hater yet by that instant
+        -- would still read as "Downtime" here, re-issuing a nav back to camp while the
+        -- separate engage logic is simultaneously trying to move us toward that same mob.
+        -- Check the live hater count instead of trusting the cached state string.
+        if not mq.TLO.Navigation.Active() and combat_state == "Downtime" and Targeting.GetXTHaterCount(false) == 0 then
             -- go back to camp.
             self:SetPullState(PullStates.PULL_WAITING_SHOULDPULL, reason)
             if campData.returnToCamp then

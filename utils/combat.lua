@@ -910,6 +910,17 @@ function Combat.CombatCampCheck(tempConfig)
     -- camped in a different zone.
     if tempConfig.CampZoneId ~= mq.TLO.Zone.ID() then return end
 
+    -- let pulling module handle camp decisions while it is enabled -- otherwise this can fire
+    -- the instant a pull's own return-to-camp sequence finishes (state back to idle) and
+    -- redundantly re-nav to the same spot over a few units of positional slop, producing a
+    -- second nav-and-stop cycle right on top of the one the pull module just did.
+    if Config:GetSetting('DoPull') then
+        local pullState = Modules:ExecModule("Pull", "GetPullState")
+        if pullState > 2 then
+            return
+        end
+    end
+
     local me = mq.TLO.Me
 
     local distanceToCampSq = Math.GetDistanceSquared(me.Y(), me.X(), tempConfig.AutoCampY, tempConfig.AutoCampX)

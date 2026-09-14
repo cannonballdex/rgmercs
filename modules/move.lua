@@ -717,7 +717,11 @@ function Module:GiveTime()
         self:DoAutoCampCheck()
     end
 
-    if (Core.IsTanking() and Config:GetSetting('MovebackWhenBehind')) and Targeting.IHaveAggro(100) then
+    -- Don't compete with an in-progress approach to a freshly-aggro'd target -- only correct
+    -- position once we've actually arrived and settled into the fight, not while still
+    -- traveling to it (that's what was causing the camp/mob back-and-forth on pulls that
+    -- start outside AutoCampRadius).
+    if (Core.IsTanking() and Config:GetSetting('MovebackWhenBehind')) and Targeting.IHaveAggro(100) and not mq.TLO.Navigation.Active() then
         self:DoCombatCampCheck()
     end
 
