@@ -427,6 +427,15 @@ function Combat.TankAggroScan()
         return
     end
 
+    -- Don't pick up a brand new fight (from our own XTargets or a peer's) while critically hurt --
+    -- e.g. freshly revived at bind with low HP. This only blocks acquiring something NEW here;
+    -- combat_state/XTHaterCount (tracked independently) still lets an already-ongoing fight continue.
+    if (mq.TLO.Me.PctHPs() or 100) < Config:GetSetting('TankAggroScanMinHP') then
+        Logger.log_verbose("TankAggroScan: HP (%d%%) below safety threshold (%d%%), not picking up a new target.",
+            mq.TLO.Me.PctHPs() or 100, Config:GetSetting('TankAggroScanMinHP'))
+        return
+    end
+
     local xtCount = mq.TLO.Me.XTarget() or 0
     local assistRange = Config:GetSetting('AssistRange')
 
@@ -871,6 +880,7 @@ function Combat.AutoCampCheck(tempConfig, bCalledFromInsideEvent)
     if distanceToCamp > 5 then
         local navTo = string.format("locyxz %d %d %d", tempConfig.AutoCampY, tempConfig.AutoCampX, tempConfig.AutoCampZ)
         if mq.TLO.Navigation.PathExists(navTo)() then
+            Logger.log_info("[CAMPNAV:AUTOCAMPCHECK] Navigating to camp, distance %d.", distanceToCamp)
             Movement:DoNav(false, "%s", navTo)
             mq.delay("2s", function() return mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() > 0 end)
             while mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() > 0 do
@@ -893,6 +903,7 @@ function Combat.AutoCampCheck(tempConfig, bCalledFromInsideEvent)
     end
 
     if mq.TLO.Navigation.Active() then
+        Logger.log_info("[CAMPNAV:AUTOCAMPCHECK] Stopping leftover navigation at end of check.")
         Movement:DoNav(false, "stop")
     end
 end
@@ -932,6 +943,7 @@ function Combat.CombatCampCheck(tempConfig)
     if distanceToCampSq > 25 then
         local navTo = string.format("locyxz %d %d %d", tempConfig.AutoCampY, tempConfig.AutoCampX, tempConfig.AutoCampZ)
         if mq.TLO.Navigation.PathExists(navTo)() then
+            Logger.log_info("[CAMPNAV:COMBATCAMPCHECK] Navigating to camp, distance %d.", math.sqrt(distanceToCampSq))
             Movement:DoNav(false, "%s", navTo)
             mq.delay("2s", function() return mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() > 0 end)
             while mq.TLO.Navigation.Active() and mq.TLO.Navigation.Velocity() > 0 do
@@ -950,6 +962,7 @@ function Combat.CombatCampCheck(tempConfig)
     end
 
     if mq.TLO.Navigation.Active() then
+        Logger.log_info("[CAMPNAV:COMBATCAMPCHECK] Stopping leftover navigation at end of check.")
         Movement:DoNav(false, "stop")
     end
 end

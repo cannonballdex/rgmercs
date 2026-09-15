@@ -799,6 +799,20 @@ Config.DefaultConfig                                     = {
         Max = 2500,
         ConfigType = "Advanced",
     },
+    ['TankAggroScanMinHP']         = {
+        DisplayName = "Tank Aggro Scan Min HP%",
+        Group = "Combat",
+        Header = "Targeting",
+        Category = "Tank Target Selection",
+        Index = 5,
+        Tooltip = "Don't pick up a brand new Aggro Target (from your own XTargets or Peer Aggro Scan) while your HP is below this percent. " ..
+            "Protects a freshly-revived or badly hurt character from immediately diving back into a fight -- e.g. right after reviving at your " ..
+            "bind point. Doesn't affect a fight you're already in.",
+        Default = 40,
+        Min = 1,
+        Max = 100,
+        ConfigType = "Advanced",
+    },
 
     -- Assisting
     ['DoAutoEngage']               = {
