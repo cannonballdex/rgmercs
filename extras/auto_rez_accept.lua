@@ -5,12 +5,14 @@
 --   1. Copy this file to: <MQ config dir>/rgmercs/modules/auto_rez_accept.lua
 --   2. RGMercs UserModules tab -> Refresh -> Enable "AutoRezAccept"
 --
--- Watches the resurrect confirmation popup (ConfirmationDialogBox) while you're
--- dead. If it can identify both the offering caster's name and the offered
--- experience %% in the popup text, the caster is in your guild, and the %%
--- meets your minimum, it accepts. Otherwise it leaves the popup alone for you
--- or MQ2Rez to handle. This is a safety net alongside MQ2Rez, not a
--- replacement -- it only ever acts when its own checks are satisfied.
+-- Watches the resurrect confirmation popup (ConfirmationDialogBox). Fires whether
+-- you're still hovering as a ghost or you've already released and respawned at
+-- bind -- a corpse-targeted rez can be confirmed either way. If it can identify
+-- both the offering caster's name and the offered experience %% in the popup
+-- text, the caster is in your guild, and the %% meets your minimum, it accepts.
+-- Otherwise it leaves the popup alone for you or MQ2Rez to handle. This is a
+-- safety net alongside MQ2Rez, not a replacement -- it only ever acts when its
+-- own checks are satisfied.
 --
 -- Survives RGMercs updates because it lives in your config folder, not lua/rgmercs.
 
@@ -26,7 +28,7 @@ local Module    = {
     _version = '1.0',
     _name    = "AutoRezAccept",
     _author  = "Cannonballdex",
-    _about   = "Auto-accepts a resurrect offer while dead, if the caster is in your guild and the offered %% meets your minimum. A safety net alongside MQ2Rez, not a replacement.",
+    _about   = "Auto-accepts a resurrect offer (hovering or already respawned at bind), if the caster is in your guild and the offered %% meets your minimum. A safety net alongside MQ2Rez, not a replacement.",
 }
 Module.__index = Module
 setmetatable(Module, { __index = Base, })
@@ -37,7 +39,7 @@ Module.CommandHandlers = {}
 Module.FAQ = {
     {
         Question = "Why didn't it accept a rez I expected it to?",
-        Answer   = "It only acts while you're actually dead (hovering) with the resurrect confirmation window open, and only if it can find both the caster's name and the offered percentage in the popup text, the caster is in your guild, and the percentage meets your minimum. If the popup wording doesn't match what this module expects, it logs the raw popup text at info level instead of guessing -- check your RGMercs log and report the exact text so the parsing can be adjusted.",
+        Answer   = "It acts whenever the resurrect confirmation window is open, whether you're still hovering as a ghost or already back alive at bind -- but only if it can find both the caster's name and the offered percentage in the popup text, the caster is in your guild, and the percentage meets your minimum. If the popup wording doesn't match what this module expects, it logs the raw popup text at info level instead of guessing -- check your RGMercs log and report the exact text so the parsing can be adjusted.",
         Settings_Used = "ARAEnabled,ARAMinPct",
     },
 }
@@ -90,12 +92,15 @@ end
 local function ParseRezOffer(text)
     if not text or text == "" then return nil, nil end
 
-    local pct = text:match("(%d+)%%")
+    -- EQ spells this out as "(96 percent)" rather than "96%".
+    local pct = text:match("(%d+)%%") or text:match("(%d+)%s*[Pp]ercent")
     if not pct then return nil, nil end
 
     -- Try a few common phrasings; if none match, deliberately return no name
     -- rather than guess, so the caller skips auto-accepting an unverified offer.
-    local name = text:match("^(%a+) has") or text:match("^(%a+) will") or text:match("^(%a+) offers")
+    -- "<Name> wants to cast <Spell> (N percent) upon you. Do you wish this?" is the
+    -- actual live wording confirmed from an in-game popup.
+    local name = text:match("^(%a+) wants to cast") or text:match("^(%a+) has") or text:match("^(%a+) will") or text:match("^(%a+) offers")
 
     return name, tonumber(pct)
 end
@@ -148,10 +153,11 @@ function Module:GiveTime()
         return
     end
 
-    -- Only act while actually dead -- a ConfirmationDialogBox is reused for many
-    -- unrelated prompts, but you can't trigger those while hovering as a corpse.
-    if not mq.TLO.Me.Hovering() then return end
-
+    -- A corpse-targeted rez can be confirmed even after you've already released and
+    -- respawned at bind (alive, not hovering) -- the offer targets the corpse, not
+    -- your current state. Confirmed against a real in-game popup where Hovering()
+    -- read false while a legitimate rez offer was showing. The specificity guard
+    -- here is the exact text pattern match below, not your current life state.
     local text = GetDialogText()
     if text == self.lastSeenText then return end -- already evaluated this exact popup
     self.lastSeenText = text
