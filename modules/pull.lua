@@ -1961,6 +1961,26 @@ function Module:SetPullState(state, reason)
     self.TempSettings.PullStateReason = reason
 end
 
+--- Tracks whether a pull target's distance is decreasing over ~1s samples, so ranged
+--- pull attempts can hold position and let an already-approaching mob close the gap
+--- instead of running out to meet it.
+---@param currentDistance number
+---@return boolean
+function Module:IsPullTargetClosing(currentDistance)
+    local now = Globals.GetTimeSeconds()
+    local lastDistance = self.TempSettings.PullTargetLastDistance
+    local lastCheck = self.TempSettings.PullTargetLastCheckTime or 0
+
+    if not lastDistance or now - lastCheck >= 1 then
+        local closing = lastDistance ~= nil and currentDistance < lastDistance
+        self.TempSettings.PullTargetLastDistance = currentDistance
+        self.TempSettings.PullTargetLastCheckTime = now
+        return closing
+    end
+
+    return currentDistance < lastDistance
+end
+
 function Module:NavToWaypoint(loc, ignoreAggro)
     -- if DoMed is set it will take care of standing us up
     if mq.TLO.Me.Sitting() then
@@ -2040,6 +2060,21 @@ function Module:GiveTime()
     self:ProcessDeleteWPs()
 
     if combat_state ~= "Downtime" and not self:IsPullMode("Chain") then
+        -- combat_state comes from Globals.CurrentState, which is only true "Downtime" once
+        -- Targeting.GetXTHaterCount() reads 0 -- if that count ever gets stuck above 0 (a stale
+        -- XTarget slot that doesn't clear), pulling silently stalls forever with nothing but this
+        -- invisible verbose line. Surface what's actually on XTargets so a stall is provable.
+        local now = Globals.GetTimeSeconds()
+        if not self.TempSettings.LastStallLogAt or now - self.TempSettings.LastStallLogAt >= 5 then
+            local haterNames = {}
+            for _, id in ipairs(Targeting.GetXTHaterIDs()) do
+                local s = mq.TLO.Spawn(id)
+                haterNames[#haterNames + 1] = string.format("%s[%d]", s.CleanName() or "?", id)
+            end
+            Logger.log_info("[CAMPNAV:PULL_STALL] combat_state=%s, XTHaters=%s, AutoTargetID=%d, AggroTargetID=%d",
+                combat_state, #haterNames > 0 and table.concat(haterNames, ", ") or "none", Globals.AutoTargetID or 0, Globals.AggroTargetID or 0)
+            self.TempSettings.LastStallLogAt = now
+        end
         Logger.log_verbose("PULL:GiveTime() we are in %s, not ready for pulling.", combat_state)
         return
     end
@@ -2129,7 +2164,7 @@ function Module:GiveTime()
             if campData.returnToCamp then
                 local distanceToCampSq = Math.GetDistanceSquared(mq.TLO.Me.Y(), mq.TLO.Me.X(), campData.campSettings.AutoCampY, campData.campSettings.AutoCampX)
                 if distanceToCampSq > (Config:GetSetting('AutoCampRadius') ^ 2) then
-                    Logger.log_debug("PULL: Distance to camp is %d and radius is %d - going closer.", math.sqrt(distanceToCampSq), Config:GetSetting('AutoCampRadius'))
+                    Logger.log_info("[CAMPNAV:PULL_NUDGE] Distance to camp is %d and radius is %d - going closer.", math.sqrt(distanceToCampSq), Config:GetSetting('AutoCampRadius'))
                     Movement:DoNav(false, "locyxz %0.2f %0.2f %0.2f log=off", campData.campSettings.AutoCampY, campData.campSettings.AutoCampX, campData.campSettings.AutoCampZ)
                 end
             end
@@ -2436,20 +2471,40 @@ function Module:GiveTime()
 
                 mq.delay("3s", function() return mq.TLO.Me.Heading.ShortName() == target.HeadingTo.ShortName() end)
                 self.TempSettings.PullAttemptStarted = Globals.GetTimeSeconds()
+                self.TempSettings.PullTargetLastDistance = nil
+                self.TempSettings.PullTargetLastCheckTime = nil
+                self.TempSettings.PullRangedLastLogAt = nil
 
                 -- We will continue to fire arrows until we aggro our target
                 while not successFn() do
                     Logger.log_super_verbose("Waiting on ranged pull to finish... %s", Strings.BoolToColorString(successFn()))
 
-                    if Targeting.GetTargetDistance() > self:GetPullAbilityRange() then
-                        Movement:DoNav(false, "id %d distance=%d lineofsight=%s log=off", self.TempSettings.PullID, self:GetPullAbilityRange() / 2, requireLOS)
-                        mq.delay(maxMove, function()
-                            Modules:ExecModule("Movement", "CheckStuck")
-                            return not mq.TLO.Navigation.Active()
-                        end)
+                    local rangedTargetDistance = Targeting.GetTargetDistance()
+                    if rangedTargetDistance > self:GetPullAbilityRange() then
+                        -- if the mob is already closing the gap on its own (chasing our ranged
+                        -- pull), hold position and keep firing instead of running out to meet it --
+                        -- doing both at once was causing the two of us to cross paths and nav
+                        -- repeatedly re-issue to the same unreachable spot.
+                        if not self:IsPullTargetClosing(rangedTargetDistance) then
+                            Logger.log_info("[CAMPNAV:PULL_RANGED] TargetDistance: %d, PullAbilityRange: %d, NavDistance: %d, LOS: %s",
+                                rangedTargetDistance, self:GetPullAbilityRange(), self:GetPullAbilityRange() / 2, requireLOS)
+                            Movement:DoNav(false, "id %d distance=%d lineofsight=%s log=off", self.TempSettings.PullID, self:GetPullAbilityRange() / 2, requireLOS)
+                            mq.delay(maxMove, function()
+                                Modules:ExecModule("Movement", "CheckStuck")
+                                return not mq.TLO.Navigation.Active()
+                            end)
+                        end
                     end
 
                     Core.DoCmd("/ranged %d", self.TempSettings.PullID)
+
+                    local rangedLogNow = Globals.GetTimeSeconds()
+                    if not self.TempSettings.PullRangedLastLogAt or rangedLogNow - self.TempSettings.PullRangedLastLogAt >= 1 then
+                        Logger.log_info("[PULL:RANGED_FIRE] Firing on %s [%d], Distance: %d, Range: %d",
+                            target.CleanName(), self.TempSettings.PullID, rangedTargetDistance, self:GetPullAbilityRange())
+                        self.TempSettings.PullRangedLastLogAt = rangedLogNow
+                    end
+
                     if self:IsPullMode("Chain") and Targeting.DiffXTHaterIDs(startingXTargs) then
                         break
                     end
@@ -2477,6 +2532,8 @@ function Module:GiveTime()
                     Core.DoCmd("/attack")
 
                     if Targeting.GetTargetDistance() > self:GetPullAbilityRange() then
+                        Logger.log_info("[CAMPNAV:PULL_AUTOATTACK] TargetDistance: %d, PullAbilityRange: %d, NavDistance: %d, LOS: %s",
+                            Targeting.GetTargetDistance(), self:GetPullAbilityRange(), self:GetPullAbilityRange() / 2, requireLOS)
                         Movement:DoNav(false, "id %d distance=%d lineofsight=%s log=off", self.TempSettings.PullID, self:GetPullAbilityRange() / 2, requireLOS)
                         mq.delay(maxMove, function()
                             Modules:ExecModule("Movement", "CheckStuck")
@@ -2508,6 +2565,8 @@ function Module:GiveTime()
                     end
 
                     if Targeting.GetTargetDistance() > self:GetPullAbilityRange() then
+                        Logger.log_info("[CAMPNAV:PULL_ABILITY] TargetDistance: %d, PullAbilityRange: %d, NavDistance: %d, LOS: %s",
+                            Targeting.GetTargetDistance(), self:GetPullAbilityRange(), self:GetPullAbilityRange() / 2, requireLOS)
                         Movement:DoNav(false, "id %d distance=%d lineofsight=%s log=off", self.TempSettings.PullID, self:GetPullAbilityRange() / 2, requireLOS)
                         mq.delay(500, function() return mq.TLO.Navigation.Active() end)
                         mq.delay(maxMove, function()
@@ -2568,6 +2627,7 @@ function Module:GiveTime()
         -- Nav back to camp.
         self:SetPullState(PullStates.PULL_RETURN_TO_CAMP, string.format("Camp Loc: %0.2f %0.2f %0.2f", start_y, start_x, start_z))
 
+        Logger.log_info("[CAMPNAV:PULL_RETURN_INITIAL] Navigating to camp after pull.")
         Movement:DoNav(false, "locyxz %0.2f %0.2f %0.2f log=off %s", start_y, start_x, start_z, Config:GetSetting('PullBackwards') and "facing=backward" or "")
         mq.delay("5s", function() return mq.TLO.Navigation.Active() end)
 
@@ -2576,6 +2636,7 @@ function Module:GiveTime()
             if mq.TLO.Me.State():lower() == "feign" or mq.TLO.Me.Sitting() then
                 Logger.log_debug("PULL:Standing up to Engage Target")
                 mq.TLO.Me.Stand()
+                Logger.log_info("[CAMPNAV:PULL_RETURN_FEIGN] Re-navigating to camp after standing from feign/sit.")
                 Movement:DoNav(false, "locyxz %0.2f %0.2f %0.2f log=off %s", start_y, start_x, start_z, Config:GetSetting('PullBackwards') and "facing=backward" or "")
                 mq.delay("5s", function() return mq.TLO.Navigation.Active() end)
             end
