@@ -3608,11 +3608,14 @@ function Config:SaveProfile(name)
 end
 
 --- Loads a named profile onto this character, refusing if it was saved under a
---- different class. Writes straight to the DB, matching how DB Management's
---- character-to-character copy already works -- a full restart is required
---- to pick up the new values, since RegisterModuleSettings() (run once per
---- module at startup) refuses to re-register and a module may also hold its
---- own local copy of a setting made at load time.
+--- different class. Writes to the DB, then reuses the same reload sequence the
+--- Class tab's "Reload Current Config" button already relies on (ClassLoader.
+--- reloadConfig): it clears Config.moduleDefaultSettings before re-registering,
+--- which is what lets Modules:ExecAll("LoadSettings") re-run without tripping
+--- RegisterModuleSettings()'s double-registration guard. That also re-triggers
+--- Config.CacheCustomColors(), so most everything -- including colors -- applies
+--- without a restart. Required lazily to avoid a circular require, since
+--- classloader.lua itself requires this module.
 ---@param name string
 ---@return boolean success
 ---@return string|nil errorMessage
@@ -3622,7 +3625,9 @@ function Config:LoadProfile(name)
         Logger.log_error("\arLoadProfile: %s", err)
         return false, err
     end
-    Logger.log_info("\agLoaded profile \at%s\ag. Any new colors or modules will reload after restarting RGMercs (/lua stop rgmercs, /lua run rgmercs).", name)
+    local ClassLoader = require("utils.classloader")
+    ClassLoader.reloadConfig()
+    Logger.log_info("\agLoaded profile \at%s\ag and reloaded settings.", name)
     return true
 end
 

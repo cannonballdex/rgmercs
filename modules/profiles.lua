@@ -2,7 +2,6 @@ local mq       = require('mq')
 local ImGui    = require('ImGui')
 local Base     = require("modules.base")
 local Config   = require('utils.config')
-local Core     = require("utils.core")
 local Globals  = require("utils.globals")
 local Logger   = require("utils.logger")
 
@@ -14,11 +13,11 @@ Module.FAQ = {
     {
         Question = "How do I save/load a settings profile?",
         Answer   = "/rgl profile save <name> snapshots your character's current class settings under <name>. " ..
-            "/rgl profile load <name> writes that snapshot into the database -- most settings (like Pull settings) " ..
-            "apply immediately; any new colors or modules will reload after restarting RGMercs, the same way DB " ..
-            "Management's character-to-character copy works. It only works if the profile was saved by a character " ..
-            "of the same class as you, to avoid applying class-inappropriate settings. /rgl profile list shows all " ..
-            "saved profiles, and /rgl profile delete <name> removes one.",
+            "/rgl profile load <name> writes that snapshot into the database and reloads settings automatically " ..
+            "(the same reload the Class tab's 'Reload Current Config' button uses), so it takes effect right away " ..
+            "without a restart. It only works if the profile was saved by a character of the same class as you, to " ..
+            "avoid applying class-inappropriate settings. /rgl profile list shows all saved profiles, and /rgl " ..
+            "profile delete <name> removes one.",
         Settings_Used = "",
     },
 }
@@ -95,31 +94,6 @@ function Module:Render()
     if not self.ModuleLoaded then return end
 
     ImGui.TextWrapped("Saved settings can be used on other same-class characters.")
-    ImGui.TextColored(ImVec4(1, 0.8, 0.2, 1), "New colors or modules will reload when restarting RGMercs.")
-    ImGui.SameLine()
-    if ImGui.Button("Restart RGMercs##rg_profile_restart") then
-        ImGui.OpenPopup("RGProfileRestartConfirm")
-    end
-
-    ImGui.SetNextWindowSize(ImVec2(360, 0), ImGuiCond.Appearing)
-    if ImGui.BeginPopup("RGProfileRestartConfirm") then
-        ImGui.TextWrapped("Restart RGMercs now? This briefly interrupts whatever it's currently doing, and can take a few seconds.")
-        ImGui.Spacing()
-        if ImGui.Button("Restart##rg_profile_restart_confirm") then
-            -- /timed is handled by MQ2's own timer, not this script instance, so it
-            -- survives /lua stop killing us -- queue the relaunch before stopping,
-            -- same pattern modules/lootnscoot.lua uses for the identical problem.
-            Core.DoCmd('/timed 30 /lua run rgmercs')
-            Core.DoCmd('/lua stop rgmercs')
-            ImGui.CloseCurrentPopup()
-        end
-        ImGui.SameLine()
-        if ImGui.Button("Cancel##rg_profile_restart_cancel") then
-            ImGui.CloseCurrentPopup()
-        end
-        ImGui.EndPopup()
-    end
-
     ImGui.Separator()
 
     local profiles = Config:ListProfiles()
