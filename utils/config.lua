@@ -3616,6 +3616,14 @@ end
 --- Config.CacheCustomColors(), so most everything -- including colors -- applies
 --- without a restart. Required lazily to avoid a circular require, since
 --- classloader.lua itself requires this module.
+---
+--- Also requests a user module sync: if the profile changed UserModuleList
+--- (which user modules are enabled), that setting value updates like any other,
+--- but actually loading/unloading a module only happens via
+--- Modules:RequestUserModuleSync() -- normally triggered by SetModuleEnabled()/
+--- ToggleModule() going through Config:SetSetting(), which a raw profile write
+--- bypasses. Without this, the setting says "enabled" but the module never
+--- actually loads.
 ---@param name string
 ---@return boolean success
 ---@return string|nil errorMessage
@@ -3627,6 +3635,7 @@ function Config:LoadProfile(name)
     end
     local ClassLoader = require("utils.classloader")
     ClassLoader.reloadConfig()
+    Modules:RequestUserModuleSync()
     Logger.log_info("\agLoaded profile \at%s\ag and reloaded settings.", name)
     return true
 end

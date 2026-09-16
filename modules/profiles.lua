@@ -9,15 +9,23 @@ local Module   = { _version = '1.0', _name = "Profiles", _author = 'Cannonballde
 Module.__index = Module
 setmetatable(Module, { __index = Base, })
 
+-- Profile names are globally unique in the DB, so two characters saving a profile
+-- called the same thing would silently overwrite each other. Prefixing with the
+-- saving character's name keeps them distinct without needing a schema change.
+local function FullProfileName(rawName)
+    return string.format("%s_%s", Globals.CurLoadedChar, rawName)
+end
+
 Module.FAQ = {
     {
         Question = "How do I save/load a settings profile?",
-        Answer   = "/rgl profile save <name> snapshots your character's current class settings under <name>. " ..
-            "/rgl profile load <name> writes that snapshot into the database and reloads settings automatically " ..
-            "(the same reload the Class tab's 'Reload Current Config' button uses), so it takes effect right away " ..
-            "without a restart. It only works if the profile was saved by a character of the same class as you, to " ..
-            "avoid applying class-inappropriate settings. /rgl profile list shows all saved profiles, and /rgl " ..
-            "profile delete <name> removes one.",
+        Answer   = "/rgl profile save <name> snapshots your character's current class settings, saved as " ..
+            "<YourCharacterName>_<name> so different characters saving the same name don't collide. /rgl profile " ..
+            "load <name> writes that snapshot into the database and reloads settings automatically (the same " ..
+            "reload the Class tab's 'Reload Current Config' button uses), so it takes effect right away without a " ..
+            "restart. It only works if the profile was saved by a character of the same class as you, to avoid " ..
+            "applying class-inappropriate settings. /rgl profile list shows all saved profiles (with their full " ..
+            "stored name), and /rgl profile delete <name> removes one.",
         Settings_Used = "",
     },
 }
@@ -42,7 +50,7 @@ Module.CommandHandlers = {
                     Logger.log_error("\arUsage: /rgl profile save <name>")
                     return true
                 end
-                Config:SaveProfile(name)
+                Config:SaveProfile(FullProfileName(name))
                 return true
             elseif action == "load" then
                 if not name or name == "" then
@@ -87,6 +95,7 @@ function Module:Init()
     self.pendingDeleteProfile = nil
     self.pendingOverwriteProfile = nil
     self.wantDeleteConfirm = nil
+    self.showAllClasses = false
 end
 
 function Module:Render()
@@ -97,10 +106,11 @@ function Module:Render()
     ImGui.TextWrapped("Saved settings can be used on other same-class characters.")
     ImGui.Separator()
 
-    local profiles = Config:ListProfiles()
+    local allProfiles = Config:ListProfiles()
+    local fullName = self.newProfileName ~= "" and FullProfileName(self.newProfileName) or ""
     local existing = nil
-    for _, p in ipairs(profiles) do
-        if p.name == self.newProfileName then existing = p end
+    for _, p in ipairs(allProfiles) do
+        if p.name == fullName then existing = p end
     end
 
     ImGui.SetNextItemWidth(220)
@@ -111,14 +121,14 @@ function Module:Render()
     if not canSave then ImGui.BeginDisabled() end
     if ImGui.Button("Save Current Settings##rg_profile_save") then
         if existing then
-            self.pendingOverwriteProfile = self.newProfileName
+            self.pendingOverwriteProfile = fullName
             ImGui.OpenPopup("RGProfileOverwriteConfirm")
         else
-            Config:SaveProfile(self.newProfileName)
+            Config:SaveProfile(fullName)
         end
     end
     if not canSave then ImGui.EndDisabled() end
-    ImGui.TextDisabled(string.format("Saves as class: %s", Globals.CurLoadedClass))
+    ImGui.TextDisabled(string.format("Saves as: %s (class: %s)", canSave and fullName or (Globals.CurLoadedChar .. "_..."), Globals.CurLoadedClass))
 
     ImGui.SetNextWindowSize(ImVec2(380, 0), ImGuiCond.Appearing)
     if ImGui.BeginPopup("RGProfileOverwriteConfirm") then
@@ -139,9 +149,21 @@ function Module:Render()
     end
 
     ImGui.Separator()
+
+    local newShowAll, showAllChanged = ImGui.Checkbox("Show all classes##rg_profile_show_all", self.showAllClasses)
+    if showAllChanged then self.showAllClasses = newShowAll end
+
+    local profiles = allProfiles
+    if not self.showAllClasses then
+        profiles = {}
+        for _, p in ipairs(allProfiles) do
+            if p.class == Globals.CurLoadedClass then profiles[#profiles + 1] = p end
+        end
+    end
+
     ImGui.Text(string.format("Saved Profiles (%d):", #profiles))
     if #profiles == 0 then
-        ImGui.TextDisabled("None yet.")
+        ImGui.TextDisabled(self.showAllClasses and "None yet." or string.format("None for %s yet.", Globals.CurLoadedClass))
         return
     end
 
