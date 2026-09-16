@@ -3593,6 +3593,58 @@ function Config:SaveModuleSettings(module, settings)
         { peer = Comms.GetPeerName(), module = module, settings = settings, settingCategories = settingsCategories, defaultSettings = defaultSettings, })
 end
 
+--- Saves (or overwrites) a named profile snapshot of this character's current class settings.
+---@param name string
+---@return boolean success
+---@return string|nil errorMessage
+function Config:SaveProfile(name)
+    local ok, err = self.Db:saveProfile(name, Globals.CurServer, Globals.CurLoadedChar, Globals.CurLoadedClass)
+    if not ok then
+        Logger.log_error("\arSaveProfile: %s", err)
+        return false, err
+    end
+    Logger.log_info("\agSaved profile \at%s\ag from your current %s settings.", name, Globals.CurLoadedClass)
+    return true
+end
+
+--- Loads a named profile onto this character, refusing if it was saved under a
+--- different class. Writes straight to the DB, matching how DB Management's
+--- character-to-character copy already works -- a full restart is required
+--- to pick up the new values, since RegisterModuleSettings() (run once per
+--- module at startup) refuses to re-register and a module may also hold its
+--- own local copy of a setting made at load time.
+---@param name string
+---@return boolean success
+---@return string|nil errorMessage
+function Config:LoadProfile(name)
+    local ok, err = self.Db:loadProfile(name, Globals.CurServer, Globals.CurLoadedChar, Globals.CurLoadedClass)
+    if not ok then
+        Logger.log_error("\arLoadProfile: %s", err)
+        return false, err
+    end
+    Logger.log_info("\agLoaded profile \at%s\ag. Any new colors or modules will reload after restarting RGMercs (/lua stop rgmercs, /lua run rgmercs).", name)
+    return true
+end
+
+--- Deletes a named profile. Does not affect any character's current settings.
+---@param name string
+---@return boolean success
+function Config:DeleteProfile(name)
+    local ok = self.Db:deleteProfile(name)
+    if ok then
+        Logger.log_info("\agDeleted profile \at%s", name)
+    else
+        Logger.log_error("\arFailed to delete profile \at%s", name)
+    end
+    return ok
+end
+
+--- Lists all saved profiles.
+---@return table  Array of { id, name, class }, ordered by name
+function Config:ListProfiles()
+    return self.Db:getProfiles()
+end
+
 function Config:ValidatePeers()
     Comms.ValidatePeers(Config:GetSetting("ActorPeerTimeout"))
 

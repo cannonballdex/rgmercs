@@ -19,6 +19,7 @@ Modules.ModuleOrder = {
     "Perf",
     "Contributors",
     "FAQ",
+    "Profiles",
     "UserModules",
     "Debug",
 }
@@ -73,6 +74,7 @@ function Modules:load(lootModule)
         Perf         = require("modules.performance"):New(),
         Contributors = require("modules.contributors"):New(),
         FAQ          = require("modules.faq"):New(),
+        Profiles     = require("modules.profiles"):New(),
         UserModules  = require("modules.usermodules"):New(),
         Debug        = require("modules.debug"):New(),
         LootNScoot   = lootModule == "LootNScoot" and require("modules.lootnscoot"):New() or nil,

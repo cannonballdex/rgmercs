@@ -42,6 +42,24 @@ local SCHEMA              = [[
 
     CREATE INDEX IF NOT EXISTS idx_config_lookup
         ON config_value(character_id, module, class);
+
+    -- A profile is a named, class-scoped snapshot of a character's settings that can be
+    -- saved from one character and loaded onto another (of the same class) later.
+    CREATE TABLE IF NOT EXISTS profile (
+        id    INTEGER PRIMARY KEY,
+        name  TEXT    NOT NULL UNIQUE,
+        class TEXT    NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS profile_value (
+        id         INTEGER PRIMARY KEY,
+        profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+        module     TEXT    NOT NULL,
+        key        TEXT    NOT NULL,
+        value_type TEXT    NOT NULL CHECK (value_type IN ('bool','number','string','lua')),
+        value      TEXT,
+        UNIQUE (profile_id, module, key)
+    );
 ]]
 
 ---@param path        string        Full path to the .db file
@@ -706,6 +724,201 @@ function DB:deleteCharacter(serverName, charName)
     if not ok then
         self:_enqueueWrite("deleteCharacter", serverName, charName)
     end
+    return ok
+end
+
+-- ── Profiles ──────────────────────────────────────────────────
+-- A profile is a named, class-scoped snapshot of a character's config_value rows.
+-- Saving copies the current character/class's rows into profile_value; loading writes
+-- them back onto a (possibly different) character, but only if that character's current
+-- class matches the class the profile was saved under.
+
+---@param name string
+---@return integer|nil profile id, or nil if not found
+function DB:getProfileId(name)
+    local stmt = self:_prepare("SELECT id FROM profile WHERE name=?;")
+    if not stmt then return nil end
+    stmt:bind(1, name)
+    local rows = collectRows(stmt)
+    return rows[1] and rows[1].id or nil
+end
+
+---@param name string
+---@return string|nil the class the profile was saved under, or nil if the profile doesn't exist
+function DB:getProfileClass(name)
+    local stmt = self:_prepare("SELECT class FROM profile WHERE name=?;")
+    if not stmt then return nil end
+    stmt:bind(1, name)
+    local rows = collectRows(stmt)
+    return rows[1] and rows[1].class or nil
+end
+
+---@return table  Array of { id, name, class }, ordered by name
+function DB:getProfiles()
+    local stmt = self:_prepare("SELECT id, name, class FROM profile ORDER BY name;")
+    if not stmt then return {} end
+    return collectRows(stmt)
+end
+
+---Saves (or overwrites) a named profile from a character's current settings for charClass.
+---@param name       string
+---@param serverName string
+---@param charName   string
+---@param charClass  string
+---@return boolean success
+---@return string|nil errorMessage  set when success is false
+function DB:saveProfile(name, serverName, charName, charClass)
+    local charId = self:getCharacterId(serverName, charName)
+    if not charId then
+        return false, string.format("Character %s.%s has no saved settings yet.", serverName, charName)
+    end
+
+    if not self:_exec("BEGIN IMMEDIATE TRANSACTION;") then
+        return false, "Database busy, try again."
+    end
+
+    local profStmt = self:_prepare([[
+        INSERT INTO profile(name, class) VALUES(?,?)
+        ON CONFLICT(name) DO UPDATE SET class=excluded.class;
+    ]])
+    if not profStmt then
+        self:_exec("ROLLBACK;")
+        return false, "Failed to prepare profile insert."
+    end
+    profStmt:bind(1, name)
+    profStmt:bind(2, charClass)
+    if not self:_step(profStmt) then
+        profStmt:finalize()
+        self:_exec("ROLLBACK;")
+        return false, "Failed to create/update profile record."
+    end
+    profStmt:finalize()
+
+    local profileId = self:getProfileId(name)
+    if not profileId then
+        self:_exec("ROLLBACK;")
+        return false, "Failed to resolve new profile id."
+    end
+
+    local delStmt = self:_prepare("DELETE FROM profile_value WHERE profile_id=?;")
+    if not delStmt then
+        self:_exec("ROLLBACK;")
+        return false, "Failed to prepare profile clear."
+    end
+    delStmt:bind(1, profileId)
+    if not self:_step(delStmt) then
+        delStmt:finalize()
+        self:_exec("ROLLBACK;")
+        return false, "Failed to clear existing profile rows."
+    end
+    delStmt:finalize()
+
+    local copyStmt = self:_prepare([[
+        INSERT INTO profile_value(profile_id, module, key, value_type, value)
+        SELECT ?, cv.module, cv.key, cv.value_type, cv.value
+        FROM config_value cv
+        WHERE cv.character_id=? AND cv.class=?;
+    ]])
+    if not copyStmt then
+        self:_exec("ROLLBACK;")
+        return false, "Failed to prepare settings copy."
+    end
+    copyStmt:bind(1, profileId)
+    copyStmt:bind(2, charId)
+    copyStmt:bind(3, charClass)
+    if not self:_step(copyStmt) then
+        copyStmt:finalize()
+        self:_exec("ROLLBACK;")
+        return false, "Failed to copy settings into profile."
+    end
+    copyStmt:finalize()
+
+    self:_exec("COMMIT;")
+    return true
+end
+
+---Loads a named profile's settings onto a character. Refuses if the profile's saved
+---class doesn't match charClass -- callers should follow a success with a settings
+---reload (e.g. Modules:ExecAll("LoadSettings")) so already-running modules pick up
+---the new values rather than just the DB.
+---@param name       string
+---@param serverName string
+---@param charName   string
+---@param charClass  string
+---@return boolean success
+---@return string|nil errorMessage  set when success is false
+function DB:loadProfile(name, serverName, charName, charClass)
+    local profileId = self:getProfileId(name)
+    if not profileId then
+        return false, string.format("Profile '%s' doesn't exist.", name)
+    end
+
+    local profileClass = self:getProfileClass(name)
+    if profileClass ~= charClass then
+        return false,
+            string.format("Profile '%s' was saved for class %s, but this character is %s -- refusing to load.", name, profileClass, charClass)
+    end
+
+    local charId = self:upsertCharacter(serverName, charName)
+    if not charId then
+        return false, "Failed to resolve character record."
+    end
+
+    local rowsStmt = self:_prepare("SELECT module, key, value_type, value FROM profile_value WHERE profile_id=?;")
+    if not rowsStmt then return false, "Failed to read profile." end
+    rowsStmt:bind(1, profileId)
+    local rows = collectRows(rowsStmt)
+
+    if #rows == 0 then
+        return false, string.format("Profile '%s' has no saved settings.", name)
+    end
+
+    if not self:_exec("BEGIN IMMEDIATE TRANSACTION;") then
+        return false, "Database busy, try again."
+    end
+
+    local writeStmt = self:_prepare([[
+        INSERT INTO config_value(character_id, module, class, key, value_type, value)
+        VALUES(?,?,?,?,?,?)
+        ON CONFLICT(character_id, module, class, key)
+        DO UPDATE SET value_type=excluded.value_type, value=excluded.value;
+    ]])
+    if not writeStmt then
+        self:_exec("ROLLBACK;")
+        return false, "Failed to prepare write."
+    end
+
+    for _, row in ipairs(rows) do
+        writeStmt:bind(1, charId)
+        writeStmt:bind(2, row.module)
+        writeStmt:bind(3, charClass)
+        writeStmt:bind(4, row.key)
+        writeStmt:bind(5, row.value_type)
+        writeStmt:bind(6, row.value)
+        if not self:_step(writeStmt) then
+            writeStmt:finalize()
+            self:_exec("ROLLBACK;")
+            return false, "Write failed mid-transaction, rolled back -- no changes applied."
+        end
+        writeStmt:reset()
+    end
+    writeStmt:finalize()
+    self:_exec("COMMIT;")
+
+    -- force a fresh DB read next time anything in this class asks for a setting
+    self:_cacheDelClass(serverName, charName, charClass)
+
+    return true
+end
+
+---@param name string
+---@return boolean success
+function DB:deleteProfile(name)
+    local stmt = self:_prepare("DELETE FROM profile WHERE name=?;")
+    if not stmt then return false end
+    stmt:bind(1, name)
+    local ok = self:_step(stmt)
+    stmt:finalize()
     return ok
 end
 
