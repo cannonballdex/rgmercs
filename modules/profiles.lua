@@ -86,6 +86,7 @@ function Module:Init()
     self.newProfileName = ""
     self.pendingDeleteProfile = nil
     self.pendingOverwriteProfile = nil
+    self.wantDeleteConfirm = nil
 end
 
 function Module:Render()
@@ -175,11 +176,20 @@ function Module:Render()
 
             ImGui.TableSetColumnIndex(3)
             if ImGui.Button("Delete##rg_profile_delete_" .. p.name) then
-                self.pendingDeleteProfile = p.name
-                ImGui.OpenPopup("RGProfileDeleteConfirm")
+                -- ImGui.OpenPopup() doesn't reliably work called from inside a table
+                -- (BeginTable/EndTable) in this binding -- just record the request here
+                -- and open the popup after EndTable, same as DB Management's own
+                -- confirm popups do in ui/options.lua.
+                self.wantDeleteConfirm = p.name
             end
         end
         ImGui.EndTable()
+    end
+
+    if self.wantDeleteConfirm then
+        self.pendingDeleteProfile = self.wantDeleteConfirm
+        self.wantDeleteConfirm = nil
+        ImGui.OpenPopup("RGProfileDeleteConfirm")
     end
 
     ImGui.SetNextWindowSize(ImVec2(360, 0), ImGuiCond.Appearing)
