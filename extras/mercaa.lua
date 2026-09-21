@@ -2062,6 +2062,9 @@ function Module:Render()
             gui.applyInitialLayout = true
         end
     end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('If you close the MercAA window (X), re-open it by clicking this button\nor by typing /mercaa ui in the MQ chat window. Use /mercaa help for all commands.')
+    end
     ImGui.SameLine()
     if ImGui.SmallButton(paused and 'Resume' or 'Pause') then
         paused = not paused
@@ -2073,6 +2076,9 @@ function Module:Render()
     end
 
     ImGui.TextWrapped('Full controls (priority list, scan, threshold, etc.) are on the floating MercAA GUI - /mercaa ui.')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('To re-open the MercAA GUI window if it was closed:\n  - click the "Open MercAA GUI" button above, or\n  - type /mercaa ui in the MQ chat window (toggles show/hide).')
+    end
 end
 
 function Module:Shutdown()

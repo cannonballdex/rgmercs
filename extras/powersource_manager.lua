@@ -242,6 +242,69 @@ function Module:EquipReplacement()
     return equipped
 end
 
+--- Scans top-level inventory slots and the contents of every bag for the first item
+--- that can be worn in the Power Source slot and still has charge.
+--- @return string|nil name The item's name, or nil if none was found.
+local function FindFirstPowerSourceInInventory()
+    for invSlot = 23, 34 do
+        local entry = mq.TLO.Me.Inventory(invSlot)
+        if entry() ~= nil then
+            if ItemIsPowerSource(entry) and (entry.Power() or 0) > 0 then
+                return entry.Name()
+            end
+            for i = 1, (entry.Container() or 0) do
+                local bagItem = entry.Item(i)
+                if ItemIsPowerSource(bagItem) and (bagItem.Power() or 0) > 0 then
+                    return bagItem.Name()
+                end
+            end
+        end
+    end
+    return nil
+end
+
+--- Equips the first usable Power Source found anywhere in inventory, but only when
+--- the Power Source slot is empty. Independent of the configured Power Source Item.
+--- @return boolean equipped True if a Power Source was equipped.
+function Module:EquipAnyPowerSource()
+    if mq.TLO.Me.Inventory('powersource')() ~= nil then
+        Logger.log_info("\ayPowerSourceManager: a Power Source is already equipped - nothing to do.")
+        return false
+    end
+
+    local newName = FindFirstPowerSourceInInventory()
+    if not newName then
+        self.lastAction = "No Power Source found in inventory"
+        Logger.log_warn("\arPowerSourceManager: no Power Source with charge found in inventory.")
+        return false
+    end
+
+    Core.DoCmd('/itemnotify "%s" leftmouseup', newName)
+    mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
+
+    if mq.TLO.Cursor.Name() == newName then
+        Core.DoCmd('/ctrl /itemnotify powersource leftmouseup')
+        mq.delay(1000, function() return mq.TLO.Me.Inventory('powersource').Name() == newName end)
+    end
+
+    if mq.TLO.Window('ConfirmationDialogBox').Open() then
+        mq.TLO.Window('ConfirmationDialogBox').Child('CD_Yes_Button').LeftMouseUp()
+        mq.delay(500)
+    end
+
+    self:ClearCursor()
+
+    local equipped = mq.TLO.Me.Inventory('powersource').Name() == newName
+    if equipped then
+        self.lastAction = string.format("Equipped Power Source from inventory: %s", newName)
+        Logger.log_info("\agPowerSourceManager: \atEquipped Power Source: %s", newName)
+    else
+        self.lastAction = string.format("Failed to equip Power Source: %s", newName)
+        Logger.log_error("\arPowerSourceManager: failed to equip \at%s", newName)
+    end
+    return equipped
+end
+
 --- If no Power Source Item is configured, adopts whatever's currently equipped as the
 --- configured item. Self-heals from the setting ever being empty (a fresh install, a
 --- lost/never-saved value, etc.) without needing the user to re-drop it manually.
@@ -269,6 +332,12 @@ function Module:CheckPowerSource()
 end
 
 function Module:GiveTime()
+    -- Render() can't mq.delay(), so the button just raises a flag that's serviced here.
+    if self.equipAnyRequested then
+        self.equipAnyRequested = false
+        self:EquipAnyPowerSource()
+    end
+
     if not Config:GetSetting('PSMEnabled') then return end
 
     self:LearnEquippedItemIfUnset()
@@ -322,6 +391,14 @@ function Module:Render()
         self.lastCheck = 0
     end
     Ui.Tooltip("Runs a check immediately instead of waiting for the check interval.")
+
+    if not name then
+        ImGui.SameLine()
+        if ImGui.SmallButton(Icons.MD_BATTERY_CHARGING_FULL .. " Equip Power Source") then
+            self.equipAnyRequested = true
+        end
+        Ui.Tooltip("No Power Source is equipped. Searches your inventory and bags and equips the first Power Source with charge it finds.")
+    end
 end
 
 return Module
