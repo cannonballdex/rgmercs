@@ -334,6 +334,7 @@ local _ClassConfig = {
             "McVaxius' Berserker Crescendo",    -- level 42, Base Game
             "Vilia's Verses of Celerity",       -- level 36, Base Game
             "Anthem de Arms",                   -- level 10, Base Game
+            "Chant of Battle",                  -- level 1, Base Game
         },
         ['FireBuffSong'] = {
             -- CasterAriaSong - Level Range 72+
@@ -591,7 +592,7 @@ local _ClassConfig = {
         },
         ['MezSong'] = {
             -- Lullaby line has lower max level and has pushback, but you get them earlier.
-            "Slumber of Keftlik	",      -- level 129, SoR (up to 133)
+            "Slumber of Keftlik",      -- level 129, SoR (up to 133)
             -- "Lullaby of the Sundered",            -- level 126, SoR (up to 130)
             "Slumber of Suja",          -- level 124, LS (up to 128,)
             -- "Lullaby of the Forgotten",           -- level 121, LS (up to 125)
@@ -653,7 +654,7 @@ local _ClassConfig = {
             "Silence of Quietus",        -- Level 116, TOL (up to 120)
             "Silence of Zburator",       -- Level 111, ToV (up to 115)
             "Silence of Jembel",         -- Level 106, RoS (up to 110)
-            "Silence of the Silisia",    -- Level 101, TDS (up to 105)
+            "Silence of Silisia",    -- Level 101, TDS (up to 105)
             "Silence of the Forsaken",   -- Level 96, RoF (up to 100)
             "Silence of the Windsong",   -- Level 91, VoA (up to 95)
             "Silence of the Dreamer",    -- Level 86, HoT (up to 90)

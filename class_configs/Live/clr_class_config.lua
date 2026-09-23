@@ -393,7 +393,7 @@ local _ClassConfig = {
             "Order of the Resolute",
             "Ward of the Resolute",
             "Ward of the Dauntless",
-            "Ward of Valliance",
+            "Ward of Valiance",
             "Ward of Gallantry",
             "Bulwark of Faith",
             "Shield of Words",
@@ -708,7 +708,7 @@ local _ClassConfig = {
             "Decree",
         },
         ['HammerPet'] = {
-            "Hammer of Emminence", -- 127
+            "Hammer of Eminence", -- 127
             "Unswerving Hammer of Faith",
             "Unswerving Hammer of Retribution",
             "Unflinching Hammer of Zeal",

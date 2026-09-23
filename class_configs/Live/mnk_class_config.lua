@@ -216,7 +216,7 @@ local _ClassConfig = {
             "Terrorpalm Discipline",
         },
         ['Poise'] = {
-            "Eagles's Symmetry",
+            "Eagle's Symmetry",
             "Dragon's Poise",
             "Tiger's Poise",
             "Eagle's Poise",

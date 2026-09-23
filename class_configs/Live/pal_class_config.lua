@@ -317,7 +317,7 @@ local _ClassConfig = {
             "Hand of the Fernshade Keeper",  -- Level 125 - Group
         },
         ["Brells"] = {
-            "Brell's Mountainous Barrior XVI",
+            "Brell's Mountainous Barrier XVI",
             "Brell's Tenacious Barrier",
             "Brell's Loamy Ward",
             "Brell's Tellurian Rampart",
@@ -364,7 +364,7 @@ local _ClassConfig = {
             "Unyielding Affirmation",
         },
         ["WaveHeal"] = { -- Group Heal
-            "Wave of Inspiriation",
+            "Wave of Inspiration",
             "Wave of Regret",
             "Wave of Bereavement",
             "Wave of Propitiation",
@@ -395,7 +395,7 @@ local _ClassConfig = {
             "Angst",
         },
         ["ReverseDS"] = {
-            "Mark of Sharash",
+            "Mark of Sharosh",
             "Mark of the Saint",
             "Mark of the Crusader",
             "Mark of the Pious",
@@ -1137,10 +1137,11 @@ local _ClassConfig = {
                 name = "HealWard",
                 type = "Spell",
                 load_cond = function(self) return Core.IsTanking() end,
-                active_cond = function(self, spell) return Casting.IHaveBuff(spell) end,
+                -- the song on us is the ward this spell triggers (effect 3), not the spell itself
+                active_cond = function(self, spell) return Casting.IHaveBuff(spell.RankName.Trigger(3)) end,
                 cond = function(self, spell, target)
                     if not Casting.CastReady(spell) then return false end
-                    return spell.RankName.Stacks() and (mq.TLO.Me.Song(spell).Duration.TotalSeconds() or 0) < 15
+                    return spell.RankName.Stacks() and (mq.TLO.Me.Song(spell.RankName.Trigger(3)).Duration.TotalSeconds() or 0) < 15
                 end,
             },
             { --Charm Click, name function stops errors in rotation window when slot is empty

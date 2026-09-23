@@ -696,6 +696,9 @@ local _ClassConfig = {
             "Heartcleave",
             "Heartsunder",
             "Heartruin",
+            "Heartbreak",  -- Level 125
+            "Heartcarve",  -- Level 100
+            "Heartshear",  -- Level 85
         },
         ["EndRegenDisc"] = {
             "Hiatus V",
@@ -891,7 +894,7 @@ local _ClassConfig = {
         ["AEBlades"] = {
             "Storm of Blades VII",
             "Storm of Blades",
-            "Squall Of Blades",
+            "Squall of Blades",
             "Gale of Blades",
             "Blizzard of Blades",
             "Tempest of Blades",
@@ -1668,7 +1671,7 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "Chamelon's Gift",
+                name = "Chameleon's Gift",
                 type = "AA",
                 tooltip = Tooltips.CG,
                 cond = function(self, spell)

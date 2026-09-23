@@ -1274,7 +1274,7 @@ local _ClassConfig = {
             "Talisman of the Faithful",
             "Talisman of the Steadfast",
             "Talisman of the Indomitable",
-            "Talisman of the Reletntless",
+            "Talisman of the Relentless",
             "Talisman of the Resolute",
             "Talisman of the Stalwart",
             "Talisman of the Stoic One",

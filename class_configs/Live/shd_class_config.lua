@@ -285,7 +285,7 @@ local _ClassConfig = {
         },
         ['Mental'] = {                -- Mana Tap Proc
             "Mental Horror VIII",     -- Level 126
-            "Mental Retchedness",     -- Level 121
+            "Mental Wretchedness",     -- Level 121
             "Mental Anguish",         -- Level 116
             "Mental Torment",         -- Level 111
             "Mental Fright",          -- Level 106
@@ -349,7 +349,7 @@ local _ClassConfig = {
             "Drape of the Ankexfen",
         },
         ['Covenant'] = {
-            "Telthel's Convenant",
+            "Telthel's Covenant",
             "Grim Covenant",
             "Venril's Covenant",
             "Gixblat's Covenant",

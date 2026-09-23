@@ -170,7 +170,7 @@ return {
             "Razor's Edge Discipline",  -- Level 92
         },
         ["AspDisc"] = {
-            "Visapehn Discipline",   -- Level 129
+            "Visaphen Discipline",   -- Level 129
             "Crinotoxin Discipline", -- Level 124
             "Exotoxin Discipline",   -- Level 119
             "Chelicerae Discipline", -- Level 114

@@ -54,7 +54,7 @@ return {
             "Reciprocal Rage",
         },
         ['Dfrenzy'] = {
-            "Obliterating Frenzy III", -- 127
+            "Obliterating Frenzy", -- 127
             "Eviscerating Frenzy",
             "Oppressing Frenzy",
             "Overpowering Frenzy",
@@ -128,7 +128,7 @@ return {
             "Phantom Assailant",
         },
         ['Alliance'] = {
-            "Demolisher's Alliance,",
+            "Demolisher's Alliance",
             "Mangler's Covenant",
             "Vindicator's Coalition",
             "Conqueror's Conjunction",
@@ -154,7 +154,7 @@ return {
             "Arcscale",
         },
         ['AEVicious'] = {
-            "Vicous Spiral VII", -- 127
+            "Vicious Spiral VII", -- 127
             "Vicious Spiral",
             "Vicious Cyclone",
             "Vicious Cycle",
@@ -255,7 +255,7 @@ return {
             "Anticipatory Retaliation", -- 129
             "Preemptive Retaliation",
             "Primed Retaliation",
-            "Premature Retaltion",
+            "Premature Retaliation",
             "Proactive Retaliation",
             "Prior Retaliation",
             "Advanced Retaliation",
@@ -666,8 +666,8 @@ return {
                 end,
             },
             {
-                name = "War Cry of the Braxi",
-                type = "Disc",
+                name = "Braxi's Howl",
+                type = "AA",
                 cond = function(self, aaName)
                     return Casting.SelfBuffAACheck(aaName)
                 end,
@@ -676,7 +676,7 @@ return {
                 name = "HHEBuff",
                 type = "Disc",
                 cond = function(self, discSpell)
-                    return not Casting.AAReady("War Cry of the Braxi") and Casting.NoDiscActive() and Casting.SelfBuffCheck(discSpell)
+                    return not Casting.AAReady("Braxi's Howl") and Casting.NoDiscActive() and Casting.SelfBuffCheck(discSpell)
                 end,
             },
         },

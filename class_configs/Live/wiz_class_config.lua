@@ -103,7 +103,7 @@ return {
             "Ethereal Plait",
         },
         ['FireEtherealNuke'] = {
-            "Ether Fire XIII",
+            "Ethereal Fire XIII",
             "Ethereal Immolation",
             "Ethereal Ignition",
             "Ethereal Brand",
@@ -581,7 +581,7 @@ return {
             "Cold Snap",      -- Level 73
         },
         ['AEBeam'] = {        -- T2 Frontal Fire AE
-            "Coronoa Beam X",
+            "Corona Beam X",
             "Cremating Beam", -- Level 121
             "Vaporizing Beam",
             "Scorching Beam",
@@ -603,7 +603,7 @@ return {
             "Ring of Flame",
             "Ring of Fire",
             "Talendor's Presence",
-            "Vsorgu's Presence",
+            "Vsorug's Presence",
             "Magmaraug's Presence",
             --"Circle of Fire", -- Level 67 Used in PBAE Mode, wouldn't be used in Modern PBAE
         },
@@ -618,7 +618,7 @@ return {
             "Jyll's Wave of Heat", -- Level 59
         },
         ['IceJyll'] = {
-            "Jyll's Zephyr of Iced", -- Level 56
+            "Jyll's Zephyr of Ice", -- Level 56
         },
         ['MagicJyll'] = {
             "Jyll's Static Pulse", -- Level 53

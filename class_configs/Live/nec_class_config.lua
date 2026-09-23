@@ -105,6 +105,7 @@ local _ClassConfig = {
             "Major Shielding",
             "Shielding",
             "Lesser Shielding",
+            "Minor Shielding", -- Level 1
         },
         ['SelfRune1'] = {
             "Wraithskin XIII",
@@ -250,7 +251,7 @@ local _ClassConfig = {
             "Mind Disintegrate",
             "Mind Atrophy",
             "Mind Erosion",
-            "Mind Exorciation",
+            "Mind Excoriation",
             "Mind Extraction",
             "Mind Strip",
             "Mind Abrasion",
@@ -507,7 +508,7 @@ local _ClassConfig = {
         },
         ['SwiftDiseaseDot'] = {
             ---Sickness Life of Disease Spells >=LVL89 QuickDOT
-            "Wremms's Swift Sickness",
+            "Wremm's Swift Sickness",
             "Ogna's Swift Sickness",
             "Diabo Tatrua's Swift Sickness",
             "Lairsaf's Swift Sickness",
@@ -713,7 +714,7 @@ local _ClassConfig = {
             "Minion of Shadows",
         },
         ['WarPetSpell'] = {
-            "Rasivimun's Shade",
+            "Rasvimun's Shade",
             "Margator's Shade",
             "Luclin's Conqueror",
             "Tserrina's Shade",
