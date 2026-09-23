@@ -127,10 +127,13 @@ function TargetUI:RenderContent()
                 for i = 1, buffCount do
                     local buff = target.Buff(i)
                     if buff and buff() and buff.ID() ~= 0 then
+                        -- the same buff from two casters would otherwise collide on the icon's ImGui ID
+                        ImGui.PushID(string.format("##target_buff_%d", i))
                         local borderCol = (buff.CasterName() == mq.TLO.Me.Name()) and Colors.Yellow:ToImU32() or nil
                         local doBlink = (math.floor((buff.Duration.TotalSeconds() or 0)) < blinkAtTime)
                         Ui.DrawInspectableSpellIcon(buff.SpellIcon(), buff, iconSize, doBlink, borderCol)
                         self:RenderTooltipForBuff(buff, target.ID(), showBuffName, showBuffDescription, showBuffCaster)
+                        ImGui.PopID()
 
                         if i == 1 or i % buffsPerRow ~= 0 then
                             ImGui.SameLine()

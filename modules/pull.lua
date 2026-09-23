@@ -1869,8 +1869,11 @@ function Module:FindTarget()
 
     if #pullTargets > 0 then
         local pullTarget = pullTargets[1]
-        Logger.log_info("\atPULL::FindPullTarget \agPulling %s [%d] with Distance: %d", pullTarget.CleanName(), pullTarget.ID(), metaData[pullTarget.ID()].distance)
-        return pullTarget.ID()
+        -- Read the ID once: the spawn can despawn between calls, which made the metaData lookup index nil.
+        local pullID = pullTarget.ID()
+        local meta = metaData[pullID]
+        Logger.log_info("\atPULL::FindPullTarget \agPulling %s [%d] with Distance: %d", pullTarget.CleanName(), pullID, meta and meta.distance or -1)
+        return pullID
     end
 
     return 0
@@ -1952,6 +1955,20 @@ end
 ---@return boolean
 function Module:IsPullState(state)
     return self.TempSettings.PullState == PullStates[state]
+end
+
+-- True when we're standing idle during a pull hold and below our med-stop level on a stat our class uses.
+-- Classes without mana report PctMana 0, so mana only counts when we have a mana pool.
+---@return boolean
+function Module:ShouldSitToMed()
+    local me = mq.TLO.Me
+    if not me.Standing() or me.Moving() then return false end
+
+    local needHP = me.PctHPs() < Config:GetSetting('HPMedPctStop')
+    local needMana = (me.MaxMana() or 0) > 0 and me.PctMana() < Config:GetSetting('ManaMedPctStop')
+    local needEndurance = Globals.Constants.RGMelee:contains(me.Class.ShortName()) and me.PctEndurance() < Config:GetSetting('EndMedPctStop')
+
+    return needHP or needMana or needEndurance
 end
 
 ---@param state number
@@ -2178,11 +2195,10 @@ function Module:GiveTime()
             Logger.log_verbose("PULL:GiveTime() - GroupWatch Failed")
             Module:StopNavAfterFailedMovingCheck()
             self:SetPullState(PullStates.PULL_GROUPWATCH_WAIT, groupReason)
-            local me = mq.TLO.Me
-            if me.Standing() and not me.Moving() and (me.PctHPs() < Config:GetSetting('HPMedPctStop') or me.PctMana() < Config:GetSetting('ManaMedPctStop') or me.PctEndurance() < Config:GetSetting('EndMedPctStop')) then
+            if self:ShouldSitToMed() then
                 Logger.log_verbose(
                     "PULL:GiveTime() - We are waiting for GroupWatch and we are below med stop levels, lets sit down ourselves! Note: Does not interface with medstate.")
-                me.Sit()
+                mq.TLO.Me.Sit()
             end
             return
         end
@@ -2529,7 +2545,8 @@ function Module:GiveTime()
                 -- We will continue to fire arrows until we aggro our target
                 while not successFn() do
                     Logger.log_super_verbose("Waiting on autoattack pull to finish... %s", Strings.BoolToColorString(successFn()))
-                    Core.DoCmd("/attack")
+                    -- plain /attack toggles, which turned autoattack back off on every other loop
+                    Core.DoCmd("/attack on")
 
                     if Targeting.GetTargetDistance() > self:GetPullAbilityRange() then
                         Logger.log_info("[CAMPNAV:PULL_AUTOATTACK] TargetDistance: %d, PullAbilityRange: %d, NavDistance: %d, LOS: %s",
@@ -2642,7 +2659,7 @@ function Module:GiveTime()
             end
 
             if mq.TLO.Navigation.Paused() then
-                Movement:DoNav(false, "pause")
+                Movement:SetNavPaused(false)
             end
 
             Modules:ExecModule("Movement", "CheckStuck")

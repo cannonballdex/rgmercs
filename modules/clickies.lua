@@ -1579,7 +1579,7 @@ function Module:RenderClickyHeaderIcon(clicky, headerPos)
     if not clicky then return end
 
     if clicky.iconId == nil then
-        local item = mq.TLO.FindItem(clicky.itemName)
+        local item = mq.TLO.FindItem("=" .. clicky.itemName)
         clicky.iconId = item() and tonumber((item.Icon() or 500) - 500) or 0
         Config:SetSetting('Clickies', Config:GetSetting('Clickies'))
     end
@@ -1807,7 +1807,7 @@ function Module:RenderClickyData(clicky, clickyIdx)
             ImGui.PushStyleColor(ImGuiCol.HeaderHovered, Globals.Constants.Colors.NearBlack)
             local _, clicked = ImGui.Selectable(spellName)
             if clicked then
-                local item = mq.TLO.FindItem(clicky.itemName)
+                local item = mq.TLO.FindItem("=" .. clicky.itemName)
                 local itemSpell = item and item.Clicky and item.Clicky.Spell
                 if itemSpell and itemSpell() then itemSpell.Inspect() end
             end
@@ -1944,7 +1944,7 @@ function Module:GiveTime()
             self.ClickyRotationIndex = (clickyIdx % numClickies) + 1
             Logger.log_super_verbose("\ayClicky: \awChecking clicky entry: \ay%s\aw[\at%d\aw]", clicky.itemName, clickyIdx)
 
-            local item = mq.TLO.FindItem(clicky.itemName)
+            local item = mq.TLO.FindItem("=" .. clicky.itemName)
             local itemSpell = item and item.Clicky and item.Clicky.Spell
             self.TempSettings.ClickyState[clicky.itemName] = self.TempSettings.ClickyState[clicky.itemName] or {}
             self.TempSettings.ClickyState[clicky.itemName].spellName = itemSpell and itemSpell.Name() or (item and "No Clicky Spell or Missing Item" or "Item Not Found")

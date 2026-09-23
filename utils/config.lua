@@ -566,6 +566,7 @@ Config.DefaultConfig                                     = {
         Index = 1,
         Tooltip = "Enable the summoning and buffing of pets.",
         Default = true,
+        RequiresLoadoutChange = true,
         ConfigType = "Normal",
     },
 
@@ -4022,7 +4023,7 @@ function Config.ShouldMount()
     local passMountItemGivesBlessing = false
 
     if passCheckMountTwo then
-        local mountItem = mq.TLO.FindItem(Config:GetSetting('MountItem'))
+        local mountItem = mq.TLO.FindItem("=" .. Config:GetSetting('MountItem'))
         if mountItem and mountItem() then
             passMountItemGivesBlessing = mountItem.Blessing() ~= nil
         end

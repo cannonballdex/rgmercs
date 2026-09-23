@@ -974,13 +974,13 @@ end
 --- Determines if the PC can/should use buffs if their corpse is nearby.
 --- @return boolean True if the entity can be buffed, false otherwise.
 function Casting.AmIBuffable()
-    local myCorpseCount = Config:GetSetting('BuffRezables') and 0 or mq.TLO.SpawnCount(string.format('pccorpse =%s radius 100 zradius 50', mq.TLO.Me.CleanName()))()
+    local myCorpseCount = Config:GetSetting('BuffRezables') and 0 or mq.TLO.SpawnCount(string.format("pccorpse %s's radius 100 zradius 50", mq.TLO.Me.CleanName()))()
     if myCorpseCount > 0 then Logger.log_debug("Corpse detected (%s), aborting rotation.", mq.TLO.Me.CleanName()) end
     return myCorpseCount == 0
 end
 
 function Casting.HasNearbyCorpse(name)
-    return mq.TLO.SpawnCount(string.format("pccorpse =%s radius 100 zradius 50", name))() > 0
+    return mq.TLO.SpawnCount(string.format("pccorpse %s's radius 100 zradius 50", name))() > 0
 end
 
 function Casting.GetBuffableIDs()
@@ -2378,7 +2378,8 @@ function Casting.UseItem(itemName, targetId, bAllowDead, retryCount)
         Targeting.SetTarget(oldTargetId, true)
     end
 
-    return Globals.Constants.CastCompleted:contains(Casting.GetLastCastResultName()), Casting.IsGroupSpell(targetType)
+    -- An item that went onto its cooldown was used, even if the cast result didn't register as completed.
+    return (Globals.Constants.CastCompleted:contains(Casting.GetLastCastResultName()) or not me.ItemReady(itemName)), Casting.IsGroupSpell(targetType)
 end
 
 --- Prepares the necessary actions for the Casting module.
@@ -2556,13 +2557,22 @@ function Casting.AutoMed()
         return
     end
 
-    if Config:GetSetting('MedAggroCheck') and Targeting.IHaveAggro(Config:GetSetting("MedAggroPct")) then
-        Logger.log_verbose("Sit check returning early due to aggro.")
+    -- Stand up to fight or when threatened.
+    local aggroStand  = Config:GetSetting('MedAggroCheck') and Targeting.IHaveAggro(Config:GetSetting('MedAggroPct'))
+    local combatStand = Targeting.GetXTHaterCount() > 0 and (Config:GetSetting('DoMed') ~= 3 or Config:GetSetting('DoMelee'))
+    if aggroStand or combatStand then
+        Globals.InMedState = false
+        if me.Sitting() and not Casting.Memorizing then
+            Logger.log_debug("Forcing stand - Combat or aggro threshold reached.")
+            me.Stand()
+        end
         return
     end
 
     -- Allow sufficient time for the player to do something before char plunks down. Spreads out med sitting too.
-    if Targeting.GetXTHaterCount() == 0 and Movement:GetTimeSinceLastMove() < math.random(Config:GetSetting('AfterCombatMedDelay')) then return end
+    -- A 0 delay skips the wait entirely (math.random(0) is not a valid interval).
+    local afterCombatMedDelay = Config:GetSetting('AfterCombatMedDelay')
+    if Targeting.GetXTHaterCount() == 0 and afterCombatMedDelay > 0 and Movement:GetTimeSinceLastMove() < math.random(afterCombatMedDelay) then return end
 
     Movement:StoreLastMove()
 
@@ -2612,13 +2622,6 @@ function Casting.AutoMed()
 
     -- This could likely be refactored
     if me.Sitting() and not Casting.Memorizing then
-        if Targeting.GetXTHaterCount() > 0 and (Config:GetSetting('DoMed') ~= 3 or Config:GetSetting('DoMelee') or ((Config:GetSetting('MedAggroCheck') and Targeting.IHaveAggro(Config:GetSetting('MedAggroPct'))))) then
-            Globals.InMedState = false
-            Logger.log_debug("Forcing stand - Combat or aggro threshold reached.")
-            me.Stand()
-            return
-        end
-
         if (Config:GetSetting('StandWhenDone') or Config:GetSetting('DoPull')) and forcestand then
             Globals.InMedState = false
             Logger.log_debug("Forcing stand - all conditions met.")
@@ -2685,7 +2688,7 @@ function Casting.ClickModRod()
             mq.delay(10)
         end
 
-        local item = mq.TLO.FindItem(itemName)
+        local item = mq.TLO.FindItem("=" .. itemName)
         if item() and item.Clicky() and mq.TLO.Me.Level() >= (item.Clicky.RequiredLevel() or 999) and item.TimerReady() == 0 then
             Casting.UseItem(item.Name(), mq.TLO.Me.ID())
             return

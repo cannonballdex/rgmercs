@@ -542,6 +542,12 @@ function Core.IsModeActive(mode)
     return Modules:ExecModule("Class", "IsModeActive", mode)
 end
 
+--- Turns off auto attack and autofire if either is currently active.
+function Core.StopAttack()
+    if mq.TLO.Me.Combat() then Core.DoCmd("/attack off") end
+    if mq.TLO.Me.AutoFire() then Core.DoCmd("/autofire off") end
+end
+
 --- Checks if the character is currently tanking.
 --- @return boolean True if the character is tanking, false otherwise.
 function Core.IsTanking()

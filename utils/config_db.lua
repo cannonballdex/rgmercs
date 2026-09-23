@@ -244,6 +244,12 @@ local function inferType(v)
     end
 end
 
+local LUA_KEYWORDS = {}
+for _, kw in ipairs({ "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in",
+    "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while", }) do
+    LUA_KEYWORDS[kw] = true
+end
+
 -- Recursively convert a Lua value to a source-code string (table constructor,
 -- function body, primitive literal) that round-trips through load("return "..s).
 local function luaToString(v, depth)
@@ -277,12 +283,19 @@ local function luaToString(v, depth)
         for k, val in pairs(v) do
             if type(k) ~= "number" or k < 1 or k > maxN or math.floor(k) ~= k then
                 local keyStr
-                if type(k) == "string" and k:match("^[%a_][%w_]*$") then
+                -- Reserved words ("nil", "end", ...) look like identifiers but aren't valid bare keys.
+                if type(k) == "string" and k:match("^[%a_][%w_]*$") and not LUA_KEYWORDS[k] then
                     keyStr = k
                 else
-                    keyStr = "[" .. luaToString(k, depth + 1) .. "]"
+                    local serializedKey = luaToString(k, depth + 1)
+                    -- a key we can't serialize would load as [nil] and throw "table index is nil"
+                    if serializedKey ~= "nil" then
+                        keyStr = "[" .. serializedKey .. "]"
+                    end
                 end
-                table.insert(parts, indent .. keyStr .. " = " .. luaToString(val, depth + 1))
+                if keyStr then
+                    table.insert(parts, indent .. keyStr .. " = " .. luaToString(val, depth + 1))
+                end
             end
         end
         if #parts == 0 then return "{}" end
@@ -307,7 +320,7 @@ local function serialize(v, vtype)
 end
 
 -- Deserialize a stored text value back to a Lua value.
-local function deserialize(text, vtype)
+local function deserialize(key, text, vtype)
     if text == nil then return nil end
     if vtype == "bool" then
         return text == "true" or text == "1"
@@ -315,8 +328,13 @@ local function deserialize(text, vtype)
         return tonumber(text)
     elseif vtype == "lua" then
         local fn, err = load("return " .. text)
-        if fn then return fn() end
-        Logger.log_error("\arDB: failed to deserialize lua value: %s", err)
+        if fn then
+            -- values saved before the key fix can still hold [nil] keys, which throw when run
+            local ok, value = pcall(fn)
+            if ok then return value end
+            err = value
+        end
+        Logger.log_error("\arDB: failed to deserialize lua value for key '%s': %s\ntext: '%s'", tostring(key), tostring(err), text)
         return nil
     else
         return text
@@ -998,7 +1016,7 @@ function DB:_fetchValue(serverName, charName, charClass, module, key)
     stmt:bind(5, key)
     local rows = collectRows(stmt)
     if not rows[1] then return nil end
-    local value = deserialize(rows[1].value, rows[1].value_type)
+    local value = deserialize(key, rows[1].value, rows[1].value_type)
     self:_cacheSet(serverName, charName, charClass, module, key, value)
     return value
 end
@@ -1019,7 +1037,7 @@ function DB:_fetchModule(serverName, charName, charClass, module)
     stmt:bind(3, charClass)
     stmt:bind(4, module)
     for row in stmt:nrows() do
-        self:_cacheSet(serverName, charName, charClass, module, row.key, deserialize(row.value, row.value_type))
+        self:_cacheSet(serverName, charName, charClass, module, row.key, deserialize(row.key, row.value, row.value_type))
     end
     stmt:finalize()
 end

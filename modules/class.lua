@@ -1814,7 +1814,7 @@ function Module:SetRotationClickies()
                 local resolvedMap = self.ResolvedActionMap[entry.name]
                 if resolvedMap and mq.TLO.FindItem(string.format("=%s", resolvedMap))() then
                     self.TempSettings.RotationClickies:add(resolvedMap)
-                elseif type(entry.name) == "string" and mq.TLO.FindItem(string.format("=%s", entry.Name))() then
+                elseif type(entry.name) == "string" and mq.TLO.FindItem(string.format("=%s", entry.name))() then
                     self.TempSettings.RotationClickies:add(entry.name)
                 end
             end

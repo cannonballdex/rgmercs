@@ -461,7 +461,7 @@ local function Main()
             Core.DoCmd("/squelch /face fast")
         end
 
-        if Config:GetSetting('DoMed') == 3 then
+        if Config:GetSetting('DoMed') ~= 1 then
             Casting.AutoMed()
         end
     else
@@ -476,6 +476,7 @@ local function Main()
             Globals.IgnoredTargetIDs    = Set.new({})
             Globals.LastBurnCheck       = false
             Modules:ExecModule("Pull", "SetLastPullOrCombatEndedTimer")
+            if Config:GetSetting('DoAutoEngage') then Core.StopAttack() end
         end
 
         Globals.CurrentState = "Downtime"
@@ -525,9 +526,9 @@ local function Main()
                 Logger.log_debug("\ayClearing Target because we are not OkToEngage() and we are in combat!")
                 Targeting.ClearTarget()
             end
-        elseif mq.TLO.Me.Combat() and (Config:GetSetting('AutoAttackSafetyCheck') or not mq.TLO.Target()) then
+        elseif (mq.TLO.Me.Combat() or mq.TLO.Me.AutoFire()) and (Config:GetSetting('AutoAttackSafetyCheck') or not mq.TLO.Target()) then
             Logger.log_debug("\ayTurning off attack because we don't have a target or we are not OkToEngage the current target!")
-            Core.DoCmd("/attack off")
+            Core.StopAttack()
         end
     end
 
@@ -543,7 +544,8 @@ local function Main()
         if Config:GetSetting('DoMercenary') then
             local merc = mq.TLO.Me.Mercenary
 
-            if merc() and merc.ID() then
+            -- Live can report a merc with a 0 ID (or an active state with no merc out), so require both.
+            if (merc.ID() or 0) > 0 and (merc.State() or ""):lower() == "active" then
                 if Combat.MercEngage() then
                     local class = merc.Class.ShortName():lower()
                     local stanceGroups = {
@@ -612,7 +614,9 @@ local function Main()
     end
 
     if Combat.ShouldDoCamp() then
-        if Config:GetSetting('DoMercenary') and mq.TLO.Me.Mercenary.ID() and (mq.TLO.Me.Mercenary.Class.ShortName() or "none"):lower() ~= "clr" and mq.TLO.Me.Mercenary.Stance():lower() ~= "passive" then
+        local merc = mq.TLO.Me.Mercenary
+        if Config:GetSetting('DoMercenary') and Globals.CurrentState ~= "Combat" and (merc.ID() or 0) > 0 and (merc.State() or ""):lower() == "active"
+            and (merc.Class.ShortName() or "none"):lower() ~= "clr" and (merc.Stance() or ""):lower() ~= "passive" then
             Core.DoCmd("/squelch /stance passive")
         end
     end
@@ -627,7 +631,7 @@ local function Main()
 
     -- Revive our mercenary if they're dead and we're using a mercenary
     if Config:GetSetting('DoMercenary') then
-        if mq.TLO.Me.Mercenary.State():lower() == "dead" then
+        if (mq.TLO.Me.Mercenary.State() or ""):lower() == "dead" then
             if mq.TLO.Window("MMGW_ManageWnd").Child("MMGW_SuspendButton").Text():lower() == "revive" then
                 mq.TLO.Window("MMGW_ManageWnd").Child("MMGW_SuspendButton").LeftMouseUp()
                 mq.delay(1000, function() return (mq.TLO.Me.Mercenary.State() or "dead"):lower() ~= "dead" end)

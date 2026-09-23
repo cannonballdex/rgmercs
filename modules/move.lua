@@ -882,12 +882,9 @@ function Module:CheckStuck()
 
                 if not Nav.Paused() then
                     Logger.log_debug("\awWARNING:\ax Pausing Nav to unstick")
-                    Movement:DoNav(true, "pause")
-                    mq.delay(500)
-
-                    if Nav.Paused() then
-                        Movement:DoNav(true, "pause")
-                    end
+                    Movement:SetNavPaused(true)
+                    mq.delay(300)
+                    Movement:SetNavPaused(false)
 
                     if not Nav.Paused() and not self:IAmStuck() then
                         Logger.log_warning("\agUnstuck successful!\ax Resuming Navigation.")

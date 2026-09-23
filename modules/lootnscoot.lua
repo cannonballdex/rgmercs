@@ -177,7 +177,8 @@ function Module:LootMessageHandler()
 
 		if who ~= Globals.CurLoadedChar then return end
 
-		if subject == ('done_looting' or 'done_processing') then
+		-- ('done_looting' or 'done_processing') evaluates to just 'done_looting', so done_processing never cleared Looting
+		if subject == 'done_looting' or subject == 'done_processing' then
 			Module.TempSettings.Looting = false
 		elseif subject == 'processing' then
 			Module.TempSettings.Looting = true

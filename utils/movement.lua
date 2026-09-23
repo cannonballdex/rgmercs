@@ -32,7 +32,8 @@ function Movement:DoStick(targetId)
     if Config:GetSetting('StickHow'):len() > 0 then
         self:DoStickCmd("%s", Config:GetSetting('StickHow'))
     else
-        if Core.IAmMA() then
+        -- A tank that isn't the MA still needs to hold the front, not stick behind.
+        if Core.IsTanking() then
             self:DoStickCmd("10 id %d %s uw", targetId, Config:GetSetting('MovebackWhenTank') and "moveback" or "")
         else
             local stickDist = (mq.TLO.Spawn(targetId).Height() or 5) > 15 and 20 or 10
@@ -63,6 +64,15 @@ function Movement:DoNav(squelch, params, ...)
     self.LastDoNav = Globals.GetTimeSeconds()
     self.LastDoNavCmd = formatted
     self:StoreLastMove()
+end
+
+--- Pauses or resumes nav. /nav pause is a toggle, and DoNav drops a repeat of the
+--- last command, so a pause-then-resume through DoNav silently left nav paused.
+---@param shouldPause boolean
+function Movement:SetNavPaused(shouldPause)
+    if mq.TLO.Navigation.Paused() == shouldPause then return end
+    Core.DoCmd("/squelch /nav pause")
+    mq.delay(200, function() return mq.TLO.Navigation.Paused() == shouldPause end)
 end
 
 function Movement:GetLastNavCmd()
