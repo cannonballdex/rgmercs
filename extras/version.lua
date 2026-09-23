@@ -1,4 +1,4 @@
 return {
-    version = 1,
-    forkedFrom = "DerpleDude/rgmercs v163 (97ee513d, 2024-04-20)",
+    version = 2,
+    forkedFrom = "DerpleDude/rgmercs v2660 (bc99514a, 2026-05-04)",
 }
