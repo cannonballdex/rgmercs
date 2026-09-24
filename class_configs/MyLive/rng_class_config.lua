@@ -241,7 +241,7 @@ local _ClassConfig = {
                     -- Ensure a kit was found then open it and enter Experimentation mode
                     -- To Do: Find a way to see if container is open
                     if fletchKit ~= '' then
-                        Core.DoCmd('/timed %d /itemnotify "%s" rightmouseup', delay, fletchKit)
+                        Core.DoCmd('/timed %d /nomodkey /itemnotify "%s" rightmouseup', delay, fletchKit)
                         delay = delay + 5
                         Core.DoCmd('/timed %d /notify TradeskillWnd COMBW_ExperimentButton leftmouseup', delay)
                         delay = delay + 5
