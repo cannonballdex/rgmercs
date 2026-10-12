@@ -25,6 +25,7 @@ Module.TempSettings                = {}
 Module.TempSettings.CampZoneId     = 0
 Module.TempSettings.LastCmd        = ""
 Module.TempSettings.StuckAtTime    = 0
+Module.TempSettings.StrafeLeft     = false
 
 Module.Constants                   = {}
 Module.Constants.GGHZones          = Set.new({ "poknowledge", "potranquility", "stratos", "guildlobby", "moors", "crescent", "guildhalllrg_int", "guildhall", })
@@ -217,7 +218,7 @@ Module.DefaultConfig   = {
         Header = "Following",
         Category = "Chase",
         Index = 9,
-        Tooltip = "If we become stuck while chasing, attempt to fix it by toggling your height via MQ2AutoSize - requires MQ2AutoSize plugin.",
+        Tooltip = "If nav is running but we haven't moved (chasing, pulling or returning to camp), try to get unstuck: toggle nav pause, back up, back up and strafe, then cycle your size via MQ2AutoSize if it is loaded.",
         Default = true,
         ConfigType = "Advanced",
     },
@@ -869,66 +870,121 @@ function Module:CheckStuck()
 
         if ((Globals.GetTimeSeconds() - Module.TempSettings.StuckAtTime) >= Config:GetSetting('AttemptToFixStuckTimer')) or Movement:GetTimeSinceLastPositionChange() >= Config:GetSetting('AttemptToFixStuckTimer') then
             Logger.log_warning("\awWARNING:\ax Navigation appears to be stuck")
-            -- is autosize loaded?
-            ---@diagnostic disable-next-line: undefined-field
-            if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() and mq.TLO.AutoSize ~= nil then
-                Logger.log_warning("\awWARNING:\ax Attempting to unstick via MQ2AutoSize and Toggling Nav Pause")
-                ---@diagnostic disable-next-line: undefined-field
-                local startingSize = mq.TLO.AutoSize.SizeSelf()
-                ---@diagnostic disable-next-line: undefined-field
-                local startingToggleEnabled = mq.TLO.AutoSize.Enabled()
-                ---@diagnostic disable-next-line: undefined-field
-                local startingToggleSelf = mq.TLO.AutoSize.ResizeSelf()
-
-                if not Nav.Paused() then
-                    Logger.log_debug("\awWARNING:\ax Pausing Nav to unstick")
-                    Movement:SetNavPaused(true)
-                    mq.delay(300)
-                    Movement:SetNavPaused(false)
-
-                    if not Nav.Paused() and not self:IAmStuck() then
-                        Logger.log_warning("\agUnstuck successful!\ax Resuming Navigation.")
-                        return
-                    end
-                end
-
-                if not startingToggleEnabled then
-                    Logger.log_debug("\awWARNING:\ax Enabling AutoSize to unstick")
-                    Core.DoCmd("/squelch /autosize on")
-                end
-
-                if not startingToggleSelf then
-                    Logger.log_debug("\awWARNING:\ax Enabling AutoSize Self to unstick")
-                    Core.DoCmd("/squelch /autosize self on")
-                end
-
-                local cycleSizes = { startingSize * 2, 1, startingSize * 1.5, 1, startingSize * 3, 1, }
-                for _, size in ipairs(cycleSizes) do
-                    Logger.log_debug("\awWARNING:\ax Setting size to %d to unstick", size)
-                    Core.DoCmd("/squelch /autosize sizeself %d", size)
-
-                    mq.delay("2s", function()
-                        return not self:IAmStuck()
-                    end)
-
-                    if not self:IAmStuck() then
-                        Logger.log_warning("\agUnstuck successful!\ax Resuming Navigation.")
-                        break
-                    end
-                end
-                Core.DoCmd("/squelch /autosize sizeself %d", startingSize) -- ensure we end back at starting size
-                if not startingToggleSelf then
-                    Core.DoCmd("/squelch /autosize self off")
-                end
-                if not startingToggleEnabled then
-                    Core.DoCmd("/squelch /autosize off")
-                end
-                Module.TempSettings.StuckAtTime = 0
-            else
-                Logger.log_warning("\awWARNING:\ax MQ2AutoSize not loaded, cannot unstuck.")
-            end
+            self:AttemptUnstick()
+            Module.TempSettings.StuckAtTime = 0
         end
     end
+end
+
+--- Waits up to ms for nav to start moving again.
+---@param ms number Max milliseconds to wait.
+---@return boolean True if no longer stuck.
+function Module:WaitForUnstuck(ms)
+    mq.delay(ms, function() return not self:IAmStuck() end)
+    return not self:IAmStuck()
+end
+
+--- Holds a movement key for ms, then releases it. Callers pause nav first so it doesn't fight the key.
+---@param key string EQ movement command for /keypress (back, strafe_left, strafe_right).
+---@param ms number How long to hold the key.
+function Module:NudgeWithKey(key, ms)
+    Core.DoCmd("/keypress %s hold", key)
+    mq.delay(ms)
+    Core.DoCmd("/keypress %s", key)
+end
+
+--- Tries each unstick strategy in order, stopping at the first that gets us moving again.
+---@return boolean True if any strategy worked.
+function Module:AttemptUnstick()
+    local unstuck = self:UnstickViaPauseToggle() or self:UnstickViaStepBack() or self:UnstickViaStrafe() or self:UnstickViaAutoSize()
+    if unstuck then
+        Logger.log_warning("\agUnstuck successful!\ax Resuming Navigation.")
+    else
+        Logger.log_warning("\arStill stuck.\ax Tried everything - will try again after the stuck timer.")
+    end
+    return unstuck
+end
+
+--- Toggles nav pause off and back on to nudge MQ2Nav's pathing.
+---@return boolean True if no longer stuck.
+function Module:UnstickViaPauseToggle()
+    Logger.log_debug("\awWARNING:\ax Toggling nav pause to unstick")
+    Movement:SetNavPaused(true)
+    mq.delay(300)
+    Movement:SetNavPaused(false)
+    return self:WaitForUnstuck(2000)
+end
+
+--- Backs up briefly to peel off geometry, then resumes nav.
+---@return boolean True if no longer stuck.
+function Module:UnstickViaStepBack()
+    Logger.log_debug("\awWARNING:\ax Backing up to unstick")
+    Movement:SetNavPaused(true)
+    self:NudgeWithKey("back", 500)
+    Movement:SetNavPaused(false)
+    return self:WaitForUnstuck(2000)
+end
+
+--- Backs up, then strafes sideways (alternating sides each attempt) to get around an edge, then resumes nav.
+---@return boolean True if no longer stuck.
+function Module:UnstickViaStrafe()
+    Module.TempSettings.StrafeLeft = not Module.TempSettings.StrafeLeft
+    local key = Module.TempSettings.StrafeLeft and "strafe_left" or "strafe_right"
+    Logger.log_debug("\awWARNING:\ax Backing up and strafing (%s) to unstick", key)
+    Movement:SetNavPaused(true)
+    self:NudgeWithKey("back", 400)
+    self:NudgeWithKey(key, 700)
+    Movement:SetNavPaused(false)
+    return self:WaitForUnstuck(2000)
+end
+
+--- Cycles MQ2AutoSize (if loaded) self-size to change the collision hitbox and pop off geometry.
+---@return boolean True if no longer stuck, false if the plugin is absent or every size fails.
+function Module:UnstickViaAutoSize()
+    ---@diagnostic disable-next-line: undefined-field
+    if not (mq.TLO.Plugin("MQ2AutoSize").IsLoaded() and mq.TLO.AutoSize ~= nil) then
+        Logger.log_warning("\awWARNING:\ax MQ2AutoSize not loaded, cannot unstick via resize.")
+        return false
+    end
+
+    Logger.log_warning("\awWARNING:\ax Attempting to unstick via MQ2AutoSize resize cycle")
+    ---@diagnostic disable-next-line: undefined-field
+    local startingSize = mq.TLO.AutoSize.SizeSelf()
+    ---@diagnostic disable-next-line: undefined-field
+    local startingToggleEnabled = mq.TLO.AutoSize.Enabled()
+    ---@diagnostic disable-next-line: undefined-field
+    local startingToggleSelf = mq.TLO.AutoSize.ResizeSelf()
+
+    if not startingToggleEnabled then
+        Logger.log_debug("\awWARNING:\ax Enabling AutoSize to unstick")
+        Core.DoCmd("/squelch /autosize on")
+    end
+
+    if not startingToggleSelf then
+        Logger.log_debug("\awWARNING:\ax Enabling AutoSize Self to unstick")
+        Core.DoCmd("/squelch /autosize self on")
+    end
+
+    local unstuck = false
+    local cycleSizes = { startingSize * 2, 1, startingSize * 1.5, 1, startingSize * 3, 1, }
+    for _, size in ipairs(cycleSizes) do
+        Logger.log_debug("\awWARNING:\ax Setting size to %d to unstick", size)
+        Core.DoCmd("/squelch /autosize sizeself %d", size)
+        if self:WaitForUnstuck(2000) then
+            unstuck = true
+            break
+        end
+    end
+
+    Core.DoCmd("/squelch /autosize sizeself %d", startingSize) -- ensure we end back at starting size
+    if not startingToggleSelf then
+        Core.DoCmd("/squelch /autosize self off")
+    end
+    if not startingToggleEnabled then
+        Core.DoCmd("/squelch /autosize off")
+    end
+
+    return unstuck
 end
 
 return Module
