@@ -234,6 +234,30 @@ Module.DefaultConfig   = {
         Max = 600,
         ConfigType = "Advanced",
     },
+    ['StuckBackupMs']                          = {
+        DisplayName = "Stuck: Back Up Time (ms)",
+        Group = "Movement",
+        Header = "Following",
+        Category = "Chase",
+        Index = 11,
+        Tooltip = "When stuck, how long to hold the back key, in milliseconds. Also used for the back-up before strafing. 0 skips backing up.",
+        Default = 500,
+        Min = 0,
+        Max = 3000,
+        ConfigType = "Advanced",
+    },
+    ['StuckStrafeMs']                          = {
+        DisplayName = "Stuck: Strafe Time (ms)",
+        Group = "Movement",
+        Header = "Following",
+        Category = "Chase",
+        Index = 12,
+        Tooltip = "When stuck, how long to strafe sideways (alternating left and right each time), in milliseconds. 0 skips strafing.",
+        Default = 700,
+        Min = 0,
+        Max = 3000,
+        ConfigType = "Advanced",
+    },
 
 
     -- Camp
@@ -918,9 +942,11 @@ end
 --- Backs up briefly to peel off geometry, then resumes nav.
 ---@return boolean True if no longer stuck.
 function Module:UnstickViaStepBack()
+    local backupMs = Config:GetSetting('StuckBackupMs')
+    if backupMs <= 0 then return false end
     Logger.log_debug("\awWARNING:\ax Backing up to unstick")
     Movement:SetNavPaused(true)
-    self:NudgeWithKey("back", 500)
+    self:NudgeWithKey("back", backupMs)
     Movement:SetNavPaused(false)
     return self:WaitForUnstuck(2000)
 end
@@ -928,12 +954,15 @@ end
 --- Backs up, then strafes sideways (alternating sides each attempt) to get around an edge, then resumes nav.
 ---@return boolean True if no longer stuck.
 function Module:UnstickViaStrafe()
+    local strafeMs = Config:GetSetting('StuckStrafeMs')
+    if strafeMs <= 0 then return false end
+    local backupMs = Config:GetSetting('StuckBackupMs')
     Module.TempSettings.StrafeLeft = not Module.TempSettings.StrafeLeft
     local key = Module.TempSettings.StrafeLeft and "strafe_left" or "strafe_right"
     Logger.log_debug("\awWARNING:\ax Backing up and strafing (%s) to unstick", key)
     Movement:SetNavPaused(true)
-    self:NudgeWithKey("back", 400)
-    self:NudgeWithKey(key, 700)
+    if backupMs > 0 then self:NudgeWithKey("back", backupMs) end
+    self:NudgeWithKey(key, strafeMs)
     Movement:SetNavPaused(false)
     return self:WaitForUnstuck(2000)
 end
