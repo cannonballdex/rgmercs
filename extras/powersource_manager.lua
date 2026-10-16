@@ -35,9 +35,9 @@ setmetatable(Module, { __index = Base, })
 Module.FAQ = {
     {
         Question = "Why didn't it equip a replacement?",
-        Answer   = "It only equips the specific item dropped onto the Power Source Item control (Options panel, " ..
-            "gear icon on this tab). If nothing is set there, or you're out of spares in your bags, nothing will be " ..
-            "equipped.",
+        Answer   = "It equips a charged copy of the item set on the Power Source Item control (Options panel, " ..
+            "gear icon on this tab) first, then any other charged Power Source in your bags. A spent Power Source " ..
+            "is only destroyed once a charged one is waiting in your bags, so the slot is never left empty.",
         Settings_Used = "PSMItemName,PSMAutoReplace",
     },
     {
@@ -66,6 +66,49 @@ local function ResolveItemByName(itemName)
         return mq.TLO.Cursor
     end
     return mq.TLO.FindItem(string.format("=%s", itemName))
+end
+
+--- Finds a Power Source in your bags that still has charge, preferring one named preferName.
+--- Goes by the slot an item fits, not its name, and returns where it sits so a spent copy
+--- with the same name is never picked up instead.
+--- @param preferName string|nil
+--- @return any item, number|nil pack, number|nil slot  (slot is nil when the item sits in the pack slot itself)
+local function FindChargedPowerSource(preferName)
+    local first
+    for pack = 1, (mq.TLO.Me.NumBagSlots() or 10) do
+        local bag = mq.TLO.Me.Inventory('pack' .. pack)
+        if bag() ~= nil then
+            local candidates = {}
+            local slots = bag.Container() or 0
+            if slots > 0 then
+                for slot = 1, slots do
+                    candidates[#candidates + 1] = { item = bag.Item(slot), slot = slot, }
+                end
+            else
+                candidates[1] = { item = bag, slot = nil, }
+            end
+            for _, c in ipairs(candidates) do
+                if ItemIsPowerSource(c.item) and (c.item.Power() or 0) > 0 then
+                    if not preferName or preferName == "" or c.item.Name() == preferName then
+                        return c.item, pack, c.slot
+                    end
+                    first = first or { c.item, pack, c.slot, }
+                end
+            end
+        end
+    end
+    if first then return first[1], first[2], first[3] end
+    return nil
+end
+
+--- Picks up the item at a bag position found by FindChargedPowerSource.
+local function PickUpFromBag(pack, slot)
+    if slot then
+        Core.DoCmd('/nomodkey /itemnotify in pack%d %d leftmouseup', pack, slot)
+    else
+        Core.DoCmd('/nomodkey /itemnotify pack%d leftmouseup', pack)
+    end
+    mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
 end
 
 Module.DefaultConfig = {
@@ -187,6 +230,16 @@ function Module:DestroyDepleted()
     local power = slot.Power() or 0
     if power > 0 then return false end
 
+    if not FindChargedPowerSource() then
+        local now = Globals.GetTimeSeconds()
+        if now - (self.lastNoSpareWarning or 0) >= 60 then
+            self.lastNoSpareWarning = now
+            self.lastAction = string.format("Keeping spent Power Source until a charged one is in your bags: %s", name)
+            Logger.log_warn("\ayPowerSourceManager: spent \at%s\ay kept - no charged Power Source in your bags.", name)
+        end
+        return false
+    end
+
     local pulledName = self:PullSlotToCursor()
     if not pulledName then return false end
 
@@ -210,17 +263,12 @@ function Module:EquipReplacement()
     local slot = mq.TLO.Me.Inventory('powersource')
     if slot() ~= nil and (slot.Power() or 0) > 0 then return false end
 
-    local itemName = Config:GetSetting('PSMItemName')
-    if not itemName or itemName == "" then return false end
-
-    local newSource = mq.TLO.FindItem(string.format("=%s", itemName))
-    if not ItemIsPowerSource(newSource) then return false end
-    if not newSource or not newSource() or (newSource.Power() or 0) <= 0 then return false end
+    local newSource, pack, bagSlot = FindChargedPowerSource(Config:GetSetting('PSMItemName'))
+    if not newSource then return false end
 
     local newName = newSource.Name()
 
-    Core.DoCmd('/itemnotify "%s" leftmouseup', newName)
-    mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
+    PickUpFromBag(pack, bagSlot)
 
     if mq.TLO.Cursor.Name() == newName then
         Core.DoCmd('/ctrl /itemnotify powersource leftmouseup')
@@ -242,27 +290,6 @@ function Module:EquipReplacement()
     return equipped
 end
 
---- Scans top-level inventory slots and the contents of every bag for the first item
---- that can be worn in the Power Source slot and still has charge.
---- @return string|nil name The item's name, or nil if none was found.
-local function FindFirstPowerSourceInInventory()
-    for invSlot = 23, 34 do
-        local entry = mq.TLO.Me.Inventory(invSlot)
-        if entry() ~= nil then
-            if ItemIsPowerSource(entry) and (entry.Power() or 0) > 0 then
-                return entry.Name()
-            end
-            for i = 1, (entry.Container() or 0) do
-                local bagItem = entry.Item(i)
-                if ItemIsPowerSource(bagItem) and (bagItem.Power() or 0) > 0 then
-                    return bagItem.Name()
-                end
-            end
-        end
-    end
-    return nil
-end
-
 --- Equips the first usable Power Source found anywhere in inventory, but only when
 --- the Power Source slot is empty. Independent of the configured Power Source Item.
 --- @return boolean equipped True if a Power Source was equipped.
@@ -272,15 +299,15 @@ function Module:EquipAnyPowerSource()
         return false
     end
 
-    local newName = FindFirstPowerSourceInInventory()
-    if not newName then
+    local newSource, pack, bagSlot = FindChargedPowerSource(Config:GetSetting('PSMItemName'))
+    if not newSource then
         self.lastAction = "No Power Source found in inventory"
         Logger.log_warn("\arPowerSourceManager: no Power Source with charge found in inventory.")
         return false
     end
 
-    Core.DoCmd('/itemnotify "%s" leftmouseup', newName)
-    mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
+    local newName = newSource.Name()
+    PickUpFromBag(pack, bagSlot)
 
     if mq.TLO.Cursor.Name() == newName then
         Core.DoCmd('/ctrl /itemnotify powersource leftmouseup')
