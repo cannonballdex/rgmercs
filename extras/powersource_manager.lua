@@ -35,9 +35,10 @@ setmetatable(Module, { __index = Base, })
 Module.FAQ = {
     {
         Question = "Why didn't it equip a replacement?",
-        Answer   = "It equips a charged copy of the item set on the Power Source Item control (Options panel, " ..
-            "gear icon on this tab) first, then any other charged Power Source in your bags. A spent Power Source " ..
-            "is only destroyed once a charged one is waiting in your bags, so the slot is never left empty.",
+        Answer   = "It only replaces a spent Power Source with a charged one of the same kind. A spent one stays " ..
+            "equipped until a charged copy is in your bags, so the slot is never left empty and it never switches " ..
+            "kinds on its own. With the slot empty it uses the item set on the Power Source Item control (Options " ..
+            "panel, gear icon on this tab); the Equip Power Source button takes any charged one.",
         Settings_Used = "PSMItemName,PSMAutoReplace",
     },
     {
@@ -68,13 +69,13 @@ local function ResolveItemByName(itemName)
     return mq.TLO.FindItem(string.format("=%s", itemName))
 end
 
---- Finds a Power Source in your bags that still has charge, preferring one named preferName.
---- Goes by the slot an item fits, not its name, and returns where it sits so a spent copy
---- with the same name is never picked up instead.
---- @param preferName string|nil
+--- Finds a Power Source in your bags that still has charge. With a name, only that kind counts;
+--- without one, any Power Source does. Goes by the slot an item fits and returns where it sits,
+--- so a spent copy with the same name is never picked up instead.
+--- @param name string|nil
 --- @return any item, number|nil pack, number|nil slot  (slot is nil when the item sits in the pack slot itself)
-local function FindChargedPowerSource(preferName)
-    local first
+local function FindChargedPowerSource(name)
+    if name == "" then name = nil end
     for pack = 1, (mq.TLO.Me.NumBagSlots() or 10) do
         local bag = mq.TLO.Me.Inventory('pack' .. pack)
         if bag() ~= nil then
@@ -88,16 +89,13 @@ local function FindChargedPowerSource(preferName)
                 candidates[1] = { item = bag, slot = nil, }
             end
             for _, c in ipairs(candidates) do
-                if ItemIsPowerSource(c.item) and (c.item.Power() or 0) > 0 then
-                    if not preferName or preferName == "" or c.item.Name() == preferName then
-                        return c.item, pack, c.slot
-                    end
-                    first = first or { c.item, pack, c.slot, }
+                if ItemIsPowerSource(c.item) and (c.item.Power() or 0) > 0
+                    and (not name or c.item.Name() == name) then
+                    return c.item, pack, c.slot
                 end
             end
         end
     end
-    if first then return first[1], first[2], first[3] end
     return nil
 end
 
@@ -230,12 +228,12 @@ function Module:DestroyDepleted()
     local power = slot.Power() or 0
     if power > 0 then return false end
 
-    if not FindChargedPowerSource() then
+    if not FindChargedPowerSource(name) then
         local now = Globals.GetTimeSeconds()
         if now - (self.lastNoSpareWarning or 0) >= 60 then
             self.lastNoSpareWarning = now
-            self.lastAction = string.format("Keeping spent Power Source until a charged one is in your bags: %s", name)
-            Logger.log_warn("\ayPowerSourceManager: spent \at%s\ay kept - no charged Power Source in your bags.", name)
+            self.lastAction = string.format("Keeping spent Power Source until a charged one of the same kind is in your bags: %s", name)
+            Logger.log_warn("\ayPowerSourceManager: spent \at%s\ay kept - no charged one of the same kind in your bags.", name)
         end
         return false
     end
@@ -252,6 +250,8 @@ function Module:DestroyDepleted()
     Core.DoCmd('/destroy')
     mq.delay(1000, function() return mq.TLO.Cursor.ID() == nil end)
 
+    -- remembered so the replacement is the same kind
+    self.lastDestroyedName = name
     self.lastAction = string.format("Destroyed spent Power Source: %s", name)
     Logger.log_info("\arPowerSourceManager: \apDestroyed spent Power Source: %s", name)
     return true
@@ -263,7 +263,9 @@ function Module:EquipReplacement()
     local slot = mq.TLO.Me.Inventory('powersource')
     if slot() ~= nil and (slot.Power() or 0) > 0 then return false end
 
-    local newSource, pack, bagSlot = FindChargedPowerSource(Config:GetSetting('PSMItemName'))
+    -- Same kind as the spent one (still worn, or just destroyed); with nothing to go on, the configured item
+    local kind = (slot() ~= nil and slot.Name()) or self.lastDestroyedName or Config:GetSetting('PSMItemName')
+    local newSource, pack, bagSlot = FindChargedPowerSource(kind)
     if not newSource then return false end
 
     local newName = newSource.Name()
@@ -284,6 +286,7 @@ function Module:EquipReplacement()
 
     local equipped = mq.TLO.Me.Inventory('powersource').Name() == newName
     if equipped then
+        self.lastDestroyedName = nil
         self.lastAction = string.format("Equipped Power Source: %s", newName)
         Logger.log_info("\agPowerSourceManager: \atEquipped Power Source: %s", newName)
     end
@@ -299,7 +302,7 @@ function Module:EquipAnyPowerSource()
         return false
     end
 
-    local newSource, pack, bagSlot = FindChargedPowerSource(Config:GetSetting('PSMItemName'))
+    local newSource, pack, bagSlot = FindChargedPowerSource(nil)
     if not newSource then
         self.lastAction = "No Power Source found in inventory"
         Logger.log_warn("\arPowerSourceManager: no Power Source with charge found in inventory.")
