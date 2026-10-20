@@ -250,13 +250,23 @@ function Movement:GetTimeSinceLastPositionChange()
     return Globals.GetTimeSeconds() - (self.LastMove.TimeAtPositionChange or 0)
 end
 
+--- Restarts the "no position change" clock from where we stand now (new nav, or after an unstick attempt).
+function Movement:ResetPositionChangeTimer()
+    local me = mq.TLO.Me
+    self.PositionAnchor = { X = me.X(), Y = me.Y(), Z = me.Z(), }
+    self.LastMove.TimeAtPositionChange = Globals.GetTimeSeconds()
+end
+
 function Movement:StoreLastMove()
     local me = mq.TLO.Me
 
-    -- only look at actual movement.
-    if math.abs(self.LastMove.X - me.X()) > 1 or
-        math.abs(self.LastMove.Y - me.Y()) > 1 or
-        math.abs(self.LastMove.Z - me.Z()) > 1 then
+    -- only look at actual movement. Measured from a fixed anchor, not from LastMove: LastMove is overwritten on
+    -- every call while in combat, so frequent checks while running saw <1 unit per call and never counted as moving.
+    local anchor = self.PositionAnchor
+    if not anchor or math.abs(anchor.X - me.X()) > 1 or
+        math.abs(anchor.Y - me.Y()) > 1 or
+        math.abs(anchor.Z - me.Z()) > 1 then
+        self.PositionAnchor = { X = me.X(), Y = me.Y(), Z = me.Z(), }
         self.LastMove.TimeAtPositionChange = Globals.GetTimeSeconds()
     end
 

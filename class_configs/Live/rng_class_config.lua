@@ -1790,7 +1790,7 @@ local _ClassConfig = {
         combatNav = function(forceMove)
             if not Config:GetSetting('DoMelee') then
                 if not mq.TLO.Me.AutoFire() then
-                    Core.DoCmd('/squelch face fast')
+                    Core.DoCmd('/squelch /face fast')
                     Core.DoCmd('/autofire on')
                 end
 
@@ -1841,7 +1841,7 @@ local _ClassConfig = {
                             "Custom Ranger combatNav: \arWarning! \awChase distance is %d. \ayThis may interfere with ranged combat, depending on chase target movement!",
                             chaseDistance)
                     end
-                    Core.DoCmd('/squelch face fast')
+                    Core.DoCmd('/squelch /face fast')
                     Movement:DoStickCmd("10 moveback")
                 elseif tooFar or effectiveForceMove then
                     Movement:DoNav(true, "id %d distance=%d", Globals.AutoTargetID, Config:GetSetting('BowNavDistance'))

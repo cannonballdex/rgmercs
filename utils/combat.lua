@@ -168,7 +168,7 @@ function Combat.EngageTarget(autoTargetId)
 
                 if Core.MyClassIs("RNG") and not mq.TLO.Me.AutoFire() then
                     Logger.log_verbose("\awNOTICE:\ax EngageTarget(%s) turning autofire on.", Targeting.GetTargetCleanName())
-                    Core.DoCmd('/squelch face fast')
+                    Core.DoCmd('/squelch /face fast')
                     Core.DoCmd('/autofire on')
                 end
             end

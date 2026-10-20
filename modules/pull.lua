@@ -2682,8 +2682,16 @@ function Module:GiveTime()
                 local rangedType = mq.TLO.Me.Inventory("ranged").Type()
                 local hasBow = rangedType == 'Archery' or rangedType == 'Bow'
                 local wantAutoFire = hasBow and Targeting.GetTargetDistance() > Config:GetSetting('AutoFireMinDistance') and mq.TLO.Target.LineOfSight()
+                if wantAutoFire then
+                    -- keep facing the mob as it paths in; autofire won't shoot at a target we aren't facing
+                    local facingDelta = math.abs((mq.TLO.Target.HeadingTo.DegreesCCW() or 0) - (mq.TLO.Me.Heading.DegreesCCW() or 0)) % 360
+                    if facingDelta > 180 then facingDelta = 360 - facingDelta end
+                    if facingDelta > 20 then
+                        Core.DoCmd('/squelch /face fast')
+                    end
+                end
                 if wantAutoFire and not mq.TLO.Me.AutoFire() then
-                    Core.DoCmd('/squelch face fast')
+                    Core.DoCmd('/squelch /face fast')
                     Core.DoCmd('/autofire on')
                 elseif not wantAutoFire and mq.TLO.Me.AutoFire() then
                     Core.DoCmd('/autofire off')

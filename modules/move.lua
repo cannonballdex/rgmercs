@@ -24,7 +24,7 @@ setmetatable(Module, { __index = Base, })
 Module.TempSettings                = {}
 Module.TempSettings.CampZoneId     = 0
 Module.TempSettings.LastCmd        = ""
-Module.TempSettings.StuckAtTime    = 0
+Module.TempSettings.NavWasActive   = false
 Module.TempSettings.StrafeLeft     = false
 
 Module.Constants                   = {}
@@ -704,6 +704,7 @@ function Module:GiveTime()
     end
 
     if Globals.PauseMain and not Config:GetSetting('RunMovePaused') then
+        Module.TempSettings.NavWasActive = false -- resuming starts a fresh stuck window
         return
     end
 
@@ -848,11 +849,10 @@ end
 function Module:IAmStuck()
     Movement:StoreLastMove()
     local Nav = mq.TLO.Navigation
-    local stuck = Nav.Active() and not Nav.Paused() and Movement:GetSecondsSinceLastNav() >= Config:GetSetting('AttemptToFixStuckTimer') and
-        (
-            (Nav.Velocity() == 0) or
-            (Movement:GetTimeSinceLastPositionChange() >= Config:GetSetting('AttemptToFixStuckTimer'))
-        )
+    -- Only "hasn't moved for the whole timer" counts. A momentary 0 velocity (corners, standing in range while nav
+    -- is still active) used to count too, which fired the unstick moves on a character that wasn't stuck.
+    local stuck = Nav.Active() and not Nav.Paused() and
+        Movement:GetTimeSinceLastPositionChange() >= Config:GetSetting('AttemptToFixStuckTimer')
 
     if stuck then
         Logger.log_debug(
@@ -877,27 +877,28 @@ function Module:CheckStuck()
     local Nav = mq.TLO.Navigation
 
     if not Nav.Active() then
-        Module.TempSettings.StuckAtTime = 0 -- not stuck
+        Module.TempSettings.NavWasActive = false
         return
     end
 
-    -- are we stuck?
-    if not self:IAmStuck() then
-        Module.TempSettings.StuckAtTime = 0 -- not stuck
+    -- New nav: time spent standing still before it started doesn't count toward being stuck.
+    if not Module.TempSettings.NavWasActive then
+        Module.TempSettings.NavWasActive = true
+        Movement:ResetPositionChangeTimer()
         return
     end
 
-    if Config:GetSetting('AttemptToFixStuck') and self:IAmStuck() then
-        if Module.TempSettings.StuckAtTime == 0 then
-            Module.TempSettings.StuckAtTime = Globals.GetTimeSeconds()
-        end
+    if not Config:GetSetting('AttemptToFixStuck') or not self:IAmStuck() then return end
 
-        if ((Globals.GetTimeSeconds() - Module.TempSettings.StuckAtTime) >= Config:GetSetting('AttemptToFixStuckTimer')) or Movement:GetTimeSinceLastPositionChange() >= Config:GetSetting('AttemptToFixStuckTimer') then
-            Logger.log_warning("\awWARNING:\ax Navigation appears to be stuck")
-            self:AttemptUnstick()
-            Module.TempSettings.StuckAtTime = 0
-        end
+    -- Can't move while stunned, mezzed or rooted; don't thrash at it.
+    if mq.TLO.Me.Stunned() or mq.TLO.Me.Mezzed() or mq.TLO.Me.Rooted() then
+        Movement:ResetPositionChangeTimer()
+        return
     end
+
+    Logger.log_warning("\awWARNING:\ax Navigation appears to be stuck")
+    self:AttemptUnstick()
+    Movement:ResetPositionChangeTimer() -- wait one full timer before trying again
 end
 
 --- Waits up to ms for nav to start moving again.
