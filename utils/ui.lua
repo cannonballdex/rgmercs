@@ -3068,7 +3068,7 @@ function Ui.RenderOption(type, setting, id, requiresLoadoutChange, ...)
         ImGui.PushID("##color_setting_" .. id)
         ImGui.SetNextItemWidth(-1)
         local newSetting
-        newSetting, pressed = ImGui.ColorEdit4("", Tables.TableToImVec4(setting) or ImVec4(0, 0, 0, 0), ImGuiColorEditFlags.NoInputs + ImGuiColorEditFlags.NoLabel)
+        newSetting, pressed = ImGui.ColorEdit4("", Tables.TableToImVec4(setting) or ImVec4(0, 0, 0, 0), bit32.bor(ImGuiColorEditFlags.NoInputs, ImGuiColorEditFlags.NoLabel))
         setting = newSetting and Tables.ImVec4ToTable(newSetting) or setting
         if not skipDefaultButton then
             ImGui.SameLine()
