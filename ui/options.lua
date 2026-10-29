@@ -230,6 +230,7 @@ OptionsUI.SettingNames   = {}
 OptionsUI.DefaultConfigs = {}
 OptionsUI.FirstRender    = true
 OptionsUI.filterDirty    = false
+OptionsUI.focusPending   = false
 
 OptionsUI.dbChars        = nil
 OptionsUI.dbFromIdx      = 1
@@ -281,6 +282,10 @@ end
 
 function OptionsUI:SetSelectedGroup(group)
     self.selectedGroup = group or self.selectedGroup
+end
+
+function OptionsUI:RequestFocus()
+    self.focusPending = true
 end
 
 function OptionsUI:ApplySearchFilter()
@@ -1283,6 +1288,12 @@ function OptionsUI:RenderMainWindow(_, openGUI, flags)
 
     ImGui.SetNextWindowSize(ImVec2(700, 500), ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(2000, 2000))
+
+    if self.focusPending then
+        ImGui.SetNextWindowCollapsed(false, ImGuiCond.Always)
+        ImGui.SetNextWindowFocus()
+        self.focusPending = false
+    end
 
     local shouldDrawGUI
     openGUI, shouldDrawGUI = ImGui.Begin(Ui.GetWindowTitle(("RGMercs Options%s"):format(Globals.PauseMain and " [Paused]" or ""), 'rgmercsOptionsUI'), openGUI, flags)

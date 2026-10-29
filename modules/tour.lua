@@ -347,6 +347,7 @@ function Module:GoToStep(idx)
     self.TempSettings.FocusPending = true
     if step.Filter then
         OptionsUI:OpenAndSetSearchFilter(step.Filter, step.Group)
+        OptionsUI:RequestFocus()
     end
 end
 
@@ -489,6 +490,7 @@ function Module:RenderOverlay()
             ImGui.SameLine()
             if ImGui.Button("Related FAQ") then
                 OptionsUI:OpenAndSetSearchFilter(step.Faq, "Commands/FAQ")
+                OptionsUI:RequestFocus()
             end
         end
     end
