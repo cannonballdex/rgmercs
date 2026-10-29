@@ -74,7 +74,6 @@ local ConsoleUI       = require("ui.console")
 local HudUI           = require("ui.hud")
 local LoaderUI        = require("ui.loader")
 local OptionsUI       = require("ui.options")
-local SimpleUI        = require("ui.simple")
 local StandardUI      = require("ui.standard")
 local TargetUI        = require("ui.target")
 
@@ -204,11 +203,7 @@ local function RGMercsGUI()
                 ImGui.PushStyleColor(ImGuiCol.WindowBg, Globals.GetAlternatingColor(ImVec4(0.7, 0.1, 0.1, Config:GetMainOpacity()), ImVec4(0.3, 0.1, 0.1, Config:GetMainOpacity())))
             end
 
-            if Config:GetSetting('FullUI') then
-                openGUI = StandardUI:RenderMainWindow(imGuiStyle, openGUI, flags)
-            else
-                openGUI = SimpleUI:RenderMainWindow(imGuiStyle, openGUI, flags)
-            end
+            openGUI = StandardUI:RenderMainWindow(imGuiStyle, openGUI, flags)
 
             if flashingWarning then
                 ImGui.PopStyleColor()

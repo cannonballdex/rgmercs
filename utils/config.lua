@@ -2981,14 +2981,6 @@ Config.DefaultConfig                                     = {
     },
 
     --Deprecated/Need Adjusted to Custom/Etc
-    ['FullUI']                           = {
-        DisplayName = "Use Full UI",
-        Group = "General",
-        Header = "Interface",
-        Category = "Interface",
-        Tooltip = "Toggle between Full UI and a Simple UI [Experimental]",
-        Default = true,
-    },
     ['EnableOptionsUI']                  = {
         DisplayName = "Enable Options UI",
         Type = "Custom",
