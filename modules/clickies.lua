@@ -2406,12 +2406,13 @@ function Module:ClickModRod()
     end
 
     for _, itemName in ipairs(Globals.Constants.ModRods) do
-        while mq.TLO.Cursor.Name() == itemName and (mq.TLO.Me.FreeInventory() or 0) > 0 do
+        -- ModRods holds partial names ("Transvergence"), so these lookups must not be exact.
+        while (mq.TLO.Cursor.Name() or ""):find(itemName, 1, true) and (mq.TLO.Me.FreeInventory() or 0) > 0 do
             Core.DoCmd("/squelch /autoinv")
             mq.delay(10)
         end
 
-        local item = mq.TLO.FindItem("=" .. itemName)
+        local item = mq.TLO.FindItem(itemName)
         if item() and item.Clicky() and mq.TLO.Me.Level() >= (item.Clicky.RequiredLevel() or 999) and item.TimerReady() == 0 then
             Casting.UseItem(item.Name(), mq.TLO.Me.ID())
             return
