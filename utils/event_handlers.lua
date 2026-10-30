@@ -522,6 +522,19 @@ mq.event('PersonaEquipLoad', "You successfully loaded your #*# equipment set.", 
 end)
 -- [ END CLASS CHANGE EVENT HANDLERS ] --
 
+-- [ PULL CONSIDER HANDLERS ] --
+for idx, standing in ipairs({
+    "regards you as an ally", "looks upon you warmly", "kindly considers you", "judges you amiably", "regards you indifferently",
+    "looks your way apprehensively", "glowers at you dubiously", "glares at you threateningly", "scowls at you",
+}) do
+    local eventName = string.format("PullCon%d", idx)
+    table.insert(Globals.PullConEvents, eventName)
+    mq.event(eventName, "#*#" .. standing .. "#*#", function()
+        Globals.PullConResult = standing
+    end)
+end
+-- [ END PULL CONSIDER HANDLERS ] --
+
 -- [ EMU REZ HANDLERS] --
 mq.event('CorpseConned', "This corpse will decay#*#.", function()
     if Core.OnEMU and Modules:ExecModule("Class", "IsRezing") then

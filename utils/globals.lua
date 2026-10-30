@@ -47,6 +47,8 @@ Globals.ServerEnv                     = (Globals.BuildType:lower() == "emu") and
 Globals.Minimized                     = false
 Globals.LastUsedSpell                 = "None"
 Globals.CorpseConned                  = false
+Globals.PullConResult                 = nil
+Globals.PullConEvents                 = {}
 Globals.RezzedCorpses                 = {}
 Globals.LastCachedBuffUpdate          = {}
 Globals.SLPeerLooting                 = false
