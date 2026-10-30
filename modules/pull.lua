@@ -34,6 +34,7 @@ Module.TempSettings.PullTargets           = {}
 Module.TempSettings.PullTargetsMetaData   = {}
 Module.TempSettings.PullIgnoreTargets     = {}
 Module.TempSettings.PullConChecked        = {}
+Module.TempSettings.PullConLastEmptySearch = 0
 Module.TempSettings.AbortPull             = false
 Module.TempSettings.PullListUpdated       = false
 Module.TempSettings.PullID                = 0
@@ -316,7 +317,7 @@ Module.DefaultConfig                   = {
         Header = "Pulling",
         Category = "Pull Rules",
         Index = 10,
-        Tooltip = "Before pulling a mob, /consider it. If it doesn't scowl at you (ready to attack), add it to the Pull Ignore List and move on to the next mob.\n" ..
+        Tooltip = "Once a mob is in line of sight, /consider it. If it doesn't scowl at you (ready to attack), add it to the Pull Ignore List and move on to the next mob.\n" ..
             "Each mob name is only checked once until the Ignore List clears (zoning, turning pulling off, or the Clear button). Not used when the zone has a Pull Allow List. Manual pull targets are not checked.",
         Default = false,
     },
@@ -1725,6 +1726,12 @@ function Module:GetPullableSpawns()
     end
 
     local pullRadiusSqr = self.TempSettings.PullRadius * self.TempSettings.PullRadius
+    local checkKOS = self:ShouldCheckPullTargetKOS()
+
+    local ignoredIDs = {}
+    for _, ignoredMob in ipairs(self.TempSettings.PullIgnoreTargets) do
+        ignoredIDs[ignoredMob.ID()] = true
+    end
 
     local spawnFilter = function(spawn)
         if not spawn() or spawn.ID() == 0 then return false end
@@ -1764,9 +1771,15 @@ function Module:GetPullableSpawns()
             end
         end
 
-        for _, ignoredMob in ipairs(self.TempSettings.PullIgnoreTargets) do
-            if spawn.ID() == ignoredMob.ID() then
-                Logger.log_verbose("\atPULL::FindPullTarget \awSpawn \am%s\aw (\at%d\aw) \ar -> Found in Ignore List!", spawn.CleanName(), spawn.ID())
+        if ignoredIDs[spawn.ID()] then
+            Logger.log_verbose("\atPULL::FindPullTarget \awSpawn \am%s\aw (\at%d\aw) \ar -> Found in Ignore List!", spawn.CleanName(), spawn.ID())
+            return false
+        end
+
+        if checkKOS then
+            local standing = self.TempSettings.PullConChecked[spawn.CleanName()]
+            if standing and standing ~= "scowls at you" then
+                Logger.log_verbose("\atPULL::FindPullTarget \awSpawn \am%s\aw (\at%d\aw) \ar -> Not KOS (%s)", spawn.CleanName(), spawn.ID(), standing)
                 return false
             end
         end
@@ -1913,49 +1926,55 @@ function Module:ConsiderForPull(pullID)
     return Globals.PullConResult
 end
 
---- When enabled, moves any mob that doesn't scowl at us onto the Ignore List and returns the next mob to pull.
---- The result is remembered per name until the Ignore List clears, so other spawns of that name aren't considered again.
+--- Checks whether a spawn is KOS, moving it to the Ignore List if it isn't. /consider needs line of sight,
+--- so a mob we can't see yet stays unchecked. The result is remembered per name until the Ignore List clears.
 ---@param pullID number
----@return number pullID
-function Module:SkipNonKOSTargets(pullID)
-    if not Config:GetSetting('PullOnlyKOS') or self:HaveList("PullAllowList") then return pullID end
+---@return boolean? isKOS True if KOS, false if it was moved to the Ignore List, nil if we can't see it yet.
+function Module:CheckPullTargetKOS(pullID)
+    local spawn = mq.TLO.Spawn(pullID)
+    local name = spawn.CleanName()
+    if not name then return nil end
 
-    local startingHaters = Targeting.GetXTHaterCount()
-    local skippedAny = false
+    local standing = self.TempSettings.PullConChecked[name]
+    if not standing then
+        if not spawn.LineOfSight() then return nil end
 
-    for _ = 1, 5 do
-        if pullID == 0 then break end
-
-        local name = mq.TLO.Spawn(pullID).CleanName()
-        if not name then return pullID end
-
-        local standing = self.TempSettings.PullConChecked[name]
-        if not standing then
-            standing = self:ConsiderForPull(pullID)
-            if standing then
-                self.TempSettings.PullConChecked[name] = standing
-                if standing ~= "scowls at you" then
-                    Logger.log_info("\atPULL::SkipNonKOSTargets \ag%s\aw %s, adding it to the Pull Ignore List.", name, standing)
-                end
-            else
-                Logger.log_info("\atPULL::SkipNonKOSTargets \ayNo consider reply for %s, adding it to the Pull Ignore List.", name)
+        standing = self:ConsiderForPull(pullID)
+        if standing then
+            self.TempSettings.PullConChecked[name] = standing
+            if standing ~= "scowls at you" then
+                Logger.log_info("\atPULL::CheckPullTargetKOS \ag%s\aw %s, adding it to the Pull Ignore List.", name, standing)
             end
+        else
+            Logger.log_info("\atPULL::CheckPullTargetKOS \ayNo consider reply for %s, adding it to the Pull Ignore List.", name)
         end
-
-        if standing == "scowls at you" then return pullID end
-
-        table.insert(self.TempSettings.PullIgnoreTargets, mq.TLO.Spawn(pullID))
-        skippedAny = true
-
-        -- something aggroed while we were checking, let combat take over
-        if Targeting.GetXTHaterCount() > startingHaters then return 0 end
-
-        pullID = self:FindTarget()
     end
 
-    -- still working through mobs we won't pull, carry on next time around
-    if skippedAny then
-        Core.DoCmd("/target clear")
+    if standing == "scowls at you" then return true end
+
+    table.insert(self.TempSettings.PullIgnoreTargets, spawn)
+    if mq.TLO.Target.ID() == pullID then Core.DoCmd("/target clear") end
+    return false
+end
+
+---@return boolean
+function Module:ShouldCheckPullTargetKOS()
+    return Config:GetSetting('PullOnlyKOS') and not self:HaveList("PullAllowList")
+end
+
+--- FindTarget, plus the KOS check when it's enabled. Each search works out a path to every mob in range, so
+--- this does one search at most and waits a moment before searching again if it comes up empty.
+--- Mobs out of sight are returned as they are and get checked on the way to them.
+---@return number pullID
+function Module:FindKOSTarget()
+    if not self:ShouldCheckPullTargetKOS() then return self:FindTarget() end
+
+    local now = Globals.GetTimeSeconds()
+    if now - self.TempSettings.PullConLastEmptySearch < 2 then return 0 end
+
+    local pullID = self:FindTarget()
+    if pullID == 0 or self:CheckPullTargetKOS(pullID) == false then
+        self.TempSettings.PullConLastEmptySearch = now
         return 0
     end
 
@@ -2349,7 +2368,7 @@ function Module:GiveTime()
         self.TempSettings.PullID = self.TempSettings.TargetSpawnID
     else
         Logger.log_debug("PULL:Finding Pull Target")
-        self.TempSettings.PullID = self:SkipNonKOSTargets(self:FindTarget())
+        self.TempSettings.PullID = self:FindKOSTarget()
     end
 
     if self.TempSettings.PullID == 0 and self:IsPullMode("Farm") then
@@ -2440,9 +2459,20 @@ function Module:GiveTime()
 
     local abortPull = false
     local maxMove = Config:GetSetting('MaxMoveTime') * 1000
+    local checkKOS = self:ShouldCheckPullTargetKOS() and self.TempSettings.PullID ~= self.TempSettings.TargetSpawnID
 
     while mq.TLO.Navigation.Active() do
         Logger.log_super_verbose("Pathing to pull id...")
+        -- as soon as the mob comes into sight we can find out whether to keep going
+        if checkKOS then
+            local isKOS = self:CheckPullTargetKOS(self.TempSettings.PullID)
+            if isKOS == false then
+                abortPull = true
+                break
+            end
+            if isKOS then checkKOS = false end
+        end
+
         if self:IsPullMode("Chain") then
             if Targeting.GetXTHaterCount() >= Config:GetSetting('ChainCount') then
                 Logger.log_debug("\awNOTICE:\ax Gained aggro -- aborting chain pull!")
@@ -2482,6 +2512,19 @@ function Module:GiveTime()
             -- in this way, nav will continue towards the original target while we rescan
             return
         end
+    end
+
+    if not abortPull and checkKOS then
+        mq.delay("2s", function() return not mq.TLO.Me.Moving() end)
+
+        -- we've arrived; if we still can't tell, it could be friendly, so leave it alone
+        local isKOS = self:CheckPullTargetKOS(self.TempSettings.PullID)
+        if isKOS == nil then
+            Logger.log_info("\atPULL::CheckPullTargetKOS \ayCan't see %s to consider it, adding it to the Pull Ignore List.",
+                mq.TLO.Spawn(self.TempSettings.PullID).CleanName() or "target")
+            table.insert(self.TempSettings.PullIgnoreTargets, mq.TLO.Spawn(self.TempSettings.PullID))
+        end
+        if not isKOS then abortPull = true end
     end
 
     if not abortPull then
