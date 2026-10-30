@@ -552,7 +552,7 @@ function OptionsUI:RenderCategorySettings(category)
                         local selectableWidth = columnWidth - iconWidth - (hasWarning and ImGui.GetStyle().ItemSpacing.x or 0)
                         ImGui.PushStyleColor(ImGuiCol.HeaderHovered, IM_COL32(0, 0, 0, 0))
                         ImGui.PushStyleColor(ImGuiCol.HeaderActive, Ui.ChangeColorAlpoha(Globals.Constants.Colors.Green, 0.1))
-                        if ImGui.Selectable(string.format("%s", settingDefaults.DisplayName or (string.format("None %d", idx))), false, ImGuiSelectableFlags.None, ImVec2(selectableWidth, 0)) then
+                        if ImGui.Selectable(string.format("%s##%s", settingDefaults.DisplayName or (string.format("None %d", idx)), settingName), false, ImGuiSelectableFlags.None, ImVec2(selectableWidth, 0)) then
                             ImGui.SetClipboardText(settingName)
                             table.insert(self.ToastStates, {
                                 active = true,
