@@ -399,6 +399,43 @@ local function SaveMercStanceUnsupported(mercName)
     pcall(mq.pickle, mercStanceFile(), { mercName = mercName, unsupported = Globals.MercStanceUnsupported })
 end
 
+-- The merc window lists the stances this merc can actually use. Read once per merc; if the
+-- list isn't filled in yet, look again every few seconds.
+local mercStanceList = { mercName = nil, stances = {}, lastRead = 0 }
+
+local function ReadMercStances(mercName)
+    local cache = mercStanceList
+    if cache.mercName == mercName and (#cache.stances > 0 or (Globals.GetTimeSeconds() - cache.lastRead) < 5) then
+        return cache.stances
+    end
+
+    cache.mercName = mercName
+    cache.stances = {}
+    cache.lastRead = Globals.GetTimeSeconds()
+
+    local listBox = mq.TLO.Window("MMGW_ManageWnd").Child("MMGW_StanceListBox")
+    for i = 1, listBox.Items() or 0 do
+        local stance = listBox.List(i)()
+        if stance and stance ~= "" then table.insert(cache.stances, stance:lower()) end
+    end
+
+    return cache.stances
+end
+
+-- Returns the stance to use from what the merc has: the one asked for if it's there, otherwise
+-- the first of this merc type's stances that is. Returns nil if none are listed.
+local function PickUsableMercStance(desiredStance, stances, available)
+    local has = {}
+    for _, stance in ipairs(available) do has[stance] = true end
+
+    if has[desiredStance] then return desiredStance end
+    for _, stance in ipairs(stances) do
+        if has[stance] then return stance end
+    end
+
+    return nil
+end
+
 local function Main()
     Logger.log_verbose("Starting Main loop.")
 
@@ -566,41 +603,52 @@ local function Main()
                         local currentStance = merc.Stance():lower()
                         local desiredStance = stances[Config:GetSetting("MercStance")] or stances[1]
 
-                        -- Apprentice-tier mercs only support Balanced/Passive -- if we've already
-                        -- seen this stance get rejected, don't keep spamming it, just stick to Balanced.
-                        if Globals.MercStanceUnsupported[desiredStance] then
+                        local usableStance = PickUsableMercStance(desiredStance, stances, ReadMercStances(mercName))
+                        if usableStance then
+                            desiredStance = usableStance
+                        elseif Globals.MercStanceUnsupported[desiredStance] then
+                            -- No list to read. Apprentice-tier mercs only support Balanced/Passive -- if we've already
+                            -- seen this stance get rejected, don't keep spamming it, just stick to Balanced.
                             desiredStance = "balanced"
                         end
 
-                        if currentStance ~= desiredStance then
-                            local attempt = Globals.MercStanceAttempt
-                            if attempt.stance == desiredStance and (Globals.GetTimeSeconds() - attempt.time) >= 2 then
-                                -- We already asked for this stance and it didn't take -- likely unsupported at this merc's tier.
-                                Logger.log_warn(
-                                    "\ayNOTICE:\ax Mercenary stance '%s' did not apply (likely unavailable at this mercenary's tier), falling back to Balanced.",
-                                    desiredStance)
-                                Globals.MercStanceUnsupported[desiredStance] = true
-                                -- desiredStance is outside this class's known Apprentice set, so this
-                                -- merc is Apprentice-tier -- every OTHER stance outside that same set
-                                -- is known to fail too. Mark them all now instead of spending a
-                                -- separate wasted /stance attempt discovering each one individually.
-                                local apprenticeSet = Globals.Constants.ApprenticeMercStances[class]
-                                if apprenticeSet then
-                                    local allowed = {}
-                                    for _, s in ipairs(apprenticeSet) do allowed[s] = true end
-                                    if not allowed[desiredStance] then
-                                        for _, s in ipairs(stances) do
-                                            if not allowed[s] then
-                                                Globals.MercStanceUnsupported[s] = true
-                                            end
-                                        end
-                                    end
-                                end
-                                SaveMercStanceUnsupported(mercName)
-                            elseif (Globals.GetTimeSeconds() - attempt.time) >= 2 then
+                        local attempt = Globals.MercStanceAttempt
+                        local sinceAttempt = Globals.GetTimeSeconds() - attempt.time
+                        if currentStance == desiredStance then
+                            -- It took, so a later change of stance isn't mistaken for this request failing.
+                            if attempt.stance then Globals.MercStanceAttempt = { stance = nil, time = 0 } end
+                        elseif usableStance or desiredStance == "balanced" then
+                            -- Known to be available (or nothing left to fall back to), so just keep asking now and then.
+                            if attempt.stance ~= desiredStance or sinceAttempt >= 10 then
                                 Core.DoCmd("/squelch /stance %s", desiredStance)
                                 Globals.MercStanceAttempt = { stance = desiredStance, time = Globals.GetTimeSeconds() }
                             end
+                        elseif attempt.stance == desiredStance and sinceAttempt >= 2 then
+                            -- We already asked for this stance and it didn't take -- likely unsupported at this merc's tier.
+                            Logger.log_warn(
+                                "\ayNOTICE:\ax Mercenary stance '%s' did not apply (likely unavailable at this mercenary's tier), falling back to Balanced.",
+                                desiredStance)
+                            Globals.MercStanceUnsupported[desiredStance] = true
+                            -- desiredStance is outside this class's known Apprentice set, so this
+                            -- merc is Apprentice-tier -- every OTHER stance outside that same set
+                            -- is known to fail too. Mark them all now instead of spending a
+                            -- separate wasted /stance attempt discovering each one individually.
+                            local apprenticeSet = Globals.Constants.ApprenticeMercStances[class]
+                            if apprenticeSet then
+                                local allowed = {}
+                                for _, s in ipairs(apprenticeSet) do allowed[s] = true end
+                                if not allowed[desiredStance] then
+                                    for _, s in ipairs(stances) do
+                                        if not allowed[s] then
+                                            Globals.MercStanceUnsupported[s] = true
+                                        end
+                                    end
+                                end
+                            end
+                            SaveMercStanceUnsupported(mercName)
+                        elseif sinceAttempt >= 2 then
+                            Core.DoCmd("/squelch /stance %s", desiredStance)
+                            Globals.MercStanceAttempt = { stance = desiredStance, time = Globals.GetTimeSeconds() }
                         end
                     end
                     Combat.MercAssist()
