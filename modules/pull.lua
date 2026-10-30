@@ -625,6 +625,7 @@ Module.DefaultConfig                   = {
         Default = false,
     },
     ['GroupWatchF4']                           = {
+        DisplayName = mq.TLO.Group.Member(3)() and string.format("Watch %s", mq.TLO.Group.Member(3).CleanName()) or "No GroupMember",
         Group = "Movement",
         Header = "Pulling",
         Category = "Group Vitals",
