@@ -144,6 +144,7 @@ local gui = {
     scanResults = {},
     selectedScanName = nil,
     selectedPriorityIndex = 0,
+    points = 0,             -- last Mercenary AA point count read by GiveTime; the windows only draw this
     windowX = nil,
     windowY = nil,
 }
@@ -659,10 +660,12 @@ local function getAvailableMercAAPoints()
     end)
 
     if not success or points == nil then
+        gui.points = 0
         return 0
     end
 
-    return toNumber(points, 0)
+    gui.points = toNumber(points, 0)
+    return gui.points
 end
 
 -- ============================================================
@@ -1301,7 +1304,7 @@ local function purchaseFirstAvailableAA()
     return true
 end
 
-local function runPurchaseCycle()
+local function runPurchaseCycleBody()
     local startingPoints = getAvailableMercAAPoints()
 
     log(string.format(
@@ -1353,11 +1356,26 @@ local function runPurchaseCycle()
         getAvailableMercAAPoints()
     ))
 
+    return purchaseCount > 0
+end
+
+-- Every way out of a cycle (bought, nothing to buy, below threshold, test mode)
+-- closes the AA window the cycle opened
+local function runPurchaseCycle()
+    -- an error mid-cycle is reported and RGMercs keeps running
+    local ok, result = pcall(runPurchaseCycleBody)
+
+    if not ok then
+        fail('Purchase cycle error: ' .. tostring(result))
+        gui.status = 'Purchase cycle failed - see the MacroQuest console.'
+        result = false
+    end
+
     if CLOSE_AA_WINDOW_WHEN_FINISHED then
         closeAAWindow()
     end
 
-    return purchaseCount > 0
+    return result
 end
 
 -- ============================================================
@@ -1460,7 +1478,7 @@ local function drawGUIContents()
 
     imgui.Text(string.format(
         'Mercenary AA Points: %d',
-        getAvailableMercAAPoints()
+        gui.points
     ))
 
     imgui.Separator()
@@ -1983,7 +2001,12 @@ end
 function Module:GiveTime()
     if not running then return end
 
-    processGUIAction()
+    local actionOk, actionError = pcall(processGUIAction)
+    if not actionOk then
+        fail('Action error: ' .. tostring(actionError))
+        gui.status = 'That action failed - see the MacroQuest console.'
+    end
+    getAvailableMercAAPoints()
 
     local now = mq.gettime()
 
@@ -2024,12 +2047,7 @@ function Module:GiveTime()
                 elseif not success or pointsAfter >= pointsBefore then
                     lastFailedScanTime = mq.gettime()
 
-                    warn(string.format(
-                        'No points were spent. Retry cooldown: %d seconds.',
-                        math.floor(
-                            FAILED_SCAN_COOLDOWN_MS / 1000
-                        )
-                    ))
+                    warn('No points were spent. It will try again after your points drop below the threshold and reach it again, or press Reset.')
                 end
             end
         end
@@ -2051,7 +2069,7 @@ function Module:Render()
 
     if not self.ModuleLoaded then return end
 
-    ImGui.Text(string.format('Mercenary AA Points: %d', getAvailableMercAAPoints()))
+    ImGui.Text(string.format('Mercenary AA Points: %d', gui.points))
     ImGui.Text(string.format('Threshold: %d    Paused: %s    Mode: %s', AA_THRESHOLD, tostring(paused), modeDisplayName()))
     ImGui.Text(string.format('Priority entries: %d', #priority.entries))
 
