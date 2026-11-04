@@ -247,7 +247,7 @@ function Module:Scan()
         c.observe    = GetDanNetZoneObserve()
         c.dannetAll  = SafeNum(mq.TLO.DanNet.PeerCount(), 0)
         c.dannetZone = SafeNum(mq.TLO.DanNet.PeerCount(c.observe)(), 0)
-        self.danNetPeers = SplitPeers(mq.TLO.DanNet.Peers(c.observe)() or mq.TLO.DanNet.Peers()() or "")
+        self.danNetPeers = SplitPeers(mq.TLO.DanNet.Peers(c.observe)() or "")
     end
 
     local rgAll  = Comms.GetPeers(true) or {}
@@ -257,7 +257,8 @@ function Module:Scan()
     self.rgZonePeers = rgZone
 
     local players = {}
-    for i = 1, pc do
+    local wantPlayers = Config:GetSetting('ZoneInfoShowPCTable') and (Globals.GetTimeSeconds() - (self.pcTableSeen or -10)) < 3
+    for i = 1, wantPlayers and pc or 0 do
         local spawn = mq.TLO.NearestSpawn(i, 'pc')
         if spawn and spawn() then
             table.insert(players, {
@@ -415,6 +416,9 @@ end
 function Module:RenderPCTable()
     if not Config:GetSetting('ZoneInfoShowPCTable') then return end
     if not ImGui.CollapsingHeader("Players in Zone") then return end
+    local now = Globals.GetTimeSeconds()
+    if (now - (self.pcTableSeen or -10)) >= 3 then self.lastScan = 0 end
+    self.pcTableSeen = now
 
     local flags = bit32.bor(
         ImGuiTableFlags.Resizable,
