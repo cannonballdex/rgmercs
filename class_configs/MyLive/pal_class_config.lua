@@ -785,29 +785,27 @@ local _ClassConfig = {
         end,
     },
     ['HealRotationOrder'] = {
-        ['HealRotationOrder'] = {
-            {
-                name = 'GroupHeal',
-                state = 1,
-                steps = 1,
-                cond = function(self, target) return Targeting.GroupHealsNeeded() end,
-            },
-            {
-                name = 'BigHeal',
-                state = 1,
-                steps = 1,
-                cond = function(self, target)
-                    return Targeting.BigHealsNeeded(target) and not Targeting.TargetIsType("pet", target)
-                end,
-            },
-            {
-                name = 'MainHeal',
-                state = 1,
-                steps = 1,
-                cond = function(self, target)
-                    return Targeting.MainHealsNeeded(target)
-                end,
-            },
+        {
+            name = 'GroupHeal',
+            state = 1,
+            steps = 1,
+            cond = function(self, target) return Targeting.GroupHealsNeeded() end,
+        },
+        {
+            name = 'BigHeal',
+            state = 1,
+            steps = 1,
+            cond = function(self, target)
+                return Targeting.BigHealsNeeded(target) and not Targeting.TargetIsType("pet", target)
+            end,
+        },
+        {
+            name = 'MainHeal',
+            state = 1,
+            steps = 1,
+            cond = function(self, target)
+                return Targeting.MainHealsNeeded(target)
+            end,
         },
     },
     ['HealRotations']     = {
@@ -1653,7 +1651,9 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function(self) return Core.IsTanking() end,
                 cond = function(self, spell)
-                    return Casting.SelfBuffCheck(spell)
+                    -- temp fix, buff has two null effects and third is the trigger; need to adjust buff check code
+                    if not spell then return false end
+                    return Casting.SelfBuffCheck(spell.RankName.Trigger(3))
                 end,
             },
             {

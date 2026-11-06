@@ -1646,7 +1646,7 @@ local _ClassConfig = {
                 end,
             },
             {
-                name = "Chamelon's Gift",
+                name = "Chameleon's Gift",
                 type = "AA",
                 tooltip = Tooltips.CG,
                 cond = function(self, spell)

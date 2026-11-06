@@ -216,8 +216,8 @@ return {
             "War Cry",
             "Battle Cry of Dravel",
             "War Cry of Dravel",
-            "Battle Cry of the Mastruq",
             "Ancient: Cry of Chaos",
+            "Battle Cry of the Mastruq",
         },
         ['CryDmg'] = {
             "Cry Havoc",
