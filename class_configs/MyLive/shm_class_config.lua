@@ -12,7 +12,7 @@ local Logger       = require("utils.logger")
 -- configs are very large, and MacroQuest's LuaJIT compiler has tighter limits
 -- than desktop syntax checkers. Only the functions used by the class table
 -- remain as top-level locals.
-local unityHasBlockedChild, runSpeedAlreadyCovered, stackGuardSpellName = (function()
+local unityHasBlockedChild, runSpeedAlreadyCovered, stackGuardSpellName, targetHasNamedBuff = (function()
 
 -- Buffs supplied by another class that satisfy one of this config's buff jobs.
 -- Add future cross-class alternatives here instead of duplicating target checks
@@ -474,7 +474,7 @@ local function runSpeedAlreadyCovered(target, proposedBuffName)
     return false
 end
 
-return unityHasBlockedChild, runSpeedAlreadyCovered, spellName
+return unityHasBlockedChild, runSpeedAlreadyCovered, spellName, targetHasNamedBuff
 end)()
 
 print(string.format(
@@ -2020,6 +2020,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function(self) return mq.TLO.Me.Level() < 86 end,
                 cond = function(self, spell, target)
+                    if stackGuardSpellName(spell) == "Harnessing of Spirit" and targetHasNamedBuff(target, "Infusion of Spirit") then return false end
                     return Targeting.TargetIsAMelee(target) and Casting.CastReady(spell) and
                         Casting.GroupBuffCheck(spell, target)
                 end,
@@ -2156,6 +2157,7 @@ local _ClassConfig = {
                 type = "Spell",
                 load_cond = function(self) return Config:GetSetting('DoLLStrBuff') end,
                 cond = function(self, spell, target)
+                    if stackGuardSpellName(spell) == "Infusion of Spirit" and targetHasNamedBuff(target, "Harnessing of Spirit") then return false end
                     return mq.TLO.Me.Level() < 71 and Targeting.TargetIsAMelee(target) and Casting.GroupBuffCheck(spell, target)
                 end,
             },
