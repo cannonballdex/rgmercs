@@ -28,7 +28,6 @@
 --   /mercaa save
 --   /mercaa load
 --   /mercaa reset
---   /mercaa stop
 -- ============================================================
 
 local mq = require('mq')
@@ -43,6 +42,21 @@ local ImGui = imgui
 local Base = require("modules.base")
 local Combat = require("utils.combat")
 local Config = require('utils.config')
+
+local VERSION = 'v1.0'
+-- the ### part keeps the window's saved size and position when the version changes
+local WINDOW_TITLE = ('MercAA.lua by Cannonballdex™ %s###MercAABuyerGUI'):format(VERSION)
+
+-- Cannonballdex logo for the window header, loaded once if the file is there
+local logoTexture
+do
+    local logoPath = mq.luaDir .. '/rgmercs/extras/cannonballdex.png'
+    local f = io.open(logoPath, 'rb')
+    if f then
+        f:close()
+        logoTexture = mq.CreateTexture(logoPath)
+    end
+end
 
 local Module = {
     _version = '1.0',
@@ -139,12 +153,13 @@ local lastFailedScanTime = 0
 local gui = {
     open = true,
     applyInitialLayout = true,
-    status = 'Ready. Click Scan AAs to populate the list.',
+    status = 'Ready. Availability is checked when your points reach the threshold, or click Check Availability.',
+    availability = {},      -- [aa name] = true (AVAILABLE) / false (LOCKED), from the last check
     pendingAction = nil,
     scanResults = {},
     selectedScanName = nil,
     selectedPriorityIndex = 0,
-    points = 0,             -- last Mercenary AA point count read by GiveTime; the windows only draw this
+    points = 0,             -- last Mercenary AA point count read by the main loop; the window only draws this
     windowX = nil,
     windowY = nil,
 }
@@ -264,10 +279,8 @@ local function isZoning()
     return success and toBoolean(zoning)
 end
 
--- Scanning/purchasing loops through mq.delay() heavily (750ms+ per row), and since
--- GiveTime() runs synchronously on RGMercs' main loop, that freezes all of RGMercs -
--- combat, healing, every other module - for as long as it takes. Restricting it to
--- downtime keeps that freeze to a time when it can't actually hurt anything.
+-- Scanning and buying open the AA window and click through it, and GiveTime runs on RGMercs'
+-- main loop, so they wait for a quiet moment
 local function inCombat()
     local success, state = pcall(function()
         return Combat.GetCachedCombatState()
@@ -599,8 +612,7 @@ local function loadConfiguration()
     end
 
     AA_THRESHOLD = math.max(1, math.floor(toNumber(loaded.threshold, AA_THRESHOLD)))
-    if loaded.testMode ~= nil then TEST_MODE = toBoolean(loaded.testMode) end
-    if loaded.debugMode ~= nil then BUTTON_DEBUG = toBoolean(loaded.debugMode) end
+    -- Test Mode and Button Debug always start OFF; they are not restored from the saved file
     if loaded.paused ~= nil then paused = toBoolean(loaded.paused) end
 
     if tonumber(loaded.windowX) ~= nil and tonumber(loaded.windowY) ~= nil then
@@ -1058,6 +1070,7 @@ local function findFirstPurchasableRow(verbose)
         selectRow(row)
 
         local enabled = isTrainButtonEnabled(verbose)
+        gui.availability[aaName] = enabled
 
         if verbose then
             log(string.format(
@@ -1091,6 +1104,26 @@ local function findRowByName(name)
     return nil
 end
 
+-- Every Merc AA belongs in the purchase list. Reads just the names (no
+-- clicking) and adds any missing ones at the end, switched ON. Your existing
+-- order and ON/OFF settings are kept. The Mercenary tab must be open.
+local function syncPriorityWithWindow()
+    local added = 0
+    local newState = #priority.entries == 0
+    for row = 1, getRowCount() do
+        local name = getRowName(row)
+        if name ~= '' and not priorityContains(name) then
+            priority.entries[#priority.entries + 1] = { name = name, enabled = newState }
+            added = added + 1
+        end
+    end
+    if added > 0 then
+        log(string.format('Added %d Mercenary AA(s) to the end of the purchase list (%s).', added, newState and 'ON' or 'OFF'))
+        markConfigurationDirty()
+    end
+    return added
+end
+
 local function findPriorityPurchasableRow(verbose)
     if not selectMercenaryTab() then
         return nil
@@ -1117,6 +1150,7 @@ local function findPriorityPurchasableRow(verbose)
                 selectRow(row)
 
                 local enabled = isTrainButtonEnabled(verbose)
+                gui.availability[entry.name] = enabled
 
                 if verbose then
                     log(string.format(
@@ -1180,13 +1214,15 @@ local function scanAllMercenaryAAs()
         return false
     end
 
+    syncPriorityWithWindow()
+
     gui.status = string.format(
-        'Scanning %d Mercenary AA rows...',
+        'Checking %d Mercenary AAs...',
         rowCount
     )
 
     for row = 1, rowCount do
-        if not running or isZoning() then
+        if not running or isZoning() or inCombat() then
             break
         end
 
@@ -1206,6 +1242,7 @@ local function scanAllMercenaryAAs()
             name = aaName,
             purchasable = isTrainButtonEnabled(false),
         }
+        gui.availability[aaName] = results[#results].purchasable
     end
 
     gui.scanResults = results
@@ -1219,9 +1256,10 @@ local function scanAllMercenaryAAs()
     end
 
     gui.status = string.format(
-        'Scan complete: %d rows, %d currently available.',
+        'Checked %d Merc AAs: %d available now, %d locked.',
         #results,
-        availableCount
+        availableCount,
+        #results - availableCount
     )
 
     return true
@@ -1304,70 +1342,117 @@ local function purchaseFirstAvailableAA()
     return true
 end
 
-local function runPurchaseCycleBody()
-    local startingPoints = getAvailableMercAAPoints()
-
-    log(string.format(
-        'Purchase cycle started with %d available points.',
-        startingPoints
-    ))
-
-    if startingPoints < AA_THRESHOLD then
-        warn(string.format(
-            'Points are below the threshold: %d/%d.',
-            startingPoints,
-            AA_THRESHOLD
-        ))
-
+-- Buy one row: select it, check Train once, click, confirm, verify points dropped.
+local function buyRow(row, name)
+    selectRow(row)
+    if not isTrainButtonEnabled(false) then
+        gui.availability[name] = false
         return false
     end
 
-    -- Test mode scans once and reports the first enabled row.
+    local pointsBefore = getAvailableMercAAPoints()
+    log(string.format('Purchasing "%s".', name))
+    if not clickTrainButton() then return false end
+    acceptConfirmation()
+
+    local pointsChanged = waitUntil(PURCHASE_TIMEOUT_MS, function()
+        return getAvailableMercAAPoints() < pointsBefore
+    end)
+    local pointsAfter = getAvailableMercAAPoints()
+    if not pointsChanged then
+        warn(string.format('Purchase was not verified for "%s". Points before: %d; now: %d.',
+            name, pointsBefore, pointsAfter))
+        return false
+    end
+    log(string.format('Purchased "%s". Points %d -> %d.', name, pointsBefore, pointsAfter))
+    mq.delay(PURCHASE_DELAY_MS)
+    return true
+end
+
+-- The AAs to buy this cycle, in order, from the one availability check.
+local function buildPurchaseOrder()
+    local order, seen = {}, {}
+    local function add(name)
+        if name and not seen[name] and gui.availability[name] == true then
+            seen[name] = true
+            order[#order + 1] = name
+        end
+    end
+    if priority.mode == 'list_order' then
+        for _, aa in ipairs(gui.scanResults) do add(aa.name) end
+    else
+        -- Priority Only / Priority First: your list, top to bottom, ON entries only.
+        -- (Every Merc AA is in the list, so there is nothing else to fall back to.)
+        for _, entry in ipairs(priority.entries) do
+            if entry.enabled then add(entry.name) end
+        end
+    end
+    return order
+end
+
+local function runPurchaseCycleBody()
+    if not selectMercenaryTab() then
+        return false
+    end
+    syncPriorityWithWindow()
+
+    local startingPoints = getAvailableMercAAPoints()
+    log(string.format('Purchase cycle started with %d available points.', startingPoints))
+
+    if startingPoints < AA_THRESHOLD then
+        warn(string.format('Points are below the threshold: %d/%d.', startingPoints, AA_THRESHOLD))
+        return false
+    end
+
+    -- Check every Merc AA once, then buy from that - no re-checking the whole list.
+    scanAllMercenaryAAs()
+    local order = buildPurchaseOrder()
+
+    if #order == 0 then
+        warn('No permitted Merc AA can be bought right now.')
+        return false
+    end
+
     if TEST_MODE then
-        return purchaseFirstAvailableAA()
+        log(string.format('TEST MODE: would buy, in order: %s', table.concat(order, ', ')))
+        return true
     end
 
     local purchaseCount = 0
-
-    while running and not paused and not isZoning() and not inCombat() do
-        local availablePoints = getAvailableMercAAPoints()
-
-        if availablePoints < AA_THRESHOLD then
-            log(string.format(
-                'Available points are now below threshold: %d/%d.',
-                availablePoints,
-                AA_THRESHOLD
-            ))
-
+    for _, name in ipairs(order) do
+        if not running or paused or isZoning() or inCombat() then break end
+        if getAvailableMercAAPoints() < AA_THRESHOLD then
+            log(string.format('Available points are now below threshold: %d/%d.',
+                getAvailableMercAAPoints(), AA_THRESHOLD))
             break
         end
 
-        -- Start again at row 1 after each purchase.
-        if not purchaseFirstAvailableAA() then
-            break
+        local row = findRowByName(name)
+        if row then
+            -- keep buying this AA while it has ranks left and points allow
+            while running and not paused and not isZoning() and not inCombat()
+                and getAvailableMercAAPoints() >= AA_THRESHOLD
+                and buyRow(row, name)
+            do
+                purchaseCount = purchaseCount + 1
+            end
         end
-
-        purchaseCount = purchaseCount + 1
     end
 
-    log(string.format(
-        'Purchase cycle finished. Purchases: %d. Points remaining: %d.',
-        purchaseCount,
-        getAvailableMercAAPoints()
-    ))
+    log(string.format('Purchase cycle finished. Purchases: %d. Points remaining: %d.',
+        purchaseCount, getAvailableMercAAPoints()))
 
     return purchaseCount > 0
 end
 
--- Every way out of a cycle (bought, nothing to buy, below threshold, test mode)
--- closes the AA window the cycle opened
+-- Every way out of a cycle (bought, nothing to buy, below threshold, test mode,
+-- could not open the tab) closes the AA window the cycle opened
 local function runPurchaseCycle()
-    -- an error mid-cycle is reported and RGMercs keeps running
+    -- an error mid-cycle is reported and the script keeps running
     local ok, result = pcall(runPurchaseCycleBody)
 
     if not ok then
         fail('Purchase cycle error: ' .. tostring(result))
-        gui.status = 'Purchase cycle failed - see the MacroQuest console.'
         result = false
     end
 
@@ -1375,7 +1460,8 @@ local function runPurchaseCycle()
         closeAAWindow()
     end
 
-    return result
+    -- second value: true when the cycle raised an error
+    return result, not ok
 end
 
 -- ============================================================
@@ -1473,8 +1559,27 @@ local function modeDisplayName()
     return 'List Order'
 end
 
+-- hover help for the window's buttons and settings
+local function tip(text)
+    if imgui.IsItemHovered() then imgui.SetTooltip(text) end
+end
+
 local function drawGUIContents()
-    imgui.Text('Mercenary AA Buyer GUI v1.0.0 by Cannonballdex')
+    -- Header: logo, name and version
+    if logoTexture then
+        imgui.Image(logoTexture:GetTextureID(), ImVec2(60, 60))
+        imgui.SameLine()
+    end
+    imgui.BeginGroup()
+    imgui.TextColored(1.0, 0.56, 0.0, 1.0, 'MercAA.lua')
+    imgui.SameLine()
+    imgui.Text('by')
+    imgui.SameLine()
+    imgui.TextColored(0.0, 1.0, 0.0, 1.0, 'Cannonballdex™')
+    imgui.TextColored(0.0, 1.0, 1.0, 1.0, VERSION)
+    imgui.TextDisabled('Buys Merc AA when set AA threshold is met.')
+    imgui.EndGroup()
+    imgui.Separator()
 
     imgui.Text(string.format(
         'Mercenary AA Points: %d',
@@ -1482,14 +1587,26 @@ local function drawGUIContents()
     ))
 
     imgui.Separator()
-    imgui.Text('Runtime Settings')
+    -- Settings drop-down (closed by default); the header shows the threshold
+    local settingsOpen = imgui.CollapsingHeader(
+        string.format('Settings  (Threshold %d%s)###mercaaSettings', AA_THRESHOLD, TEST_MODE and ', Test Mode' or ''))
+    tip('Click to show or hide the AA Threshold, Test Mode and Button Debug settings.')
+    -- opening/closing a drop-down refits the window to its contents
+    if gui.lastSettingsOpen ~= settingsOpen then
+        if gui.lastSettingsOpen ~= nil then gui.fittedOnce = false end
+        gui.lastSettingsOpen = settingsOpen
+    end
+    if settingsOpen then
 
+    -- small typed box (room for 5 digits, no +/- buttons)
+    imgui.SetNextItemWidth(imgui.CalcTextSize('00000') + imgui.GetStyle().FramePadding.x * 2)
     local newThreshold, thresholdChanged = imgui.InputInt(
         'AA Threshold',
         AA_THRESHOLD,
-        1,
-        10
+        0,
+        0
     )
+    tip('Buy Merc AAs automatically once your Mercenary AA points reach this number.\nType a number and press Enter or click away. Saved automatically.')
 
     if thresholdChanged then
         AA_THRESHOLD = math.max(1, math.floor(toNumber(newThreshold, AA_THRESHOLD)))
@@ -1503,6 +1620,7 @@ local function drawGUIContents()
         'Test Mode',
         TEST_MODE
     )
+    tip('Go through the motions without actually buying anything.\nUse it to check what would be bought before turning it off.')
 
     if testModeChanged then
         TEST_MODE = newTestMode
@@ -1516,12 +1634,14 @@ local function drawGUIContents()
         'Button Debug',
         BUTTON_DEBUG
     )
+    tip('Print extra details about every Train button lookup to the MacroQuest console.\nOnly needed when buying is not working.')
 
     if debugChanged then
         BUTTON_DEBUG = newDebugMode
         gui.status = string.format('Button Debug %s.', BUTTON_DEBUG and 'enabled' or 'disabled')
         markConfigurationDirty()
     end
+    end -- settingsOpen
 
     imgui.Text(string.format(
         'Paused: %s    Purchase Mode: %s',
@@ -1536,28 +1656,33 @@ local function drawGUIContents()
     if imgui.Button('Status') then
         queueGUIAction('status')
     end
+    tip('Print the current points, threshold, mode and settings to the MacroQuest console.\nCommand: /mercaa status')
 
     imgui.SameLine()
 
-    if imgui.Button('Scan AAs') then
+    if imgui.Button('Check Availability') then
         queueGUIAction('scan')
     end
+    tip('Check which Merc AAs can be bought right now and update the AVAILABLE / LOCKED labels.\nAlso adds any new Merc AAs to the list. Buys nothing.\nCommand: /mercaa scan')
 
     imgui.SameLine()
 
     if imgui.Button('Buy') then
         queueGUIAction('buy')
     end
+    tip('Start a purchase cycle now, without waiting for the threshold.\nCommand: /mercaa buy')
 
     if imgui.Button(paused and 'Resume' or 'Pause') then
         queueGUIAction(paused and 'resume' or 'pause')
     end
+    tip('Pause or resume the automatic threshold checks.\nCommands: /mercaa pause   /mercaa resume')
 
     imgui.SameLine()
 
     if imgui.Button('Reset') then
         queueGUIAction('reset')
     end
+    tip('Re-arm the automatic trigger so it buys again the next time your points reach the threshold.\nCommand: /mercaa reset')
 
     imgui.Separator()
     imgui.Text('Purchase Mode')
@@ -1567,6 +1692,7 @@ local function drawGUIContents()
         gui.status = 'Mode changed to Priority Only.'
         markConfigurationDirty()
     end
+    tip('Only buy the AAs that are turned ON in your priority list, in that order.')
 
     imgui.SameLine()
 
@@ -1575,6 +1701,7 @@ local function drawGUIContents()
         gui.status = 'Mode changed to Priority First.'
         markConfigurationDirty()
     end
+    tip('Buy from your list, top to bottom, ON entries only.\nNow that every Merc AA is in the list, this works the same as Priority Only.')
 
     imgui.SameLine()
 
@@ -1583,149 +1710,96 @@ local function drawGUIContents()
         gui.status = 'Mode changed to List Order.'
         markConfigurationDirty()
     end
+    tip('Ignore the priority list and buy in the order EQ lists the Mercenary AAs.')
 
     imgui.Separator()
-    imgui.Text('Scanned Mercenary AAs')
-
-    if #gui.scanResults == 0 then
-        imgui.TextWrapped('No scan results yet. Click Scan AAs.')
-    else
-        local beganScanChild = pcall(function()
-            imgui.BeginChild('MercAAScanResults', 0, 150, true)
-        end)
-
-        if beganScanChild then
-            for _, aa in ipairs(gui.scanResults) do
-                local state = aa.purchasable
-                    and '[AVAILABLE]'
-                    or '[LOCKED]'
-
-                local label = string.format(
-                    '%s %d. %s###scan_%d',
-                    state,
-                    aa.row,
-                    aa.name,
-                    aa.row
-                )
-
-                if drawSelectable(
-                    label,
-                    gui.selectedScanName == aa.name
-                ) then
-                    gui.selectedScanName = aa.name
-                end
-            end
-
-            imgui.EndChild()
-        end
+    -- Purchase List drop-down (closed by default); the header shows the counts
+    local onCount = 0
+    for _, e in ipairs(priority.entries) do if e.enabled then onCount = onCount + 1 end end
+    local listOpen = imgui.CollapsingHeader(string.format(
+        'Purchase List  (%d Merc AAs, %d ON)###mercaaList', #priority.entries, onCount))
+    if gui.lastListOpen ~= listOpen then
+        if gui.lastListOpen ~= nil then gui.fittedOnce = false end
+        gui.lastListOpen = listOpen
     end
-
-    if imgui.Button('Add Selected to Priority') then
-        addPriority(gui.selectedScanName)
-    end
-
-    imgui.SameLine()
-
-    if imgui.Button('Add All Available') then
-        local added = 0
-
-        for _, aa in ipairs(gui.scanResults) do
-            if aa.purchasable
-                and not priorityContains(aa.name)
-            then
-                priority.entries[#priority.entries + 1] = {
-                    name = aa.name,
-                    enabled = true,
-                }
-                added = added + 1
-            end
-        end
-
-        gui.status = string.format(
-            'Added %d available AAs to the priority list.',
-            added
-        )
-        if added > 0 then markConfigurationDirty() end
-    end
-
-    imgui.Separator()
-    imgui.Text('Saved Purchase Priority')
+    if listOpen then
+    tip('Every Mercenary AA is in this list. New ones are added at the end, switched ON.\n'
+        .. 'Priority modes buy them top to bottom; LOCKED ones are skipped until they unlock.\n'
+        .. 'Select an entry, then Move Up / Move Down or Enable / Disable it.')
 
     if #priority.entries == 0 then
-        imgui.TextWrapped(
-            'The priority list is empty. Select an AA above and add it.'
-        )
+        imgui.TextWrapped('The list fills itself from the AA window - click Check Availability.')
     else
         local beganPriorityChild = pcall(function()
-            imgui.BeginChild('MercAAPriorityResults', 0, 150, true)
+            imgui.BeginChild('MercAAPriorityResults', 0, 240, true)
         end)
 
         if beganPriorityChild then
             for index, entry in ipairs(priority.entries) do
-                local state = entry.enabled
-                    and '[ON]'
-                    or '[OFF]'
-
+                local known = gui.availability[entry.name]
+                local stateText = known == true and '[AVAILABLE]' or (known == false and '[LOCKED]' or '[?]')
                 local label = string.format(
-                    '%d. %s %s###priority_%d',
+                    '%d. %s %s %s###priority_%d',
                     index,
-                    state,
+                    entry.enabled and '[ON] ' or '[OFF]',
+                    stateText,
                     entry.name,
                     index
                 )
 
-                if drawSelectable(
-                    label,
-                    gui.selectedPriorityIndex == index
-                ) then
+                -- green = ON and available now; grey = switched OFF
+                local pushed = false
+                if not entry.enabled then
+                    imgui.PushStyleColor(ImGuiCol.Text, 0.55, 0.55, 0.55, 1.0)
+                    pushed = true
+                elseif known == true then
+                    imgui.PushStyleColor(ImGuiCol.Text, 0.3, 1.0, 0.3, 1.0)
+                    pushed = true
+                end
+                if drawSelectable(label, gui.selectedPriorityIndex == index) then
                     gui.selectedPriorityIndex = index
                 end
+                if pushed then imgui.PopStyleColor() end
             end
 
             imgui.EndChild()
         end
     end
+    imgui.TextDisabled('[?] = not checked yet - Check Availability or a purchase updates it.')
 
     if imgui.Button('Move Up') then
         movePriority(gui.selectedPriorityIndex, -1)
     end
+    tip('Move the selected priority entry up (bought sooner).')
 
     imgui.SameLine()
 
     if imgui.Button('Move Down') then
         movePriority(gui.selectedPriorityIndex, 1)
     end
+    tip('Move the selected priority entry down (bought later).')
 
     imgui.SameLine()
 
     if imgui.Button('Enable / Disable') then
         togglePriority(gui.selectedPriorityIndex)
     end
+    tip('Switch the selected AA ON or OFF. OFF AAs are never bought, but stay in the list.')
 
-    imgui.SameLine()
-
-    if imgui.Button('Remove') then
-        removePriority(gui.selectedPriorityIndex)
-    end
 
     if imgui.Button('Save Priorities') then
         savePriorities()
     end
+    tip('Save your priority list and settings to disk now (changes also save automatically).\nCommand: /mercaa save')
 
     imgui.SameLine()
 
     if imgui.Button('Reload Priorities') then
         loadPriorities()
     end
+    tip('Reload your priority list and settings from disk, undoing unsaved changes.\nCommand: /mercaa load')
+    end -- listOpen
 
-    imgui.SameLine()
-
-    if imgui.Button('Clear Priorities') then
-        priority.entries = {}
-        gui.selectedPriorityIndex = 0
-        gui.status = 'Priority list cleared.'
-        markConfigurationDirty()
-    end
 end
 
 local function drawGUI()
@@ -1754,23 +1828,17 @@ local function drawGUI()
             end
         end)
 
-        pcall(function()
-            local size = getImVec2(650, 800)
-
-            if size and imgui.SetNextWindowSize then
-                imgui.SetNextWindowSize(
-                    size,
-                    condAlways
-                )
-            end
-        end)
-
         gui.applyInitialLayout = false
     end
 
     local okBegin, open, draw = pcall(function()
+        -- fits its contents on open and whenever a drop-down opens/closes; resizable in between
+        if not gui.fittedOnce then
+            gui.fittedOnce = true
+            pcall(function() imgui.SetNextWindowSize(ImVec2(0, 0), ImGuiCond.Always) end)
+        end
         return imgui.Begin(
-            'Mercenary AA Buyer###MercAABuyerGUI',
+            WINDOW_TITLE,
             gui.open
         )
     end)
@@ -1833,7 +1901,7 @@ local function processGUIAction()
 
     elseif action == 'scan' then
         if inCombat() then
-            gui.status = "Can't scan while in combat - try again after the fight."
+            gui.status = "Can't check while in combat - try again after the fight."
             warn(gui.status)
         else
             scanAllMercenaryAAs()
@@ -1846,16 +1914,17 @@ local function processGUIAction()
         else
             gui.status = 'Running purchase cycle...'
 
-            local success = runPurchaseCycle()
+            local success, errored = runPurchaseCycle()
 
-            gui.status = success
-                and 'Purchase cycle completed.'
-                or 'No verified purchase was completed.'
-
-            if running and not isZoning() then
-                scanAllMercenaryAAs()
+            if errored then
+                gui.status = 'Purchase cycle failed - see the MacroQuest console.'
+            else
+                gui.status = success
+                    and 'Purchase cycle completed.'
+                    or 'No verified purchase was completed.'
             end
         end
+
 
     elseif action == 'pause' then
         paused = true
@@ -1884,7 +1953,7 @@ local function showHelp()
     log('/mercaa help     - show this command list')
     log('/mercaa ui       - show or hide the GUI')
     log('/mercaa status   - show current state')
-    log('/mercaa scan     - select and check every row')
+    log('/mercaa scan     - check which AAs are available (buys nothing)')
     log('/mercaa buy      - manually start a purchase cycle')
     log('/mercaa pause    - pause automatic checks')
     log('/mercaa resume   - resume automatic checks')
@@ -1995,6 +2064,7 @@ function Module:Init()
     ))
 
     mq.imgui.init('MercAABuyerGUI', drawGUI)
+    log('GUI registered. Use /mercaa ui to show or hide it.')
     mq.bind('/mercaa', handleMercAACommand)
 end
 
@@ -2078,6 +2148,7 @@ function Module:Render()
         gui.open = not gui.open
         if gui.open then
             gui.applyInitialLayout = true
+            gui.fittedOnce = false
         end
     end
     if ImGui.IsItemHovered() then
