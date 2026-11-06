@@ -828,7 +828,9 @@ end
 ---@param id number
 ---@return string
 function Module:getPullAbilityDisplayName(id)
-    local displayName = self.TempSettings.ValidPullAbilities[id].DisplayName
+    local entry = self.TempSettings.ValidPullAbilities[id]
+    if not entry then return "Error" end
+    local displayName = entry.DisplayName
 
     if type(displayName) == 'function' then displayName = displayName() end
 
@@ -1072,6 +1074,7 @@ function Module:Render()
         end
         if #self.TempSettings.ValidPullAbilities > 0 then
             local pullAbility = Config:GetSetting('PullAbility')
+            if not self.TempSettings.ValidPullAbilities[pullAbility] then pullAbility = 1 end
             pullAbility, pressed = ImGui.Combo("Pull Ability", pullAbility, function(id) return self:getPullAbilityDisplayName(id) end,
                 #self.TempSettings.ValidPullAbilities) --, self.TempSettings.ValidPullAbilities, #self.TempSettings.ValidPullAbilities)
             if pressed then
@@ -1870,6 +1873,11 @@ function Module:GetPullableSpawns()
             return false
         end
 
+        if Targeting.IsEncounterLocked(spawn) then
+            Logger.log_verbose("\atPULL::FindPullTarget \awSpawn \am%s\aw (\at%d\aw) \ar is encounter locked to another player!", spawn.CleanName(), spawn.ID())
+            return false
+        end
+
         Logger.log_debug("\atPULL::FindPullTarget \awSpawn \am%s\aw (\at%d\aw) \agPotential Pull Added to List", spawn.CleanName(), spawn.ID())
 
         metaDataCache[spawn.ID()] = { distance = navDist, }
@@ -2014,6 +2022,11 @@ function Module:CheckForAbort(pullID, bNavigating)
 
     if not spawn or spawn.Dead() or not spawn.ID() or spawn.ID() == 0 then
         Logger.log_debug("PULL:\ar ALERT: Aborting mob died or despawned \ax")
+        return true
+    end
+
+    if Targeting.IsEncounterLocked(spawn) then
+        Logger.log_debug("PULL:\ar ALERT: Aborting mob is encounter locked to another player \ax")
         return true
     end
 

@@ -299,6 +299,7 @@ local function processFallbackSpawn(spawn, checkNamed, radius, namedPref, hpPref
     if Targeting.IsTempPet(spawn) then return end
     if (spawn.CleanName() or ""):find("Guard") then return end
     if Config:GetSetting('SafeTargeting') and Targeting.IsSpawnFightingStranger(spawn, radius) then return end
+    if Targeting.IsEncounterLocked(spawn) then return end
     local spawnIsNamed = checkNamed and Targeting.IsNamed(spawn) or false
 
     if Combat.IsPreferredType(spawnIsNamed, namedPref) then
@@ -351,6 +352,10 @@ function Combat.ProcessXTarget(xtSpawn, radius, namedPref, hpPref, immediate, pr
 
     if Config:GetSetting('SafeTargeting') and Targeting.IsSpawnFightingStranger(xtSpawn, radius) then
         Logger.log_verbose("MATargetScan XTarget %s [%d] Distance: %d - is fighting someone else - ignoring it.", xtName, spawnId, xtSpawn.Distance())
+        return nil
+    end
+    if Targeting.IsEncounterLocked(xtSpawn) then
+        Logger.log_verbose("MATargetScan XTarget %s [%d] - encounter locked to another player - ignoring it.", xtName, spawnId)
         return nil
     end
     if (xtSpawn.Distance() or 999) > radius then
@@ -722,6 +727,11 @@ function Combat.OkToEngagePreValidateId(targetId)
         return false
     end
 
+    if Targeting.IsEncounterLocked(target) then
+        Logger.log_verbose("\ayOkToEngagePrevalidate check for %s(ID: %d) - Encounter Locked To Another Player --> Not Engaging", targetName, targetId)
+        return false
+    end
+
     if not Globals.BackOffFlag then
         if Core.IAmMA() then
             Logger.log_verbose("OkToEngagePrevalidate check for %s(ID: %d) - I am MA, proceeding!", targetName, targetId)
@@ -790,6 +800,11 @@ function Combat.OkToEngage(autoTargetId)
 
     if Config:GetSetting('SafeTargeting') and Targeting.IsSpawnFightingStranger(target, 100) then
         Logger.log_verbose("\ayOkToEngage check for %s(ID: %d) - Fighting Stranger --> Not Engaging", targetName, targetId)
+        return false
+    end
+
+    if Targeting.IsEncounterLocked(target) then
+        Logger.log_verbose("\ayOkToEngage check for %s(ID: %d) - Encounter Locked To Another Player --> Not Engaging", targetName, targetId)
         return false
     end
 
@@ -913,7 +928,7 @@ function Combat.AutoCampCheck(tempConfig, bCalledFromInsideEvent)
                 end
             end
         else
-            Core.DoCmd("/moveto loc %d %d|on", tempConfig.AutoCampY, tempConfig.AutoCampX)
+            Movement:MoveToLoc(tempConfig.AutoCampY, tempConfig.AutoCampX)
             while mq.TLO.MoveTo.Moving() and not mq.TLO.MoveTo.Stopped() do
                 mq.delay(10)
                 if not bCalledFromInsideEvent then
@@ -974,7 +989,7 @@ function Combat.CombatCampCheck(tempConfig)
                 Events.DoEvents()
             end
         else
-            Core.DoCmd("/moveto loc %d %d|on", tempConfig.AutoCampY, tempConfig.AutoCampX)
+            Movement:MoveToLoc(tempConfig.AutoCampY, tempConfig.AutoCampX)
             while mq.TLO.MoveTo.Moving() and not mq.TLO.MoveTo.Stopped() do
                 mq.delay(10)
                 mq.doevents()

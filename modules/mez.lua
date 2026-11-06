@@ -542,6 +542,12 @@ function Module:IsValidMezTarget(mobId)
         return false
     end
 
+    if Targeting.IsEncounterLocked(spawn) then
+        Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d - encounter locked to another player.",
+            spawn.ID(), spawn.CleanName(), spawn.Level() or 0)
+        return false
+    end
+
     -- Is the mob ID in our mez immune list? If so, skip.
     if self:IsMezImmune(mobId) then
         Logger.log_debug("\ayUpdateMezList: Skipping Mob ID: %d Name: %s Level: %d as it is in our immune list.",

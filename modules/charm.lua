@@ -418,6 +418,11 @@ end
 function Module:IsValidCharmTarget(mobId)
 	local spawn = mq.TLO.Spawn(mobId)
 
+	if Targeting.IsEncounterLocked(spawn) then
+		Logger.log_debug("\ayUpdateCharmList: Skipping Mob ID: %d - encounter locked to another player.", spawn.ID() or 0)
+		return false
+	end
+
 	-- Is the mob ID in our charm immune list? If so, skip.
 	if self:IsCharmImmune(mobId) then
 		Logger.log_debug(

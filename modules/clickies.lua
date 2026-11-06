@@ -1931,14 +1931,16 @@ function Module:GiveTime()
 
     local maxClickiesPerFrame = Config:GetSetting('MaxClickiesPerFrame') or 0
     local clickiesUsedThisFrame = 0
-    local startingClickyIdx = maxClickiesPerFrame > 0 and self.ClickyRotationIndex or 1
     local clickies = Config:GetSetting('Clickies') or {}
     local numClickies = #clickies
+    if numClickies == 0 then return end
+    local startingClickyIdx = maxClickiesPerFrame > 0 and (((self.ClickyRotationIndex - 1) % numClickies) + 1) or 1
     local moving = mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.MoveTo.Moving()
-    for clickyIdx = startingClickyIdx, numClickies do
+    for offset = 0, numClickies - 1 do
         if Globals.PauseMain or Globals.StopCast then
             break
         end
+        local clickyIdx = ((startingClickyIdx - 1 + offset) % numClickies) + 1
         local clicky = clickies[clickyIdx]
         if clicky.itemName:len() > 0 and (clicky.enabled == nil or clicky.enabled == true) then
             self.ClickyRotationIndex = (clickyIdx % numClickies) + 1
@@ -2007,7 +2009,7 @@ function Module:GiveTime()
                                     Strings.BoolToColorString(peerFound))
                                 if peerFound then
                                     target = mq.TLO.Spawn(targetPeer.Data.ID)
-                                    buffCheckPassed = target and Casting.ActorBuffCheck(item.Clicky.Spell.RankName.ID(), target)
+                                    buffCheckPassed = target and Casting.ActorBuffCheck(itemSpell.ID(), target)
                                 else
                                     buffCheckPassed = false
                                 end
@@ -2036,19 +2038,19 @@ function Module:GiveTime()
                             local readyCheckPassed = Casting.ItemReady(item())
 
                             if buffCheckPassed and distanceCheckPassed and readyCheckPassed then
-                                Logger.log_verbose("\ayClicky: \awItem \am%s\aw Clicky Spell: \at%s\ag!", item.Name(), item.Clicky.Spell.RankName.Name())
+                                Logger.log_verbose("\ayClicky: \awItem \am%s\aw Clicky Spell: \at%s\ag!", item.Name(), itemSpell.Name())
                                 Casting.UseItem(item.Name(), targetId)
+                                self.TempSettings.ClickyState[clicky.itemName].lastUsed = Globals.GetTimeSeconds()
                                 clickiesUsedThisFrame = clickiesUsedThisFrame + 1
                                 if maxClickiesPerFrame > 0 and clickiesUsedThisFrame >= maxClickiesPerFrame then
                                     Logger.log_debug("\ayClicky: \a-tMax Clickies Per Frame of \am%d\a-t reached, stopping for this frame and picking up with %d next frame.",
                                         maxClickiesPerFrame, self.ClickyRotationIndex)
                                     break
                                 end
-                                self.TempSettings.ClickyState[clicky.itemName].lastUsed = Globals.GetTimeSeconds()
                                 break --ensure we stop after we process a single clicky to allow rotations to continue
                             else
                                 Logger.log_verbose("\ayClicky: \awItem \am%s\aw Clicky: \at%s\ar checks failed, not using!\aw BuffCheck(%s), DistanceCheck(%s), ItemReady(%s)",
-                                    item.Name(), item.Clicky.Spell.RankName.Name(), Strings.BoolToColorString(buffCheckPassed), Strings.BoolToColorString(distanceCheckPassed),
+                                    item.Name(), itemSpell.Name(), Strings.BoolToColorString(buffCheckPassed), Strings.BoolToColorString(distanceCheckPassed),
                                     Strings.BoolToColorString(readyCheckPassed))
                             end
                         end
@@ -2194,7 +2196,17 @@ end
 
 function Module:ValidateClickyRotationSettings(clicky)
     local isHeal = clicky.combat_state == "During Heal Rotation"
-    if clicky.combat_state ~= "During Rotation" and not isHeal then return false end
+    if clicky.combat_state ~= "During Rotation" and not isHeal then
+        local validTargetIDs = clicky.combat_state == "Downtime" and self.NonCombatTargetTypeIDs or self.CombatTargetTypeIDs
+        if not validTargetIDs[clicky.target or ""] then
+            Logger.log_warn(
+                "\ayClicky Module: \awClicky '%s' had target '%s', invalid for '%s' usage - reset to Self.",
+                clicky.itemName or "?", clicky.target or "", clicky.combat_state or "")
+            clicky.target = "Self"
+            return true
+        end
+        return false
+    end
     local changed = false
     if not self:ValidateRotationName(clicky.rotation_name, isHeal) then
         Logger.log_warn("\ayClicky Module: rotation '%s' is no longer valid, resetting to None.", tostring(clicky.rotation_name))

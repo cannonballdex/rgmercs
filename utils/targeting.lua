@@ -446,8 +446,16 @@ end
 --- @param slot number The slot number to reset.
 function Targeting.ResetXTSlot(slot)
     Core.DoCmd("/xtarget set %d ET", slot)
-    mq.delay(500, function() return (mq.TLO.Me.XTarget(slot).TargetType():lower() or "empty target") == "empty target" end)
+    mq.delay(500, function() return (mq.TLO.Me.XTarget(slot).TargetType() or ""):lower() == "empty target" end)
     Core.DoCmd("/xtarget set %d autohater", slot)
+end
+
+--- Returns true if spawn is encounter locked to someone outside our group or raid.
+---@param spawn MQSpawn The spawn to check.
+---@return boolean True if the encounter lock keeps us from engaging spawn.
+function Targeting.IsEncounterLocked(spawn)
+    -- explicit false check for compat with older MQ builds that don't have this
+    return spawn.CanEngage ~= nil and spawn.CanEngage() == false
 end
 
 --- Checks if a given spawn is fighting a stranger within a specified radius.

@@ -828,7 +828,7 @@ function Module:GiveTime()
                     else
                         -- Assuming no line of site problems.
                         Logger.log_verbose("\awNOTICE:\ax Chase Target %s Has no nav path, trying /moveto", chaseTarg)
-                        self:RunCmd("/squelch /moveto id %d uw mdist %d", chaseId, Config:GetSetting('ChaseDistance'))
+                        Movement:MoveToSpawnId(chaseId, Config:GetSetting('ChaseDistance'))
                     end
                 end
             elseif chaseSpawnDist < 400 then -- Cannonballdex note I left this alone, legacy code, not sure if this value is signifigant or arbitrary
@@ -896,6 +896,11 @@ function Module:CheckStuck()
         return
     end
 
+    if Nav.Active() and mq.TLO.MoveTo.Moving() then
+        Logger.log_warning("\awWARNING:\ax Navigation appears to be trying to MoveTo and Nav at the same time. Stopping MoveTo to attempt to fix stuck.")
+        Movement:StopMoveTo()
+    end
+
     Logger.log_warning("\awWARNING:\ax Navigation appears to be stuck")
     self:AttemptUnstick()
     Movement:ResetPositionChangeTimer() -- wait one full timer before trying again
@@ -935,6 +940,7 @@ end
 function Module:UnstickViaPauseToggle()
     Logger.log_debug("\awWARNING:\ax Toggling nav pause to unstick")
     Movement:SetNavPaused(true)
+    Movement:StopMoveTo()
     mq.delay(300)
     Movement:SetNavPaused(false)
     return self:WaitForUnstuck(2000)

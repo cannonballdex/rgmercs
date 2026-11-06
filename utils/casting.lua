@@ -75,6 +75,37 @@ function Casting.TargetHasBuff(effect, target, bAllowTargetChange)
     return mq.TLO.Target.Buff(spell)() ~= nil
 end
 
+-- Buff Check Family: Local, LocalPet, Target, Peer, Actor, ActorPet.
+
+--- Collects the spells a spell triggers, reading each slot's SPA so non-trigger slots are skipped instead of ending the scan.
+---@param spell MQSpell The spell whose effect slots to scan.
+---@return table triggerSpells Array of triggered spells, empty if the spell has none.
+function Casting.GetTriggerSpells(spell)
+    local triggerSpells = {}
+
+    for i = 1, (spell.NumEffects() or 0) do
+        local slotSPA = spell.Attrib(i)()
+        if slotSPA == 374 or slotSPA == 340 or slotSPA == 469 or slotSPA == 470 then
+            local triggerSpell = spell.Trigger(i)
+            --Some Laz spells report a trigger with an ID of 0, which always reports false on stack checks
+            if triggerSpell and triggerSpell() and triggerSpell.ID() > 0 then
+                table.insert(triggerSpells, triggerSpell)
+            end
+        end
+    end
+
+    if #triggerSpells == 0 then
+        -- Use autocast to check by ID to avoid duplicate spell name collisions
+        ---@diagnostic disable-next-line: undefined-field
+        local recourseId = spell.AutoCast() or 0
+        if recourseId > 0 then
+            table.insert(triggerSpells, mq.TLO.Spell(recourseId))
+        end
+    end
+
+    return triggerSpells
+end
+
 --- Complex buff check that will check for presence and stacking of the buff (and any triggers) on the PC or the PC's pet.
 --- @param spellId integer The ID of the spell to check.
 --- @param skipBlockCheck boolean|nil whether to check the peers blocked spells, this needs to be skipped for certain manual stacking checks
@@ -107,20 +138,11 @@ function Casting.LocalBuffCheck(spellId, skipBlockCheck, skipTriggerCheck)
     -- Check triggers
     if not skipTriggerCheck then
         Logger.log_verbose("LocalBuffCheck: %s(ID:%d) not found, let's check for triggers.", spellName, spellId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            --Some Laz spells report trigger 1 as "Unknown Spell" with an ID of 0, which always reports false on stack checks
-            if not (triggerSpell and triggerSpell() and triggerSpell.ID() > 0) then
-                Logger.log_verbose("LocalBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
-            end
-
+        for _, triggerSpell in ipairs(triggerSpells) do
             local triggerName = triggerSpell.Name()
             local triggerId = triggerSpell.ID()
-            triggerCount = triggerCount + 1
 
             if mq.TLO.Me.FindBuff("id " .. triggerId)() then
                 Logger.log_verbose("LocalBuffCheck: Trigger %s(ID:%d) found, moving on.", triggerName, triggerId)
@@ -134,8 +156,8 @@ function Casting.LocalBuffCheck(spellId, skipBlockCheck, skipTriggerCheck)
             end
         end
 
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("LocalBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, triggerCount, triggerFound)
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("LocalBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, #triggerSpells, triggerFound)
             return false
         end
     end
@@ -195,20 +217,11 @@ function Casting.LocalPetBuffCheck(spellId, skipBlockCheck, skipTriggerCheck)
     -- Check triggers
     if not skipTriggerCheck then
         Logger.log_verbose("LocalPetBuffCheck: %s(ID:%d) not found, let's check for triggers.", spellName, spellId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            --Some Laz spells report trigger 1 as "Unknown Spell" with an ID of 0, which always reports false on stack checks
-            if not (triggerSpell and triggerSpell() and triggerSpell.ID() > 0) then
-                Logger.log_verbose("LocalPetBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
-            end
-
+        for _, triggerSpell in ipairs(triggerSpells) do
             local triggerName = triggerSpell.Name()
             local triggerId = triggerSpell.ID()
-            triggerCount = triggerCount + 1
 
             if mq.TLO.Me.Pet.Buff(triggerName)() then
                 Logger.log_verbose("LocalPetBuffCheck: Trigger %s(ID:%d) found, moving on.", triggerName, triggerId)
@@ -222,8 +235,8 @@ function Casting.LocalPetBuffCheck(spellId, skipBlockCheck, skipTriggerCheck)
             end
         end
 
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("LocalPetBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, triggerCount, triggerFound)
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("LocalPetBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, #triggerSpells, triggerFound)
             return false
         end
     end
@@ -232,9 +245,9 @@ function Casting.LocalPetBuffCheck(spellId, skipBlockCheck, skipTriggerCheck)
     return true
 end
 
-function Casting.PetBuffCheck(spell)
+function Casting.PetBuffCheck(spell, skipBlockCheck, skipTriggerCheck)
     if not (spell and spell()) then return false end
-    return Casting.LocalPetBuffCheck(Casting.GetUseableSpellId(spell))
+    return Casting.LocalPetBuffCheck(Casting.GetUseableSpellId(spell), skipBlockCheck, skipTriggerCheck)
 end
 
 function Casting.PetBuffAACheck(aaName)
@@ -377,22 +390,13 @@ function Casting.TargetBuffCheck(spellId, target, bAllowTargetChange, bAllowDupl
 
     if not skipTriggerCheck then
         Logger.log_verbose("TargetBuffCheck: %s(ID:%d) not found on %s(ID:%d), let's check for triggers.", spellName, spellId, targetName, targetId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
 
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            if not (triggerSpell and triggerSpell() and triggerSpell.ID() > 0) then
-                Logger.log_verbose("TargetBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
-            end
-
+        for _, triggerSpell in ipairs(triggerSpells) do
             local triggerName = triggerSpell.Name()
             local triggerId = triggerSpell.ID()
             local triggerSearch = bAllowDuplicates and string.format("id %d and caster =%s", triggerId, mq.TLO.Me.DisplayName()) or string.format("id %d", triggerId)
-
-            triggerCount = triggerCount + 1
 
             if mq.TLO.Target.FindBuff(triggerSearch)() then
                 Logger.log_verbose("TargetBuffCheck: %s(ID:%d) found on %s(ID:%d), moving on.", triggerName, triggerId, targetName, targetId)
@@ -406,8 +410,8 @@ function Casting.TargetBuffCheck(spellId, target, bAllowTargetChange, bAllowDupl
             end
         end
 
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("TargetBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, triggerCount, triggerFound)
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("TargetBuffCheck: Total triggers for %s(ID:%d): %d. Triggers found: %d. Ending Check.", spellName, spellId, #triggerSpells, triggerFound)
             return false
         end
     end
@@ -480,21 +484,12 @@ function Casting.PeerBuffCheck(spellId, target, skipBlockCheck, skipTriggerCheck
 
     if not skipTriggerCheck then
         Logger.log_verbose("PeerBuffCheck: %s(ID:%d) stacks on %s(ID:%d), but let's check for triggers.", spellName, spellId, targetName, targetId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            if not (triggerSpell and triggerSpell() and triggerSpell.ID() > 0) then
-                Logger.log_verbose("PeerBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
-            end
-
+        for _, triggerSpell in ipairs(triggerSpells) do
             local triggerName = triggerSpell.Name()
             local triggerId = triggerSpell.ID()
             local triggerResult = DanNet.query(targetName, string.format("Me.FindBuff[id %d]", triggerId), 1000)
-
-            triggerCount = triggerCount + 1
 
             if triggerResult:lower() == triggerName:lower() then
                 Logger.log_verbose("PeerBuffCheck: %s(ID:%d) found on %s(ID:%d), moving on.", triggerName, triggerId, targetName, targetId)
@@ -511,8 +506,8 @@ function Casting.PeerBuffCheck(spellId, target, skipBlockCheck, skipTriggerCheck
             end
         end
 
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("PeerBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, triggerCount, triggerFound)
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("PeerBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, #triggerSpells, triggerFound)
             return false
         end
     end
@@ -604,17 +599,13 @@ function Casting.ActorBuffCheck(spellId, target, skipBlockCheck, skipTriggerChec
 
     if not skipTriggerCheck then
         Logger.log_verbose("ActorBuffCheck: %s(ID:%d) seems to stack on %s(ID:%d), let's check for triggers.", spellName, spellId, targetName, targetId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
 
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            --Some Laz spells report trigger 1 as "Unknown Spell" with an ID of 0, which always reports false on stack checks
-            if triggerSpell and triggerSpell() and triggerSpell.ID() > 0 then
+        for _, triggerSpell in ipairs(triggerSpells) do
+            do
                 local triggerName = triggerSpell.Name()
                 local triggerId = triggerSpell.ID()
-                triggerCount = triggerCount + 1
                 local triggerHandled = false
                 for _, buffId in ipairs(buffList) do
                     if buffId == triggerId then
@@ -654,13 +645,10 @@ function Casting.ActorBuffCheck(spellId, target, skipBlockCheck, skipTriggerChec
                     Logger.log_verbose("ActorBuffCheck: %s(ID:%d) seems to stack on %s(ID:%d), let's do it!", triggerName, triggerId, targetName, targetId)
                     return true
                 end
-            else
-                Logger.log_verbose("ActorBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
             end
         end
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("ActorBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, triggerCount,
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("ActorBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, #triggerSpells,
                 triggerFound)
             return false
         end
@@ -733,17 +721,13 @@ function Casting.ActorPetBuffCheck(spellId, target, skipBlockCheck, skipTriggerC
 
     if not skipTriggerCheck then
         Logger.log_verbose("ActorBuffCheck: %s(ID:%d) seems to stack on %s's pet(%s, ID:%d), let's check for triggers.", spellName, spellId, masterName, targetName, targetId)
-        local numEffects = buffSpell.NumEffects()
-        local triggerCount = 0
+        local triggerSpells = Casting.GetTriggerSpells(buffSpell)
         local triggerFound = 0
 
-        for i = 1, numEffects do
-            local triggerSpell = buffSpell.Trigger(i)
-            --Some Laz spells report trigger 1 as "Unknown Spell" with an ID of 0, which always reports false on stack checks
-            if triggerSpell and triggerSpell() and triggerSpell.ID() > 0 then
+        for _, triggerSpell in ipairs(triggerSpells) do
+            do
                 local triggerName = triggerSpell.Name()
                 local triggerId = triggerSpell.ID()
-                triggerCount = triggerCount + 1
                 local triggerHandled = false
                 for _, buffId in ipairs(buffList) do
                     if buffId == triggerId then
@@ -764,13 +748,10 @@ function Casting.ActorPetBuffCheck(spellId, target, skipBlockCheck, skipTriggerC
                     Logger.log_verbose("ActorBuffCheck: %s(ID:%d) seems to stack on %s's pet(%s, ID:%d), let's do it!", triggerName, triggerId, masterName, targetName, targetId)
                     return true
                 end
-            else
-                Logger.log_verbose("ActorBuffCheck: We've checked every trigger for %s(ID:%d).", spellName, spellId)
-                break
             end
         end
-        if triggerCount > 0 and triggerFound >= triggerCount then
-            Logger.log_verbose("ActorBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, triggerCount,
+        if #triggerSpells > 0 and triggerFound >= #triggerSpells then
+            Logger.log_verbose("ActorBuffCheck: Total triggers for %s(ID:%d): %d. Present or non-stacking triggers: %d. Ending Check.", spellName, spellId, #triggerSpells,
                 triggerFound)
             return false
         end
